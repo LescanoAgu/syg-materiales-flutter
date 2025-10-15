@@ -5,7 +5,7 @@ import 'core/constants/app_colors.dart';
 import 'core/database/database_helper.dart';
 import 'core/database/seed_data.dart';
 import 'features/stock/presentation/providers/producto_provider.dart';
-import 'features/stock/presentation/pages/stock_list_page.dart';
+import 'features/stock/presentation/pages/catalogo_page.dart';
 
 /// Punto de entrada de la aplicación S&G Materiales
 void main() async {
@@ -121,7 +121,7 @@ class SyGMaterialesApp extends StatelessWidget {
         // ========================================
         // PANTALLA INICIAL: Stock List
         // ========================================
-        home: const StockListPage(),
+        home: const CatalogoPage(),
       ),
     );
   }

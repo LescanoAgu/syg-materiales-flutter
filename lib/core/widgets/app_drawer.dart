@@ -1,0 +1,253 @@
+import 'package:flutter/material.dart';
+import '../constants/app_colors.dart';
+import '../constants/app_text_styles.dart';
+import '../../features/stock/presentation/pages/catalogo_page.dart';
+import '../../features/stock/presentation/pages/stock_page.dart';
+/// Drawer (menú lateral) de la aplicación S&G
+///
+/// Muestra las opciones de navegación principales:
+/// - Stock
+/// - Clientes
+/// - Obras
+/// - Pedidos
+/// - Configuración
+class AppDrawer extends StatelessWidget {
+  const AppDrawer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: Column(
+        children: [
+          // ========================================
+          // HEADER DEL DRAWER
+          // ========================================
+          _buildHeader(),
+
+          // ========================================
+          // OPCIONES DE NAVEGACIÓN
+          // ========================================
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _buildMenuItem(
+                  context,
+                  icon: Icons.book,
+                  title: 'Catálogo',
+                  subtitle: 'Productos disponibles',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CatalogoPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.inventory_2,
+                  title: 'Stock',
+                  subtitle: 'Inventario actual',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const StockPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.people,
+                  title: 'Clientes',
+                  subtitle: 'Gestión de clientes',
+                  onTap: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Próximamente: Clientes')),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.business,
+                  title: 'Obras',
+                  subtitle: 'Gestión de obras',
+                  onTap: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Próximamente: Obras')),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.shopping_cart,
+                  title: 'Pedidos',
+                  subtitle: 'Gestión de pedidos',
+                  onTap: () {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Próximamente: Pedidos')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // ========================================
+          // FOOTER DEL DRAWER
+          // ========================================
+          _buildFooter(),
+        ],
+      ),
+    );
+  }
+
+  // ========================================
+  // HEADER CON DEGRADADO
+  // ========================================
+  Widget _buildHeader() {
+    return Container(
+      height: 180,
+      decoration: const BoxDecoration(
+        gradient: AppColors.primaryGradient,
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Logo/Icono circular
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.business_center,
+                  color: AppColors.primary,
+                  size: 30,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Nombre de la empresa
+              Text(
+                'S&G Materiales',
+                style: AppTextStyles.h3.copyWith(
+                  color: Colors.white,
+                ),
+              ),
+
+              const SizedBox(height: 4),
+
+              // Subtítulo
+              Text(
+                'Sistema de Gestión',
+                style: AppTextStyles.body2.copyWith(
+                  color: Colors.white.withOpacity(0.9),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ========================================
+  // ITEM DEL MENÚ
+  // ========================================
+  Widget _buildMenuItem(
+      BuildContext context, {
+        required IconData icon,
+        required String title,
+        required String subtitle,
+        required VoidCallback onTap,
+      }) {
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          color: AppColors.primary,
+          size: 22,
+        ),
+      ),
+      title: Text(
+        title,
+        style: AppTextStyles.body1.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: AppTextStyles.caption,
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 4,
+      ),
+    );
+  }
+
+  // ========================================
+  // FOOTER CON VERSIÓN
+  // ========================================
+  Widget _buildFooter() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundGray,
+        border: Border(
+          top: BorderSide(
+            color: AppColors.border.withOpacity(0.5),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 16,
+            color: AppColors.textMedium,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Versión 1.0.0',
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.textMedium,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

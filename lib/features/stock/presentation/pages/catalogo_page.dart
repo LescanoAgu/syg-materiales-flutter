@@ -5,19 +5,20 @@ import '../providers/producto_provider.dart';
 import '../../data/models/stock_model.dart';
 import 'producto_detalle_page.dart';
 import 'producto_form_page.dart';
+import '../../../../core/widgets/app_drawer.dart';
 
 /// Pantalla principal de Stock
 ///
 /// Muestra la lista de productos con búsqueda y filtros.
 /// Diseño inspirado en modern_design_desktop.tsx
-class StockListPage extends StatefulWidget {
-  const StockListPage({super.key});
+class CatalogoPage extends StatefulWidget {
+  const CatalogoPage({super.key});
 
   @override
-  State<StockListPage> createState() => _StockListPageState();
+  State<CatalogoPage> createState() => _CatalogoPageState();
 }
 
-class _StockListPageState extends State<StockListPage> {
+class _CatalogoPageState extends State<CatalogoPage> {
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -41,6 +42,7 @@ class _StockListPageState extends State<StockListPage> {
       // ========================================
       // APP BAR con gradiente
       // ========================================
+      drawer: const AppDrawer(),
       appBar: AppBar(
         flexibleSpace: Container(
           decoration: const BoxDecoration(
@@ -55,7 +57,7 @@ class _StockListPageState extends State<StockListPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Stock de Materiales',
+              'Catálogo de Productos',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -186,7 +188,7 @@ class _StockListPageState extends State<StockListPage> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No hay productos',
+                            'Catálogo Vacío',
                             style: TextStyle(
                               fontSize: 18,
                               color: AppColors.textMedium,
@@ -195,7 +197,7 @@ class _StockListPageState extends State<StockListPage> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Comienza agregando productos',
+                            'Agrega productos al catálogo maestro',
                             style: TextStyle(
                               color: AppColors.textLight,
                             ),
@@ -249,7 +251,7 @@ class _StockListPageState extends State<StockListPage> {
         },
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add),
-        label: const Text('Nuevo Material'),
+        label: const Text('Nuevo Producto'),
       ),
     );
   }

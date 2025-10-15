@@ -1,3 +1,5 @@
+import 'producto_model.dart';
+import 'categoria_model.dart';
 /// Modelo de datos para Stock
 ///
 /// Representa el inventario actual de un producto.
