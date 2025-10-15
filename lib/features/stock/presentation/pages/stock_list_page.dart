@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/producto_provider.dart';
 import '../../data/models/stock_model.dart';
+import 'producto_detalle_page.dart';
+import 'producto_form_page.dart';
 
 /// Pantalla principal de Stock
 ///
@@ -228,10 +230,22 @@ class _StockListPageState extends State<StockListPage> {
       // ========================================
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // TODO: Navegar a pantalla de crear producto
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Crear producto próximamente')),
-          );
+          print('🔍 Botón + presionado');
+
+          try {
+            // Navegar a crear producto
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ProductoFormPage(),
+              ),
+            );
+          } catch (e) {
+            print('❌ Error al navegar a formulario: $e');
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: $e')),
+            );
+          }
         },
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add),
@@ -252,20 +266,26 @@ class _ProductoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: InkWell(
-        onTap: () {
-          // TODO: Navegar a detalle del producto
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Detalle de ${productoConStock.productoNombre}')),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
+    return GestureDetector(
+      onTap: () {
+        print('🔍 Tap en producto: ${productoConStock.productoNombre}');
+
+        // Navegar a detalle del producto
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductoDetallePage(
+              producto: productoConStock,
+            ),
+          ),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
