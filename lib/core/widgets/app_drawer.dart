@@ -3,6 +3,8 @@ import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../../features/stock/presentation/pages/catalogo_page.dart';
 import '../../features/stock/presentation/pages/stock_page.dart';
+import '../../features/clientes/presentation/pages/clientes_list_page.dart';
+
 /// Drawer (menú lateral) de la aplicación S&G
 ///
 /// Muestra las opciones de navegación principales:
@@ -68,8 +70,11 @@ class AppDrawer extends StatelessWidget {
                   subtitle: 'Gestión de clientes',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Próximamente: Clientes')),
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ClientesListPage(),
+                      ),
                     );
                   },
                 ),

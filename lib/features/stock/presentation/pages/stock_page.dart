@@ -28,22 +28,62 @@ class _StockPageState extends State<StockPage> {
   List<ProductoConStock> _productosFiltrados = [];
   bool _isLoading = true;
   String _filtroCategoria = 'Todos';
+  String _filtroEstado = 'Todos';
+  String _ordenamiento = 'Código';
+  static const int _itemsPorPagina = 20;
+  int _paginaActual = 0;
+  bool _cargandoMas = false;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _cargarProductos();
     _searchController.addListener(_filtrarProductos);
+    _scrollController.addListener(_onScroll);
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    // Detectar cuando llega al final del scroll
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
+      _cargarMasProductos();
+    }
+  }
+
+  Future<void> _cargarMasProductos() async {
+    if (_cargandoMas) return;
+
+    final totalProductos = _productosFiltrados.length;
+    final productosMostrados = (_paginaActual + 1) * _itemsPorPagina;
+
+    // Si ya mostramos todos, no cargar más
+    if (productosMostrados >= totalProductos) return;
+
+    setState(() {
+      _cargandoMas = true;
+    });
+
+    // Simular delay de red (opcional, solo para efecto visual)
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    setState(() {
+      _paginaActual++;
+      _cargandoMas = false;
+    });
+  }
+
   Future<void> _cargarProductos() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _paginaActual = 0;
+    });
 
     try {
       final productos = await _stockRepo.obtenerTodosConStock(soloActivos: true);
@@ -68,15 +108,53 @@ class _StockPageState extends State<StockPage> {
 
     setState(() {
       _productosFiltrados = _todosLosProductos.where((producto) {
+        // Filtro por búsqueda
         final matchQuery = query.isEmpty ||
             producto.productoNombre.toLowerCase().contains(query) ||
             producto.productoCodigo.toLowerCase().contains(query);
 
+        // Filtro por categoría
         final matchCategoria = _filtroCategoria == 'Todos' ||
             producto.categoriaNombre == _filtroCategoria;
 
-        return matchQuery && matchCategoria;
+        // Filtro por estado de stock
+        bool matchEstado = true;
+        switch (_filtroEstado) {
+          case 'Con Stock':
+            matchEstado = producto.cantidadDisponible > 0;
+            break;
+          case 'Stock Bajo':
+            matchEstado = producto.cantidadDisponible < 10 && producto.cantidadDisponible > 0;
+            break;
+          case 'Sin Stock':
+            matchEstado = producto.cantidadDisponible == 0;
+            break;
+          default:
+            matchEstado = true;
+        }
+
+        return matchQuery && matchCategoria && matchEstado;
       }).toList();
+
+      // Ordenamiento
+      switch (_ordenamiento) {
+        case 'Código':
+          _productosFiltrados.sort((a, b) => a.productoCodigo.compareTo(b.productoCodigo));
+          break;
+        case 'Nombre':
+          _productosFiltrados.sort((a, b) => a.productoNombre.compareTo(b.productoNombre));
+          break;
+        case 'Stock Menor':
+          _productosFiltrados.sort((a, b) => a.cantidadDisponible.compareTo(b.cantidadDisponible));
+          break;
+        case 'Stock Mayor':
+          _productosFiltrados.sort((a, b) => b.cantidadDisponible.compareTo(a.cantidadDisponible));
+          break;
+        case 'Categoría':
+          _productosFiltrados.sort((a, b) => a.categoriaNombre.compareTo(b.categoriaNombre));
+          break;
+      }
+      _paginaActual = 0;
     });
   }
 
@@ -167,7 +245,182 @@ class _StockPageState extends State<StockPage> {
 
           const SizedBox(height: 12),
 
-          // Filtro por categoría
+          // Fila de ordenamiento y filtros
+          Row(
+            children: [
+              // Botón de ordenamiento
+              Expanded(
+                child: PopupMenuButton<String>(
+                  initialValue: _ordenamiento,
+                  onSelected: (value) {
+                    setState(() {
+                      _ordenamiento = value;
+                      _filtrarProductos();
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'Código',
+                      child: Row(
+                        children: [
+                          Icon(Icons.sort_by_alpha, size: 20),
+                          SizedBox(width: 8),
+                          Text('Por Código'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Nombre',
+                      child: Row(
+                        children: [
+                          Icon(Icons.text_fields, size: 20),
+                          SizedBox(width: 8),
+                          Text('Por Nombre'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Stock Menor',
+                      child: Row(
+                        children: [
+                          Icon(Icons.arrow_upward, size: 20),
+                          SizedBox(width: 8),
+                          Text('Stock Menor'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Stock Mayor',
+                      child: Row(
+                        children: [
+                          Icon(Icons.arrow_downward, size: 20),
+                          SizedBox(width: 8),
+                          Text('Stock Mayor'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Categoría',
+                      child: Row(
+                        children: [
+                          Icon(Icons.category, size: 20),
+                          SizedBox(width: 8),
+                          Text('Por Categoría'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.sort, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _ordenamiento,
+                            style: AppTextStyles.body2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 8),
+
+              // Botón de filtro por estado
+              Expanded(
+                child: PopupMenuButton<String>(
+                  initialValue: _filtroEstado,
+                  onSelected: (value) {
+                    setState(() {
+                      _filtroEstado = value;
+                      _filtrarProductos();
+                    });
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'Todos',
+                      child: Row(
+                        children: [
+                          Icon(Icons.all_inclusive, size: 20),
+                          SizedBox(width: 8),
+                          Text('Todos'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Con Stock',
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle, size: 20, color: AppColors.success),
+                          SizedBox(width: 8),
+                          Text('Con Stock'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Stock Bajo',
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber, size: 20, color: AppColors.warning),
+                          SizedBox(width: 8),
+                          Text('Stock Bajo'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'Sin Stock',
+                      child: Row(
+                        children: [
+                          Icon(Icons.cancel, size: 20, color: AppColors.error),
+                          SizedBox(width: 8),
+                          Text('Sin Stock'),
+                        ],
+                      ),
+                    ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.filter_list, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _filtroEstado,
+                            style: AppTextStyles.body2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down, size: 20),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Filtro por categoría (chips horizontales)
           SizedBox(
             height: 40,
             child: ListView(
@@ -285,13 +538,71 @@ class _StockPageState extends State<StockPage> {
   // LISTA DE PRODUCTOS
   // ========================================
   Widget _buildProductList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _productosFiltrados.length,
-      itemBuilder: (context, index) {
-        final productoStock = _productosFiltrados[index];
-        return _buildProductoCard(productoStock);
-      },
+    // Calcular cuántos productos mostrar
+    final totalProductos = _productosFiltrados.length;
+    final productosMostrados = (_paginaActual + 1) * _itemsPorPagina;
+    final productosAMostrar = productosMostrados > totalProductos
+        ? totalProductos
+        : productosMostrados;
+
+    final productosVisibles = _productosFiltrados.take(productosAMostrar).toList();
+
+    return Column(
+      children: [
+        // Lista de productos
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemCount: productosVisibles.length + (_cargandoMas ? 1 : 0),
+            itemBuilder: (context, index) {
+              // Mostrar indicador de carga al final
+              if (index == productosVisibles.length) {
+                return _buildLoadingIndicator();
+              }
+
+              final productoStock = productosVisibles[index];
+              return _buildProductoCard(productoStock);
+            },
+          ),
+        ),
+
+        // Contador de productos mostrados
+        if (productosAMostrar < totalProductos)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Mostrando $productosAMostrar de $totalProductos productos',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.textMedium,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      alignment: Alignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Cargando más productos...',
+            style: AppTextStyles.body2.copyWith(
+              color: AppColors.textMedium,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

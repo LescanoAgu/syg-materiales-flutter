@@ -3,6 +3,8 @@ import '../../features/stock/data/models/stock_model.dart';
 import '../../features/stock/data/repositories/producto_repository.dart';
 import '../../features/stock/data/repositories/categoria_repository.dart';
 import '../../features/stock/data/repositories/stock_repository.dart';
+import '../../features/clientes/data/models/cliente_model.dart';
+import '../database/database_helper.dart';
 
 /// Clase para cargar datos de prueba en la base de datos
 ///
@@ -44,6 +46,8 @@ class SeedData {
 
       // Cargar stock inicial
       await cargarStockInicial();
+      await _cargarClientesPrueba();
+
 
     } catch (e) {
       print('   ❌ Error al cargar datos de prueba: $e\n');
@@ -463,4 +467,68 @@ class SeedData {
       print('      ❌ Error al cargar stock inicial: $e\n');
     }
   }
+
+  // ========================================
+// CLIENTES DE PRUEBA
+// ========================================
+
+  Future<void> _cargarClientesPrueba() async {
+    print('   👥 Cargando clientes de prueba...');
+
+    try {
+      final db = await DatabaseHelper().database;
+
+      final clientes = [
+        {
+          'codigo': 'CL-001',
+          'razon_social': 'Constructora del Sur S.A.',
+          'cuit': '30712345678',
+          'condicion_iva': 'Responsable Inscripto',
+          'condicion_pago': '30 días',
+          'email': 'ventas@constructoradelsur.com',
+        },
+        {
+          'codigo': 'CL-002',
+          'razon_social': 'Obras Mendocinas S.R.L.',
+          'cuit': '30798765432',
+          'condicion_iva': 'Responsable Inscripto',
+          'condicion_pago': '60 días',
+          'email': 'info@obrasmendocinas.com.ar',
+        },
+        {
+          'codigo': 'CL-003',
+          'razon_social': 'Juan Pérez',
+          'cuit': '20345678901',
+          'condicion_iva': 'Monotributista',
+          'condicion_pago': 'Contado',
+          'email': 'juanperez@gmail.com',
+        },
+        {
+          'codigo': 'CL-004',
+          'razon_social': 'Desarrollos Urbanos S.A.',
+          'cuit': '30887654321',
+          'condicion_iva': 'Responsable Inscripto',
+          'condicion_pago': '90 días',
+          'email': 'proyectos@desarrollosurbanos.com',
+        },
+        {
+          'codigo': 'CL-005',
+          'razon_social': 'María Rodríguez',
+          'cuit': '27234567890',
+          'condicion_iva': 'Monotributista',
+          'condicion_pago': 'Contado',
+          'email': 'mrodriguez@hotmail.com',
+        },
+      ];
+
+      for (var cliente in clientes) {
+        await db.insert('clientes', cliente);
+      }
+
+      print('      ✅ ${clientes.length} clientes de prueba cargados\n');
+    } catch (e) {
+      print('      ❌ Error al cargar clientes: $e\n');
+    }
+  }
+
 }

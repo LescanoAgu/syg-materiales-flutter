@@ -6,6 +6,7 @@ import 'core/database/database_helper.dart';
 import 'core/database/seed_data.dart';
 import 'features/stock/presentation/providers/producto_provider.dart';
 import 'features/stock/presentation/pages/catalogo_page.dart';
+import 'features/clientes/presentation/providers/cliente_provider.dart';
 
 /// Punto de entrada de la aplicación S&G Materiales
 void main() async {
@@ -20,7 +21,7 @@ void main() async {
     ),
   );
 
-  // Inicializar la base de datos
+  // Inicializar la base def datos
   print('🚀 Inicializando aplicación...');
   try {
     await DatabaseHelper().database;
@@ -43,10 +44,12 @@ class SyGMaterialesApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ChangeNotifierProvider hace que ProductoProvider esté disponible
-    // en TODA la app
-    return ChangeNotifierProvider(
-      create: (context) => ProductoProvider(),
+    // MultiProvider para tener múltiples providers disponibles
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => ProductoProvider()),
+        ChangeNotifierProvider(create: (context) => ClienteProvider()),
+      ],
       child: MaterialApp(
         title: 'S&G Materiales',
         debugShowCheckedModeBanner: false,
@@ -118,9 +121,8 @@ class SyGMaterialesApp extends StatelessWidget {
           useMaterial3: true,
         ),
 
-        // ========================================
-        // PANTALLA INICIAL: Stock List
-        // ========================================
+        themeMode: ThemeMode.system,
+
         home: const CatalogoPage(),
       ),
     );
