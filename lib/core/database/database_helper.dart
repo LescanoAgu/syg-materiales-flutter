@@ -68,14 +68,24 @@ class DatabaseHelper {
     print('🏗️  Creando base de datos versión $version...');
 
     // Ejecuta todas las tablas en orden
+    //Usuarios
     await _createUsuariosTable(db);
+    //Clientes y Obras
     await _createClientesTable(db);
     await _createContactosClienteTable(db);
     await _createObrasTable(db);
+    //Stock
     await _createCategoriasTable(db);
     await _createProductosTable(db);
     await _createStockTable(db);
     await _createMovimientosStockTable(db);
+    //ACOPIOS
+    await _createProveedoresTable(db);
+    await _createAcopiosTable(db);
+    await _createMovimientosAcopioTable(db);
+    await _createSaldosProveedorTable(db);
+    await _createCuentasCorrientesTable(db);
+    await _createMovimientosCuentaTable(db);
 
     // Carga datos iniciales
     await _seedCategorias(db);
@@ -299,8 +309,195 @@ class DatabaseHelper {
   }
 
   // ========================================
-  // DATOS INICIALES (SEED)
-  // ========================================
+// TABLA PROVEEDORES
+// ========================================
+  Future<void> _createProveedoresTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE proveedores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      codigo TEXT UNIQUE NOT NULL,
+      nombre TEXT NOT NULL,
+      tipo TEXT NOT NULL,
+      direccion TEXT,
+      telefono TEXT,
+      contacto TEXT,
+      email TEXT,
+      estado TEXT DEFAULT 'activo',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT
+    )
+  ''');
+
+    await db.execute('CREATE INDEX idx_proveedores_codigo ON proveedores(codigo)');
+    await db.execute('CREATE INDEX idx_proveedores_tipo ON proveedores(tipo)');
+    await db.execute('CREATE INDEX idx_proveedores_estado ON proveedores(estado)');
+
+    print('  ✓ Tabla proveedores creada');
+  }
+
+// ========================================
+// TABLA ACOPIOS
+// ========================================
+  Future<void> _createAcopiosTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE acopios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      producto_id INTEGER NOT NULL,
+      cliente_id INTEGER NOT NULL,
+      proveedor_id INTEGER NOT NULL,
+      cantidad_disponible REAL NOT NULL DEFAULT 0,
+      estado TEXT DEFAULT 'activo',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT,
+      FOREIGN KEY (producto_id) REFERENCES productos(id),
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+      FOREIGN KEY (proveedor_id) REFERENCES proveedores(id),
+      UNIQUE(producto_id, cliente_id, proveedor_id)
+    )
+  ''');
+
+    await db.execute('CREATE INDEX idx_acopios_producto ON acopios(producto_id)');
+    await db.execute('CREATE INDEX idx_acopios_cliente ON acopios(cliente_id)');
+    await db.execute('CREATE INDEX idx_acopios_proveedor ON acopios(proveedor_id)');
+    await db.execute('CREATE INDEX idx_acopios_estado ON acopios(estado)');
+
+    print('  ✓ Tabla acopios creada');
+  }
+
+// ========================================
+// TABLA MOVIMIENTOS ACOPIO
+// ========================================
+  Future<void> _createMovimientosAcopioTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE movimientos_acopio (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      producto_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL,
+      cantidad REAL NOT NULL,
+      
+      origen_tipo TEXT,
+      origen_id INTEGER,
+      destino_tipo TEXT,
+      destino_id INTEGER,
+      
+      motivo TEXT,
+      referencia TEXT,
+      remito_numero TEXT,
+      
+      valorizado INTEGER DEFAULT 0,
+      monto_valorizado REAL,
+      
+      usuario_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (producto_id) REFERENCES productos(id),
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+    )
+  ''');
+
+    await db.execute('CREATE INDEX idx_movimientos_acopio_producto ON movimientos_acopio(producto_id)');
+    await db.execute('CREATE INDEX idx_movimientos_acopio_tipo ON movimientos_acopio(tipo)');
+    await db.execute('CREATE INDEX idx_movimientos_acopio_fecha ON movimientos_acopio(created_at)');
+
+    print('  ✓ Tabla movimientos_acopio creada');
+  }
+
+// ========================================
+// TABLA SALDOS PROVEEDOR
+// ========================================
+  Future<void> _createSaldosProveedorTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE saldos_proveedor (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cliente_id INTEGER NOT NULL,
+      proveedor_id INTEGER NOT NULL,
+      saldo_a_favor REAL DEFAULT 0,
+      moneda TEXT DEFAULT 'ARS',
+      ultima_actualizacion TEXT DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+      FOREIGN KEY (proveedor_id) REFERENCES proveedores(id),
+      UNIQUE(cliente_id, proveedor_id)
+    )
+  ''');
+
+    await db.execute('CREATE INDEX idx_saldos_cliente ON saldos_proveedor(cliente_id)');
+    await db.execute('CREATE INDEX idx_saldos_proveedor ON saldos_proveedor(proveedor_id)');
+
+    print('  ✓ Tabla saldos_proveedor creada');
+  }
+
+// ========================================
+// TABLA CUENTAS CORRIENTES
+// ========================================
+  Future<void> _createCuentasCorrientesTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE cuentas_corrientes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo TEXT NOT NULL,
+      entidad_id INTEGER NOT NULL,
+      saldo_actual REAL DEFAULT 0,
+      saldo_pendiente REAL DEFAULT 0,
+      moneda TEXT DEFAULT 'ARS',
+      ultima_actualizacion TEXT DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tipo, entidad_id)
+    )
+  ''');
+
+    await db.execute('CREATE INDEX idx_cuentas_tipo ON cuentas_corrientes(tipo)');
+    await db.execute('CREATE INDEX idx_cuentas_entidad ON cuentas_corrientes(entidad_id)');
+
+    print('  ✓ Tabla cuentas_corrientes creada');
+  }
+
+// ========================================
+// TABLA MOVIMIENTOS CUENTA
+// ========================================
+  Future<void> _createMovimientosCuentaTable(Database db) async {
+    await db.execute('''
+    CREATE TABLE movimientos_cuenta (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cuenta_id INTEGER NOT NULL,
+      tipo TEXT NOT NULL,
+      estado TEXT DEFAULT 'pendiente',
+      monto REAL NOT NULL,
+      concepto TEXT,
+      
+      movimiento_stock_id INTEGER,
+      movimiento_acopio_id INTEGER,
+      remito_numero TEXT,
+      
+      fecha TEXT DEFAULT CURRENT_TIMESTAMP,
+      confirmado_fecha TEXT,
+      confirmado_por INTEGER,
+      anulado_fecha TEXT,
+      anulado_por INTEGER,
+      motivo_anulacion TEXT,
+      
+      comprobante TEXT,
+      observaciones TEXT,
+      usuario_id INTEGER,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      
+      FOREIGN KEY (cuenta_id) REFERENCES cuentas_corrientes(id),
+      FOREIGN KEY (usuario_id) REFERENCES usuarios(id),
+      FOREIGN KEY (confirmado_por) REFERENCES usuarios(id),
+      FOREIGN KEY (anulado_por) REFERENCES usuarios(id)
+    )
+  ''');
+
+    await db.execute('CREATE INDEX idx_movimientos_cuenta_cuenta ON movimientos_cuenta(cuenta_id)');
+    await db.execute('CREATE INDEX idx_movimientos_cuenta_tipo ON movimientos_cuenta(tipo)');
+    await db.execute('CREATE INDEX idx_movimientos_cuenta_estado ON movimientos_cuenta(estado)');
+    await db.execute('CREATE INDEX idx_movimientos_cuenta_fecha ON movimientos_cuenta(fecha)');
+
+    print('  ✓ Tabla movimientos_cuenta creada');
+  }
+
+
+
+
+
+
 
   /// Carga las categorías predefinidas
   Future<void> _seedCategorias(Database db) async {
@@ -362,6 +559,40 @@ class DatabaseHelper {
     }
 
     print('  ✓ ${categorias.length} categorías cargadas');
+  }
+
+
+  // ========================================
+// DATOS INICIALES - PROVEEDORES
+// ========================================
+
+  /// Carga proveedores iniciales
+  Future<void> _seedProveedoresIniciales(Database db) async {
+    print('🌱 Cargando proveedores iniciales...');
+
+    final proveedores = [
+      {
+        'codigo': 'DEP-001',
+        'nombre': 'Depósito Central S&G',
+        'tipo': 'deposito_syg',
+        'direccion': 'Dirección del depósito',
+        'estado': 'activo',
+      },
+      // Proveedores de ejemplo (puedes agregar los reales después)
+      {
+        'codigo': 'PROV-001',
+        'nombre': 'Proveedor Ejemplo 1',
+        'tipo': 'proveedor',
+        'direccion': '',
+        'estado': 'activo',
+      },
+    ];
+
+    for (var proveedor in proveedores) {
+      await db.insert('proveedores', proveedor);
+    }
+
+    print('  ✓ ${proveedores.length} proveedores cargados');
   }
 
   // ========================================

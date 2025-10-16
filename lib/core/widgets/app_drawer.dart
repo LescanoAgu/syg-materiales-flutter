@@ -5,6 +5,8 @@ import '../../features/stock/presentation/pages/catalogo_page.dart';
 import '../../features/stock/presentation/pages/stock_page.dart';
 import '../../features/clientes/presentation/pages/clientes_list_page.dart';
 import '../../features/obras/presentation/pages/obras_list_page.dart';
+import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
+
 
 /// Drawer (menú lateral) de la aplicación S&G
 ///
@@ -103,6 +105,22 @@ class AppDrawer extends StatelessWidget {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Próximamente: Pedidos')),
+
+                    );
+                  },
+                ),
+                _buildMenuItem(  // ← NUEVO
+                  context,
+                  icon: Icons.swap_horiz,
+                  title: 'Movimientos de Stock',
+                  subtitle: 'Historial y Kardex',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const MovimientoHistorialPage(),
+                      ),
                     );
                   },
                 ),
@@ -186,6 +204,10 @@ class AppDrawer extends StatelessWidget {
   // ========================================
   // ITEM DEL MENÚ
   // ========================================
+
+  // ========================================
+// ITEM DEL MENÚ
+// ========================================
   Widget _buildMenuItem(
       BuildContext context, {
         required IconData icon,
@@ -194,19 +216,7 @@ class AppDrawer extends StatelessWidget {
         required VoidCallback onTap,
       }) {
     return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.primaryLight.withOpacity(0.2),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(
-          icon,
-          color: AppColors.primary,
-          size: 22,
-        ),
-      ),
+      leading: Icon(icon, color: AppColors.primary, size: 28),
       title: Text(
         title,
         style: AppTextStyles.body1.copyWith(
@@ -217,11 +227,11 @@ class AppDrawer extends StatelessWidget {
         subtitle,
         style: AppTextStyles.caption,
       ),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 4,
+      trailing: const Icon(
+        Icons.chevron_right,
+        color: AppColors.textLight,
       ),
+      onTap: onTap,
     );
   }
 

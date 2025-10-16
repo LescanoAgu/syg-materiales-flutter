@@ -5,6 +5,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../data/models/stock_model.dart';
 import '../../data/repositories/stock_repository.dart';
 import '../providers/producto_provider.dart';
+import 'movimiento_historial_page.dart';
 import 'producto_form_page.dart';
 
 /// Pantalla de Detalle del Producto
@@ -100,10 +101,6 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
 
               const SizedBox(height: 16),
 
-              // ========================================
-              // BOTONES DE ACCIÓN
-              // ========================================
-              _buildActionButtons(),
             ],
           ),
         ),
@@ -203,6 +200,9 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
   // ========================================
   // CARD DE STOCK
   // ========================================
+  // ========================================
+// CARD DE STOCK
+// ========================================
   Widget _buildStockCard() {
     return Card(
       elevation: 4,
@@ -259,24 +259,51 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
 
             const SizedBox(height: 16),
 
-            // Botón de ajustar stock
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _mostrarDialogoAjustarStock,
-                icon: const Icon(Icons.tune),
-                label: const Text('Ajustar Stock'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+            // Botones de acciones
+            Row(
+              children: [
+                // Botón Ver Historial
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MovimientoHistorialPage(
+                            productoId: widget.producto.productoId,
+                            productoNombre: widget.producto.productoNombre,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.history),
+                    label: const Text('VER HISTORIAL'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 50),
+                      side: const BorderSide(color: AppColors.primary, width: 2),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+
+                // Botón Ajustar Stock
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _mostrarDialogoAjustarStock,
+                    icon: const Icon(Icons.edit),
+                    label: const Text('AJUSTAR'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 50),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
-
   // ========================================
   // CARD DE INFORMACIÓN
   // ========================================
@@ -372,36 +399,6 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     );
   }
 
-  // ========================================
-  // BOTONES DE ACCIÓN
-  // ========================================
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        // Botón Historial de Movimientos
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () {
-              // TODO: Navegar a historial de movimientos
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Historial de movimientos próximamente'),
-                ),
-              );
-            },
-            icon: const Icon(Icons.history),
-            label: const Text('Ver Historial de Movimientos'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary, width: 2),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 
   // ========================================
   // BADGE DE STOCK

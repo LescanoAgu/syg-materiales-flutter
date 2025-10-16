@@ -52,6 +52,9 @@ class AppColors {
   /// Verde para éxito
   static const Color success = Color(0xFF10b981);
 
+  static const Color successLight = Color(0xFFE8F5E9); // ejemplo "light"
+
+
   /// Azul para información
   static const Color info = Color(0xFF3b82f6);
 
@@ -93,6 +96,8 @@ class AppColors {
 
   /// Divisores entre elementos
   static const Color divider = Color(0xFFd1d5db);
+
+
 
   // ========================================
   // DEGRADADOS (Gradients)
