@@ -5,6 +5,7 @@ import '../../features/stock/data/repositories/categoria_repository.dart';
 import '../../features/stock/data/repositories/stock_repository.dart';
 import '../../features/clientes/data/models/cliente_model.dart';
 import '../database/database_helper.dart';
+import '../../features/obras/data/models/obra_model.dart';
 
 /// Clase para cargar datos de prueba en la base de datos
 ///
@@ -47,6 +48,7 @@ class SeedData {
       // Cargar stock inicial
       await cargarStockInicial();
       await _cargarClientesPrueba();
+      await _cargarObrasPrueba();
 
 
     } catch (e) {
@@ -528,6 +530,99 @@ class SeedData {
       print('      ✅ ${clientes.length} clientes de prueba cargados\n');
     } catch (e) {
       print('      ❌ Error al cargar clientes: $e\n');
+    }
+  }
+
+  // ========================================
+// OBRAS DE PRUEBA
+// ========================================
+
+  Future<void> _cargarObrasPrueba() async {
+    print('   🏗️  Cargando obras de prueba...');
+
+    try {
+      final db = await DatabaseHelper().database;
+
+      final obras = [
+        {
+          'codigo': 'OB-001-CL-001',
+          'cliente_id': 1,
+          'nombre': 'Edificio Torres del Sol',
+          'direccion': 'Av. San Martín 2500, Mendoza',
+          'horarios_descarga': 'Lunes a Viernes 8:00 a 17:00',
+          'contacto_obra': 'Carlos Gómez',
+          'telefono_obra': '261-1234567',
+          'maestro_obra_nombre': 'Roberto Sánchez',
+          'maestro_obra_telefono': '261-7654321',
+          'estado': 'activa',
+        },
+        {
+          'codigo': 'OB-002-CL-001',
+          'cliente_id': 1,
+          'nombre': 'Complejo Residencial Las Palmeras',
+          'direccion': 'Calle Las Heras 890, Godoy Cruz',
+          'horarios_descarga': 'Lunes a Sábado 7:00 a 18:00',
+          'contacto_obra': 'María López',
+          'telefono_obra': '261-9876543',
+          'maestro_obra_nombre': 'Juan Martínez',
+          'maestro_obra_telefono': '261-5551234',
+          'estado': 'activa',
+        },
+        {
+          'codigo': 'OB-001-CL-002',
+          'cliente_id': 2,
+          'nombre': 'Shopping Center Mendoza Plaza',
+          'direccion': 'Av. España 1200, Mendoza',
+          'horarios_descarga': 'Lunes a Domingo 6:00 a 22:00',
+          'contacto_obra': 'Diego Fernández',
+          'telefono_obra': '261-4445566',
+          'maestro_obra_nombre': 'Luis Ramírez',
+          'maestro_obra_telefono': '261-3332211',
+          'estado': 'activa',
+        },
+        {
+          'codigo': 'OB-001-CL-003',
+          'cliente_id': 3,
+          'nombre': 'Casa Quinta Luján',
+          'direccion': 'Calle Belgrano 456, Luján de Cuyo',
+          'horarios_descarga': 'Lunes a Viernes 9:00 a 18:00',
+          'contacto_obra': 'Juan Pérez',
+          'telefono_obra': '261-1234567',
+          'estado': 'activa',
+        },
+        {
+          'codigo': 'OB-001-CL-004',
+          'cliente_id': 4,
+          'nombre': 'Barrio Cerrado Los Aromos',
+          'direccion': 'Ruta 7 Km 12, Luján de Cuyo',
+          'horarios_descarga': 'Lunes a Sábado 8:00 a 19:00',
+          'contacto_obra': 'Ana García',
+          'telefono_obra': '261-8887766',
+          'maestro_obra_nombre': 'Pedro González',
+          'maestro_obra_telefono': '261-6665544',
+          'estado': 'pausada',
+        },
+        {
+          'codigo': 'OB-002-CL-004',
+          'cliente_id': 4,
+          'nombre': 'Torres del Este - Fase 1',
+          'direccion': 'Av. Acceso Este 3500, Guaymallén',
+          'horarios_descarga': 'Lunes a Viernes 7:00 a 16:00',
+          'contacto_obra': 'Marcelo Suárez',
+          'telefono_obra': '261-2223344',
+          'maestro_obra_nombre': 'Jorge Castro',
+          'maestro_obra_telefono': '261-1112233',
+          'estado': 'finalizada',
+        },
+      ];
+
+      for (var obra in obras) {
+        await db.insert('obras', obra);
+      }
+
+      print('      ✅ ${obras.length} obras de prueba cargadas\n');
+    } catch (e) {
+      print('      ❌ Error al cargar obras: $e\n');
     }
   }
 

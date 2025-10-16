@@ -7,7 +7,7 @@ import 'core/database/seed_data.dart';
 import 'features/stock/presentation/providers/producto_provider.dart';
 import 'features/stock/presentation/pages/catalogo_page.dart';
 import 'features/clientes/presentation/providers/cliente_provider.dart';
-
+import 'features/obras/presentation/providers/obra_provider.dart';
 /// Punto de entrada de la aplicación S&G Materiales
 void main() async {
   // Asegura que Flutter esté inicializado
@@ -49,6 +49,8 @@ class SyGMaterialesApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (context) => ProductoProvider()),
         ChangeNotifierProvider(create: (context) => ClienteProvider()),
+        ChangeNotifierProvider(create: (context) => ObraProvider()),
+
       ],
       child: MaterialApp(
         title: 'S&G Materiales',

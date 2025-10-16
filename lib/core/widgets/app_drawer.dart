@@ -4,6 +4,7 @@ import '../constants/app_text_styles.dart';
 import '../../features/stock/presentation/pages/catalogo_page.dart';
 import '../../features/stock/presentation/pages/stock_page.dart';
 import '../../features/clientes/presentation/pages/clientes_list_page.dart';
+import '../../features/obras/presentation/pages/obras_list_page.dart';
 
 /// Drawer (menú lateral) de la aplicación S&G
 ///
@@ -85,8 +86,11 @@ class AppDrawer extends StatelessWidget {
                   subtitle: 'Gestión de obras',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Próximamente: Obras')),
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ObrasListPage(),
+                      ),
                     );
                   },
                 ),
