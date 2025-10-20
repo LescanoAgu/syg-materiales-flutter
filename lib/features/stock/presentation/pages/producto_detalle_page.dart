@@ -7,7 +7,8 @@ import '../../data/repositories/stock_repository.dart';
 import '../providers/producto_provider.dart';
 import 'movimiento_historial_page.dart';
 import 'producto_form_page.dart';
-
+import '../../../stock/data/models/movimiento_stock_model.dart';
+import '../providers/movimiento_stock_provider.dart';
 /// Pantalla de Detalle del Producto
 ///
 /// Muestra toda la información del producto y permite:
@@ -480,27 +481,60 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     );
   }
 
-  // ========================================
-  // DIÁLOGO AJUSTAR STOCK
-  // ========================================
+// ========================================
+// DIÁLOGO AJUSTAR STOCK
+// ========================================
   void _mostrarDialogoAjustarStock() {
     _cantidadController.text = widget.producto.cantidadDisponible.toString();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ajustar Stock'),
+        title: const Text('Ajustar Stock Manualmente'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // AVISO
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.primary, width: 1.5),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Este ajuste se registrará en el historial de movimientos (Kardex).',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Stock actual
             Text(
               'Stock actual: ${widget.producto.cantidadFormateada} ${widget.producto.unidadBase}',
               style: const TextStyle(
                 fontSize: 14,
                 color: AppColors.textMedium,
+                fontWeight: FontWeight.w600,
               ),
             ),
+
             const SizedBox(height: 16),
+
+            // Campo de entrada
             TextField(
               controller: _cantidadController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -508,11 +542,13 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
                 FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
               ],
               decoration: InputDecoration(
-                labelText: 'Nueva cantidad',
+                labelText: 'Nueva cantidad total',
                 hintText: '0.00',
                 suffixText: widget.producto.unidadBase,
                 prefixIcon: const Icon(Icons.edit),
+                helperText: 'Ingresa el nuevo total de stock',
               ),
+              autofocus: true,
             ),
           ],
         ),
@@ -521,21 +557,20 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
               _ajustarStock();
             },
-            child: const Text('Guardar'),
+            icon: const Icon(Icons.check),
+            label: const Text('Ajustar Stock'),
           ),
         ],
       ),
     );
-  }
-
-  // ========================================
-  // AJUSTAR STOCK
-  // ========================================
+  }// =====================================
+// AJUSTAR STOCK
+// ========================================
   Future<void> _ajustarStock() async {
     final String textoNuevaCantidad = _cantidadController.text.trim();
 
@@ -556,10 +591,21 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
     });
 
     try {
-      // Ajustar el stock en la BD
-      await _stockRepo.establecer(
+      final cantidadActual = widget.producto.cantidadDisponible;
+      final diferencia = nuevaCantidad - cantidadActual;
+
+      // Registrar el ajuste como movimiento en el Kardex
+      final movimientoProvider = context.read<MovimientoStockProvider>();
+
+      await movimientoProvider.registrarMovimiento(
         productoId: widget.producto.productoId,
-        cantidad: nuevaCantidad,
+        tipo: TipoMovimiento.ajuste,
+        cantidad: diferencia.abs(), // Siempre positivo en el modelo
+        motivo: diferencia > 0
+            ? 'Ajuste manual desde catálogo (+${diferencia.abs()})'
+            : 'Ajuste manual desde catálogo (-${diferencia.abs()})',
+        referencia: 'AJUSTE-CATALOGO',
+        usuarioId: null, // TODO: Agregar cuando tengamos login
       );
 
       // Recargar productos en el provider
@@ -578,9 +624,12 @@ class _ProductoDetallePageState extends State<ProductoDetallePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Stock ajustado: ${productoActualizado.cantidadFormateada} ${productoActualizado.unidadBase}',
+              diferencia > 0
+                  ? 'Stock ajustado: +${diferencia.abs()} ${productoActualizado.unidadBase} (${productoActualizado.cantidadFormateada} total)'
+                  : 'Stock ajustado: -${diferencia.abs()} ${productoActualizado.unidadBase} (${productoActualizado.cantidadFormateada} total)',
             ),
             backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 3),
           ),
         );
       }

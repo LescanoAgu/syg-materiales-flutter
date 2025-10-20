@@ -6,6 +6,7 @@ import '../../features/stock/presentation/pages/stock_page.dart';
 import '../../features/clientes/presentation/pages/clientes_list_page.dart';
 import '../../features/obras/presentation/pages/obras_list_page.dart';
 import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
+import '../../features/acopios/presentation/pages/acopios_list_page.dart';
 
 
 /// Drawer (menú lateral) de la aplicación S&G
@@ -62,6 +63,21 @@ class AppDrawer extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const StockPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.warehouse,
+                  title: 'Acopios',
+                  subtitle: 'Materiales en proveedores',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AcopiosListPage(),
                       ),
                     );
                   },

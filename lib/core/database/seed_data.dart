@@ -49,6 +49,9 @@ class SeedData {
       await cargarStockInicial();
       await _cargarClientesPrueba();
       await _cargarObrasPrueba();
+      await _cargarProveedoresPrueba();
+      await _cargarAcopiosPrueba();
+
 
 
     } catch (e) {
@@ -625,5 +628,152 @@ class SeedData {
       print('      ❌ Error al cargar obras: $e\n');
     }
   }
+// ========================================
+// PROVEEDORES DE PRUEBA
+// ========================================
 
+  Future<void> _cargarProveedoresPrueba() async {
+    print('   🏪 Cargando proveedores de prueba...');
+
+    try {
+      final db = await DatabaseHelper().database;
+
+      // Cliente especial S&G primero
+      await db.insert('clientes', {
+        'codigo': 'SYG-001',
+        'razon_social': 'S&G Materiales (Acopios Propios)',
+        'cuit': '20-00000000-0',
+        'condicion_iva': 'Responsable Inscripto',
+        'condicion_pago': 'Contado',
+        'estado': 'activo',
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      final proveedores = [
+        {
+          'codigo': 'DEP-001',
+          'nombre': 'Depósito Central S&G',
+          'tipo': 'deposito_syg',
+          'direccion': 'Av. San Martín 1234, Mendoza',
+          'telefono': '261-1234567',
+          'contacto': 'Depósito Central',
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        {
+          'codigo': 'PROV-001',
+          'nombre': 'Corralón Angler',
+          'tipo': 'proveedor',
+          'direccion': 'Av. San Martín 500, Mendoza',
+          'telefono': '261-7654321',
+          'contacto': 'Juan Pérez',
+          'email': 'contacto@angler.com',
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        {
+          'codigo': 'PROV-002',
+          'nombre': 'Materiales Del Sur',
+          'tipo': 'proveedor',
+          'direccion': 'Ruta 40 Km 15, Mendoza',
+          'telefono': '261-9998877',
+          'contacto': 'María González',
+          'email': 'ventas@delsur.com',
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      ];
+
+      for (var proveedor in proveedores) {
+        await db.insert('proveedores', proveedor);
+      }
+
+      print('      ✅ ${proveedores.length} proveedores cargados');
+      print('      ✅ Cliente especial S&G creado\n');
+    } catch (e) {
+      print('      ❌ Error al cargar proveedores: $e\n');
+    }
+  }
+
+// ========================================
+// ACOPIOS DE PRUEBA
+// ========================================
+
+  Future<void> _cargarAcopiosPrueba() async {
+    print('   📦 Cargando acopios de prueba...');
+
+    try {
+      final db = await DatabaseHelper().database;
+
+      // Obtener IDs necesarios
+      final clientes = await db.query('clientes', columns: ['id', 'codigo']);
+      final productos = await db.query('productos', columns: ['id', 'codigo'], limit: 6);
+      final proveedores = await db.query('proveedores', columns: ['id', 'codigo']);
+
+      if (clientes.isEmpty || productos.isEmpty || proveedores.isEmpty) {
+        print('      ⚠️ Faltan datos base, saltando acopios\n');
+        return;
+      }
+
+      final clienteSyg = clientes.firstWhere((c) => c['codigo'] == 'SYG-001');
+      final clienteNormal = clientes.firstWhere((c) => c['codigo'] == 'CL-001');
+      final provAngler = proveedores.firstWhere((p) => p['codigo'] == 'PROV-001');
+      final provDelSur = proveedores.firstWhere((p) => p['codigo'] == 'PROV-002');
+      final depositoSyg = proveedores.firstWhere((p) => p['codigo'] == 'DEP-001');
+
+      final acopios = [
+        // Acopio de S&G en Proveedor Angler
+        {
+          'producto_id': productos[0]['id'],
+          'cliente_id': clienteSyg['id'],
+          'proveedor_id': provAngler['id'],
+          'cantidad_disponible': 100.0,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        {
+          'producto_id': productos[1]['id'],
+          'cliente_id': clienteSyg['id'],
+          'proveedor_id': provDelSur['id'],
+          'cantidad_disponible': 75.0,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        // Acopio de Cliente en Proveedor Angler
+        {
+          'producto_id': productos[2]['id'],
+          'cliente_id': clienteNormal['id'],
+          'proveedor_id': provAngler['id'],
+          'cantidad_disponible': 50.0,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        // Acopios RESERVADOS en Depósito S&G
+        {
+          'producto_id': productos[3]['id'],
+          'cliente_id': clienteNormal['id'],
+          'proveedor_id': depositoSyg['id'],
+          'cantidad_disponible': 30.0,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+        {
+          'producto_id': productos[4]['id'],
+          'cliente_id': clienteNormal['id'],
+          'proveedor_id': depositoSyg['id'],
+          'cantidad_disponible': 15.0,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      ];
+
+      for (var acopio in acopios) {
+        await db.insert('acopios', acopio);
+      }
+
+      print('      ✅ ${acopios.length} acopios de ejemplo cargados\n');
+    } catch (e) {
+      print('      ❌ Error al cargar acopios: $e\n');
+    }
+  }
 }

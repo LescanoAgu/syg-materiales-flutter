@@ -10,7 +10,7 @@ import 'features/clientes/presentation/providers/cliente_provider.dart';
 import 'features/obras/presentation/providers/obra_provider.dart';
 import 'features/stock/presentation/providers/movimiento_stock_provider.dart';
 import 'features/acopios/presentation/providers/acopio_provider.dart';  // ← NUEVO IMPORT
-
+import 'features/acopios/presentation/pages/acopios_list_page.dart';  // ← NUEVO IMPORT'
 /// Punto de entrada de la aplicación S&G Materiales
 void main() async {
   // Asegura que Flutter esté inicializado

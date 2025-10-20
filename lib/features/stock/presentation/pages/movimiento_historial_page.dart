@@ -65,6 +65,10 @@ class _MovimientoHistorialPageState extends State<MovimientoHistorialPage> {
       // APP BAR
       // ========================================
       appBar: AppBar(
+        leading: IconButton(  // ← AGREGAR ESTO
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
