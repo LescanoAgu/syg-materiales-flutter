@@ -384,6 +384,12 @@ class DatabaseHelper {
       referencia TEXT,
       remito_numero TEXT,
       
+      -- ========================================
+      -- NUEVOS CAMPOS PARA FACTURA
+      -- ========================================
+      factura_numero TEXT,               -- Número de factura (ej: FC-0001-00012345)
+      factura_fecha TEXT,                -- Fecha de la factura (ISO 8601)
+      
       valorizado INTEGER DEFAULT 0,
       monto_valorizado REAL,
       
@@ -397,7 +403,12 @@ class DatabaseHelper {
 
     await db.execute('CREATE INDEX idx_movimientos_acopio_producto ON movimientos_acopio(producto_id)');
     await db.execute('CREATE INDEX idx_movimientos_acopio_tipo ON movimientos_acopio(tipo)');
-    await db.execute('CREATE INDEX idx_movimientos_acopio_fecha ON movimientos_acopio(created_at)');
+    await db.execute('CREATE INDEX idx_movimientos_acopio_created_at ON movimientos_acopio(created_at)');
+
+    // ========================================
+    // NUEVO ÍNDICE PARA BUSCAR POR FACTURA
+    // ========================================
+    await db.execute('CREATE INDEX idx_movimientos_acopio_factura ON movimientos_acopio(factura_numero)');
 
     print('  ✓ Tabla movimientos_acopio creada');
   }

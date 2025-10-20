@@ -7,6 +7,8 @@ import '../../features/clientes/presentation/pages/clientes_list_page.dart';
 import '../../features/obras/presentation/pages/obras_list_page.dart';
 import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
 import '../../features/acopios/presentation/pages/acopios_list_page.dart';
+import '../../features/stock/presentation/pages/consultar_disponibilidad_page.dart';
+
 
 
 /// Drawer (menú lateral) de la aplicación S&G
@@ -82,6 +84,23 @@ class AppDrawer extends StatelessWidget {
                     );
                   },
                 ),
+
+                _buildMenuItem(
+                  context,
+                  icon: Icons.search,
+                  title: 'Consultar Disponibilidad',
+                  subtitle: '¿Dónde está este material?',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ConsultarDisponibilidadPage(),
+                      ),
+                    );
+                  },
+                ),
+
                 _buildMenuItem(
                   context,
                   icon: Icons.people,

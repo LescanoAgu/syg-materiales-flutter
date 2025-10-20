@@ -4,6 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/acopio_model.dart';
 import '../providers/acopio_provider.dart';
+import 'acopio_movimiento_page.dart';
 
 /// Pantalla principal de Acopios
 ///
@@ -14,7 +15,6 @@ import '../providers/acopio_provider.dart';
 /// - Todos los Acopios
 class AcopiosListPage extends StatefulWidget {
   const AcopiosListPage({super.key});
-
   @override
   State<AcopiosListPage> createState() => _AcopiosListPageState();
 }
@@ -130,10 +130,17 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
       // ========================================
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // TODO: Navegar a registrar movimiento
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Registrar movimiento - Próximamente')),
-          );
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const AcopioMovimientoPage(),
+            ),
+          ).then((resultado) {
+            // Si se registró un movimiento, recargar la lista
+            if (resultado == true) {
+              context.read<AcopioProvider>().cargarTodo();
+            }
+          });
         },
         icon: const Icon(Icons.add),
         label: const Text('NUEVO MOVIMIENTO'),

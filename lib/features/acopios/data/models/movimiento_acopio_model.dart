@@ -18,6 +18,8 @@ enum TipoMovimientoAcopio {
 /// - Traspasos entre acopios
 /// - Reservas y liberaciones
 /// - Cambios de dueño
+///
+/// NUEVO: Vinculación opcional con facturas
 class MovimientoAcopioModel extends Equatable {
   final int? id;
   final int productoId;
@@ -33,6 +35,12 @@ class MovimientoAcopioModel extends Equatable {
   final String? motivo;
   final String? referencia;
   final String? remitoNumero;
+
+  // ========================================
+  // NUEVOS CAMPOS: Factura
+  // ========================================
+  final String? facturaNumero;     // Ej: "0001-00012345"
+  final DateTime? facturaFecha;
 
   // Valorización
   final bool valorizado;
@@ -53,6 +61,8 @@ class MovimientoAcopioModel extends Equatable {
     this.motivo,
     this.referencia,
     this.remitoNumero,
+    this.facturaNumero,        // ← NUEVO
+    this.facturaFecha,         // ← NUEVO
     this.valorizado = false,
     this.montoValorizado,
     this.usuarioId,
@@ -75,6 +85,15 @@ class MovimientoAcopioModel extends Equatable {
       motivo: map['motivo'],
       referencia: map['referencia'],
       remitoNumero: map['remito_numero'],
+
+      // ========================================
+      // LEER NUEVOS CAMPOS
+      // ========================================
+      facturaNumero: map['factura_numero'],
+      facturaFecha: map['factura_fecha'] != null
+          ? DateTime.parse(map['factura_fecha'])
+          : null,
+
       valorizado: map['valorizado'] == 1,
       montoValorizado: map['monto_valorizado'] != null
           ? (map['monto_valorizado'] as num).toDouble()
@@ -98,6 +117,13 @@ class MovimientoAcopioModel extends Equatable {
       'motivo': motivo,
       'referencia': referencia,
       'remito_numero': remitoNumero,
+
+      // ========================================
+      // GUARDAR NUEVOS CAMPOS
+      // ========================================
+      'factura_numero': facturaNumero,
+      'factura_fecha': facturaFecha?.toIso8601String(),
+
       'valorizado': valorizado ? 1 : 0,
       'monto_valorizado': montoValorizado,
       'usuario_id': usuarioId,
@@ -105,7 +131,45 @@ class MovimientoAcopioModel extends Equatable {
     };
   }
 
-  /// CopyWith
+  @override
+  List<Object?> get props => [
+    id,
+    productoId,
+    tipo,
+    cantidad,
+    origenTipo,
+    origenId,
+    destinoTipo,
+    destinoId,
+    motivo,
+    referencia,
+    remitoNumero,
+    facturaNumero,      // ← NUEVO
+    facturaFecha,       // ← NUEVO
+    valorizado,
+    montoValorizado,
+    usuarioId,
+    createdAt,
+  ];
+
+  // ========================================
+  // HELPERS
+  // ========================================
+
+  /// Indica si este movimiento tiene factura asociada
+  bool get tieneFactura => facturaNumero != null && facturaNumero!.isNotEmpty;
+
+  /// Retorna el número de factura formateado o "Sin factura"
+  String get facturaFormateada => tieneFactura ? facturaNumero! : 'Sin factura';
+
+  /// Indica si la factura es reciente (últimos 30 días)
+  bool get facturaReciente {
+    if (facturaFecha == null) return false;
+    final diasDesdeFactura = DateTime.now().difference(facturaFecha!).inDays;
+    return diasDesdeFactura <= 30;
+  }
+
+  /// CopyWith para crear copias modificadas
   MovimientoAcopioModel copyWith({
     int? id,
     int? productoId,
@@ -118,6 +182,8 @@ class MovimientoAcopioModel extends Equatable {
     String? motivo,
     String? referencia,
     String? remitoNumero,
+    String? facturaNumero,
+    DateTime? facturaFecha,
     bool? valorizado,
     double? montoValorizado,
     int? usuarioId,
@@ -135,6 +201,8 @@ class MovimientoAcopioModel extends Equatable {
       motivo: motivo ?? this.motivo,
       referencia: referencia ?? this.referencia,
       remitoNumero: remitoNumero ?? this.remitoNumero,
+      facturaNumero: facturaNumero ?? this.facturaNumero,
+      facturaFecha: facturaFecha ?? this.facturaFecha,
       valorizado: valorizado ?? this.valorizado,
       montoValorizado: montoValorizado ?? this.montoValorizado,
       usuarioId: usuarioId ?? this.usuarioId,
@@ -142,28 +210,4 @@ class MovimientoAcopioModel extends Equatable {
     );
   }
 
-  @override
-  List<Object?> get props => [
-    id,
-    productoId,
-    tipo,
-    cantidad,
-    origenTipo,
-    origenId,
-    destinoTipo,
-    destinoId,
-    motivo,
-    referencia,
-    remitoNumero,
-    valorizado,
-    montoValorizado,
-    usuarioId,
-    createdAt,
-  ];
-
-  // Helpers
-  bool get esEntrada => tipo == TipoMovimientoAcopio.entrada;
-  bool get esSalida => tipo == TipoMovimientoAcopio.salida;
-  bool get esTraspaso => tipo == TipoMovimientoAcopio.traspaso;
-  bool get tieneRemito => remitoNumero != null && remitoNumero!.isNotEmpty;
 }

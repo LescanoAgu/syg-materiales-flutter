@@ -214,6 +214,8 @@ class AcopioRepository {
     String? motivo,
     String? referencia,
     String? remitoNumero,
+    String? facturaNumero,      // ← NUEVO PARÁMETRO
+    DateTime? facturaFecha,     // ← NUEVO PARÁMETRO
     bool valorizado = false,
     double? montoValorizado,
     int? usuarioId,
@@ -236,27 +238,27 @@ class AcopioRepository {
         acopioId = acopioActual.first['id'] as int;
       }
 
-      // 2. Calcular nueva cantidad según tipo
+      // 2. Calcular nueva cantidad según el tipo de movimiento
       double cantidadNueva;
-      double cantidadMovimiento = cantidad;
 
       switch (tipo) {
         case TipoMovimientoAcopio.entrada:
           cantidadNueva = cantidadAnterior + cantidad;
           break;
+
         case TipoMovimientoAcopio.salida:
-          if (cantidadAnterior < cantidad) {
-            throw Exception('Acopio insuficiente. Disponible: $cantidadAnterior');
-          }
           cantidadNueva = cantidadAnterior - cantidad;
-          cantidadMovimiento = -cantidad;
+          if (cantidadNueva < 0) {
+            throw Exception('Saldo insuficiente. Disponible: $cantidadAnterior, Requerido: $cantidad');
+          }
           break;
+
         default:
-        // Otros tipos se manejan diferente (traspasos, etc.)
+        // Para otros tipos (traspaso, reserva, etc.) mantener igual por ahora
           cantidadNueva = cantidadAnterior + cantidad;
       }
 
-      // 3. Actualizar o crear acopio
+      // 3. Actualizar o crear el acopio
       if (acopioId != null) {
         await txn.update(
           _tableName,
@@ -269,43 +271,44 @@ class AcopioRepository {
         );
       } else {
         // Crear nuevo acopio
-        acopioId = await txn.insert(
-          _tableName,
-          {
-            'producto_id': productoId,
-            'cliente_id': clienteId,
-            'proveedor_id': proveedorId,
-            'cantidad_disponible': cantidadNueva,
-            'estado': 'activo',
-            'created_at': DateTime.now().toIso8601String(),
-          },
-        );
+        acopioId = await txn.insert(_tableName, {
+          'producto_id': productoId,
+          'cliente_id': clienteId,
+          'proveedor_id': proveedorId,
+          'cantidad_disponible': cantidadNueva,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        });
       }
 
-      // 4. Insertar movimiento
+      // 4. Registrar el movimiento
       final movimiento = MovimientoAcopioModel(
         productoId: productoId,
         tipo: tipo,
-        cantidad: cantidad.abs(),
+        cantidad: cantidad,
         origenTipo: 'acopio',
         origenId: acopioId,
-        destinoTipo: null,
-        destinoId: null,
+        destinoTipo: 'acopio',
+        destinoId: acopioId,
         motivo: motivo,
         referencia: referencia,
         remitoNumero: remitoNumero,
+        facturaNumero: facturaNumero,      // ← NUEVO
+        facturaFecha: facturaFecha,        // ← NUEVO
         valorizado: valorizado,
         montoValorizado: montoValorizado,
         usuarioId: usuarioId,
         createdAt: DateTime.now(),
       );
 
-      final id = await txn.insert(
-        'movimientos_acopio',
-        movimiento.toMap(),
-      );
+      final movimientoId = await txn.insert('movimientos_acopio', movimiento.toMap());
 
-      return movimiento.copyWith(id: id);
+      print('✅ Movimiento de acopio registrado: ${tipo.name} - $cantidad unidades');
+      if (movimiento.tieneFactura) {
+        print('   📄 Factura vinculada: ${movimiento.facturaNumero}');
+      }
+
+      return movimiento.copyWith(id: movimientoId);
     });
   }
 
