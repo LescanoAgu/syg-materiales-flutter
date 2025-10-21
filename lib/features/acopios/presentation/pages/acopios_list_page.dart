@@ -7,6 +7,7 @@ import '../providers/acopio_provider.dart';
 import 'acopio_movimiento_page.dart';
 import 'facturas_list_page.dart';
 import 'acopio_traspaso_page.dart';
+import 'acopio_historial_page.dart';
 
 
 /// Pantalla principal de Acopios
@@ -527,7 +528,14 @@ class _AcopioCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
-          // TODO: Navegar a detalle
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AcopioHistorialPage(
+                acopioDetalle: acopioDetalle,
+              ),
+            ),
+          );
         },
         child: Padding(
           padding: const EdgeInsets.all(16),

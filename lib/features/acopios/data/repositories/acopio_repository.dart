@@ -610,4 +610,49 @@ class AcopioRepository {
     });
   }
 
+  // ========================================
+// HISTORIAL DE MOVIMIENTOS
+// ========================================
+
+  /// Obtiene el historial de movimientos de un acopio específico
+  Future<List<MovimientoAcopioModel>> obtenerHistorialAcopio({
+    required int productoId,
+    required int clienteId,
+    required int proveedorId,
+  }) async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      // Primero obtener el ID del acopio
+      final acopioActual = await db.query(
+        _tableName,
+        where: 'producto_id = ? AND cliente_id = ? AND proveedor_id = ?',
+        whereArgs: [productoId, clienteId, proveedorId],
+      );
+
+      if (acopioActual.isEmpty) {
+        return [];
+      }
+
+      final acopioId = acopioActual.first['id'] as int;
+
+      // Obtener todos los movimientos donde este acopio es origen o destino
+      final List<Map<String, dynamic>> maps = await db.query(
+        'movimientos_acopio',
+        where: 'origen_id = ? OR destino_id = ?',
+        whereArgs: [acopioId, acopioId],
+        orderBy: 'created_at DESC',
+      );
+
+      return List.generate(maps.length, (i) {
+        return MovimientoAcopioModel.fromMap(maps[i]);
+      });
+
+    } catch (e) {
+      print('❌ Error al obtener historial de acopio: $e');
+      return [];
+    }
+  }
+
+
 }
