@@ -8,6 +8,7 @@ import 'acopio_movimiento_page.dart';
 import 'facturas_list_page.dart';
 import 'acopio_traspaso_page.dart';
 import 'acopio_historial_page.dart';
+import 'movimiento_lote_page.dart';
 
 
 /// Pantalla principal de Acopios
@@ -162,11 +163,30 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
                 }
               });
             },
-            backgroundColor: AppColors.secondary,
+            backgroundColor: AppColors.warning,
             child: const Icon(Icons.swap_horiz),
           ),
-          const SizedBox(height: 16),
-          // Botón de nuevo movimiento
+          const SizedBox(height: 12),
+          // Botón movimiento en lote
+          FloatingActionButton(
+            heroTag: 'lote',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MovimientoLotePage(),
+                ),
+              ).then((resultado) {
+                if (resultado == true) {
+                  context.read<AcopioProvider>().cargarTodo();
+                }
+              });
+            },
+            backgroundColor: AppColors.secondary,
+            child: const Icon(Icons.playlist_add),
+          ),
+          const SizedBox(height: 12),
+          // Botón nuevo movimiento individual
           FloatingActionButton.extended(
             heroTag: 'movimiento',
             onPressed: () {
@@ -182,7 +202,7 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
               });
             },
             icon: const Icon(Icons.add),
-            label: const Text('NUEVO MOVIMIENTO'),
+            label: const Text('MOVIMIENTO'),
             backgroundColor: AppColors.primary,
           ),
         ],

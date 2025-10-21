@@ -303,4 +303,45 @@ class MovimientoStockProvider extends ChangeNotifier {
       );
     }
   }
+  /// Registra movimiento en lote (múltiples productos)
+  Future<bool> registrarMovimientoEnLote({
+    required List<Map<String, dynamic>> items,
+    required TipoMovimientoStock tipo,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    String? motivo,
+    String? referencia,
+    String? remitoNumero,
+    bool valorizado = false,
+  }) async {
+    try {
+      _state = MovimientoStockState.loading;
+      notifyListeners();
+
+      final exito = await _stockRepo.registrarMovimientoEnLote(
+        items: items,
+        tipo: tipo,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
+        motivo: motivo,
+        referencia: referencia,
+        remitoNumero: remitoNumero,
+        valorizado: valorizado,
+      );
+
+      _state = MovimientoStockState.loaded;
+      notifyListeners();
+
+      print('✅ Movimiento en lote registrado');
+      return exito;
+
+    } catch (e) {
+      _state = MovimientoStockState.error;
+      _errorMessage = e.toString();
+      notifyListeners();
+
+      print('❌ Error al registrar lote: $e');
+      return false;
+    }
+  }
 }

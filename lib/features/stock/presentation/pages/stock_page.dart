@@ -9,6 +9,7 @@ import '../../data/models/stock_model.dart';
 import '../../data/repositories/stock_repository.dart';
 import '../providers/producto_provider.dart';
 import 'movimiento_registro_page.dart';
+import '../../../acopios/presentation/pages/movimiento_lote_page.dart';
 
 /// Pantalla de STOCK (Inventario)
 ///
@@ -206,23 +207,37 @@ class _StockPageState extends State<StockPage> {
         ),
       ),
 
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const MovimientoRegistroPage(),
-            ),
-          ).then((resultado) {
-            // Si se registró un movimiento, recargar la lista
-            if (resultado == true) {
-              _cargarProductos();
-            }
-          });
-        },
-        icon: const Icon(Icons.add_circle_outline),
-        label: const Text('MOVIMIENTO'),
-        backgroundColor: AppColors.primary,
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Botón movimiento en lote
+          FloatingActionButton(
+            heroTag: 'lote',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MovimientoLotePage(),
+                ),
+              ).then((resultado) {
+                if (resultado == true) {
+                  _cargarProductos();
+                }
+              });
+            },
+            backgroundColor: AppColors.secondary,
+            child: const Icon(Icons.playlist_add),
+          ),
+          const SizedBox(height: 16),
+          // Botón movimiento individual
+          FloatingActionButton.extended(
+            heroTag: 'individual',
+            onPressed: () => _navegarARegistroMovimiento(context, null),
+            icon: const Icon(Icons.add),
+            label: const Text('MOVIMIENTO'),
+            backgroundColor: AppColors.primary,
+          ),
+        ],
       ),
     );
   }

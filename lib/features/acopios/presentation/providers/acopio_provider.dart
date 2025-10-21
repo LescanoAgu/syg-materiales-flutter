@@ -355,6 +355,50 @@ class AcopioProvider extends ChangeNotifier {
     }
   }
 
+  /// Registra movimiento en lote (múltiples productos)
+  Future<bool> registrarMovimientoEnLote({
+    required List<Map<String, dynamic>> items,
+    required int clienteId,
+    required int proveedorId,
+    required TipoMovimientoAcopio tipo,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    String? motivo,
+    String? referencia,
+    bool valorizado = false,
+  }) async {
+    try {
+      _state = AcopioState.loading;
+      notifyListeners();
+
+      final exito = await _acopioRepo.registrarMovimientoEnLote(
+        items: items,
+        clienteId: clienteId,
+        proveedorId: proveedorId,
+        tipo: tipo,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
+        motivo: motivo,
+        referencia: referencia,
+        valorizado: valorizado,
+      );
+
+      // Recargar acopios
+      await cargarAcopios();
+
+      print('✅ Movimiento en lote registrado');
+      return exito;
+
+    } catch (e) {
+      _state = AcopioState.error;
+      _errorMessage = e.toString();
+      notifyListeners();
+
+      print('❌ Error al registrar lote: $e');
+      return false;
+    }
+  }
+
   // ========================================
   // FILTRO POR FACTURA
   // ========================================

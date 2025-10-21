@@ -404,4 +404,116 @@ class StockRepository {
       return 0;
     }
   }
+
+  // ========================================
+// REGISTRO EN LOTE
+// ========================================
+
+  /// Registra múltiples movimientos de stock en una sola transacción
+  Future<bool> registrarMovimientoEnLote({
+    required List<Map<String, dynamic>> items, // Lista de {productoId, cantidad, montoValorizado}
+    required TipoMovimientoStock tipo,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    String? motivo,
+    String? referencia,
+    String? remitoNumero,
+    bool valorizado = false,
+    int? usuarioId,
+  }) async {
+    final db = await _dbHelper.database;
+
+    return await db.transaction((txn) async {
+      try {
+        int movimientosRegistrados = 0;
+
+        for (var item in items) {
+          final productoId = item['productoId'] as int;
+          final cantidad = item['cantidad'] as double;
+          final montoValorizado = item['montoValorizado'] as double?;
+
+          // 1. Obtener stock actual
+          final stockActual = await txn.query(
+            _tableName,
+            where: 'producto_id = ?',
+            whereArgs: [productoId],
+          );
+
+          if (stockActual.isEmpty) {
+            throw Exception('Producto ID $productoId no tiene stock registrado');
+          }
+
+          final cantidadActual = stockActual.first['cantidad_disponible'] as double;
+          final stockId = stockActual.first['id'] as int;
+
+          // 2. Calcular nueva cantidad
+          double cantidadNueva;
+
+          switch (tipo) {
+            case TipoMovimientoStock.entrada:
+              cantidadNueva = cantidadActual + cantidad;
+              break;
+
+            case TipoMovimientoStock.salida:
+              cantidadNueva = cantidadActual - cantidad;
+              if (cantidadNueva < 0) {
+                throw Exception(
+                  'Saldo insuficiente en producto ID $productoId. '
+                      'Disponible: $cantidadActual, Requerido: $cantidad',
+                );
+              }
+              break;
+
+            case TipoMovimientoStock.ajuste:
+              cantidadNueva = cantidad; // En ajuste, la cantidad es el nuevo total
+              break;
+
+            default:
+              cantidadNueva = cantidadActual;
+          }
+
+          // 3. Actualizar stock
+          await txn.update(
+            _tableName,
+            {
+              'cantidad_disponible': cantidadNueva,
+              'updated_at': DateTime.now().toIso8601String(),
+            },
+            where: 'id = ?',
+            whereArgs: [stockId],
+          );
+
+          // 4. Registrar movimiento
+          final movimiento = {
+            'producto_id': productoId,
+            'tipo': tipo.name,
+            'cantidad': cantidad,
+            'motivo': motivo,
+            'referencia': referencia,
+            'remito_numero': remitoNumero,
+            'factura_numero': facturaNumero,
+            'factura_fecha': facturaFecha?.toIso8601String(),
+            'valorizado': valorizado ? 1 : 0,
+            'monto_valorizado': montoValorizado,
+            'usuario_id': usuarioId,
+            'created_at': DateTime.now().toIso8601String(),
+          };
+
+          await txn.insert('movimientos_stock', movimiento);
+          movimientosRegistrados++;
+        }
+
+        print('✅ Movimiento en lote de STOCK registrado: $movimientosRegistrados productos');
+        if (facturaNumero != null) {
+          print('   📄 Factura: $facturaNumero');
+        }
+
+        return true;
+
+      } catch (e) {
+        print('❌ Error en registro en lote de stock: $e');
+        rethrow;
+      }
+    });
+  }
 }

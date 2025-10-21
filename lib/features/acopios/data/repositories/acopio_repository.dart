@@ -653,6 +653,129 @@ class AcopioRepository {
       return [];
     }
   }
+// ========================================
+// REGISTRO EN LOTE
+// ========================================
 
+  /// Registra múltiples movimientos de acopio en una sola transacción
+  /// Útil para registrar facturas completas con varios productos
+  Future<bool> registrarMovimientoEnLote({
+    required List<Map<String, dynamic>> items, // Lista de {productoId, cantidad}
+    required int clienteId,
+    required int proveedorId,
+    required TipoMovimientoAcopio tipo,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    String? motivo,
+    String? referencia,
+    bool valorizado = false,
+    int? usuarioId,
+  }) async {
+    final db = await _dbHelper.database;
+
+    return await db.transaction((txn) async {
+      try {
+        int movimientosRegistrados = 0;
+
+        for (var item in items) {
+          final productoId = item['productoId'] as int;
+          final cantidad = item['cantidad'] as double;
+          final montoValorizado = item['montoValorizado'] as double?;
+
+          // 1. Obtener o crear el acopio
+          final acopioActual = await txn.query(
+            _tableName,
+            where: 'producto_id = ? AND cliente_id = ? AND proveedor_id = ?',
+            whereArgs: [productoId, clienteId, proveedorId],
+          );
+
+          double cantidadAnterior = 0;
+          int? acopioId;
+
+          if (acopioActual.isNotEmpty) {
+            cantidadAnterior = acopioActual.first['cantidad_disponible'] as double;
+            acopioId = acopioActual.first['id'] as int;
+          }
+
+          // 2. Calcular nueva cantidad
+          double cantidadNueva;
+
+          switch (tipo) {
+            case TipoMovimientoAcopio.entrada:
+              cantidadNueva = cantidadAnterior + cantidad;
+              break;
+
+            case TipoMovimientoAcopio.salida:
+              cantidadNueva = cantidadAnterior - cantidad;
+              if (cantidadNueva < 0) {
+                throw Exception(
+                  'Saldo insuficiente en producto ID $productoId. '
+                      'Disponible: $cantidadAnterior, Requerido: $cantidad',
+                );
+              }
+              break;
+
+            default:
+              cantidadNueva = cantidadAnterior + cantidad;
+          }
+
+          // 3. Actualizar o crear el acopio
+          if (acopioId != null) {
+            await txn.update(
+              _tableName,
+              {
+                'cantidad_disponible': cantidadNueva,
+                'updated_at': DateTime.now().toIso8601String(),
+              },
+              where: 'id = ?',
+              whereArgs: [acopioId],
+            );
+          } else {
+            acopioId = await txn.insert(_tableName, {
+              'producto_id': productoId,
+              'cliente_id': clienteId,
+              'proveedor_id': proveedorId,
+              'cantidad_disponible': cantidadNueva,
+              'estado': 'activo',
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          }
+
+          // 4. Registrar el movimiento
+          final movimiento = MovimientoAcopioModel(
+            productoId: productoId,
+            tipo: tipo,
+            cantidad: cantidad,
+            origenTipo: 'acopio',
+            origenId: acopioId,
+            destinoTipo: 'acopio',
+            destinoId: acopioId,
+            motivo: motivo,
+            referencia: referencia,
+            facturaNumero: facturaNumero,
+            facturaFecha: facturaFecha,
+            valorizado: valorizado,
+            montoValorizado: montoValorizado,
+            usuarioId: usuarioId,
+            createdAt: DateTime.now(),
+          );
+
+          await txn.insert('movimientos_acopio', movimiento.toMap());
+          movimientosRegistrados++;
+        }
+
+        print('✅ Movimiento en lote registrado: $movimientosRegistrados productos');
+        if (facturaNumero != null) {
+          print('   📄 Factura: $facturaNumero');
+        }
+
+        return true;
+
+      } catch (e) {
+        print('❌ Error en registro en lote: $e');
+        rethrow;
+      }
+    });
+  }
 
 }
