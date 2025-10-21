@@ -202,7 +202,7 @@ class AcopioProvider extends ChangeNotifier {
     _clienteFiltro = null;
     _proveedorFiltro = null;
     _searchTerm = '';
-    _facturaFiltro = null;  // ← NUEVO
+    _facturaFiltro = null;
     await cargarAcopios();
   }
 
@@ -265,9 +265,9 @@ class AcopioProvider extends ChangeNotifier {
     required double cantidad,
     String? motivo,
     String? referencia,
+    String? remitoNumero,
     String? facturaNumero,
     DateTime? facturaFecha,
-    String? remitoNumero,
     bool valorizado = false,
     double? montoValorizado,
   }) async {
@@ -283,9 +283,9 @@ class AcopioProvider extends ChangeNotifier {
         cantidad: cantidad,
         motivo: motivo,
         referencia: referencia,
+        remitoNumero: remitoNumero,
         facturaNumero: facturaNumero,
         facturaFecha: facturaFecha,
-        remitoNumero: remitoNumero,
         valorizado: valorizado,
         montoValorizado: montoValorizado,
       );
@@ -306,43 +306,58 @@ class AcopioProvider extends ChangeNotifier {
     }
   }
 
-  // ========================================
-  // UTILIDADES
-  // ========================================
+  /// Registra traspaso entre acopios
+  Future<bool> registrarTraspaso({
+    required int productoId,
+    // Origen
+    required int origenClienteId,
+    required int origenProveedorId,
+    // Destino
+    required int destinoClienteId,
+    required int destinoProveedorId,
+    // Cantidad
+    required double cantidad,
+    String? motivo,
+    String? referencia,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+  }) async {
+    try {
+      _state = AcopioState.loading;
+      notifyListeners();
 
-  /// Obtiene acopios agrupados por proveedor
-  Map<String, List<AcopioDetalle>> obtenerAgrupadosPorProveedor() {
-    final Map<String, List<AcopioDetalle>> agrupados = {};
+      final exito = await _acopioRepo.registrarTraspaso(
+        productoId: productoId,
+        origenClienteId: origenClienteId,
+        origenProveedorId: origenProveedorId,
+        destinoClienteId: destinoClienteId,
+        destinoProveedorId: destinoProveedorId,
+        cantidad: cantidad,
+        motivo: motivo,
+        referencia: referencia,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
+      );
 
-    for (var acopio in _acopios) {
-      final key = acopio.proveedorNombre;
-      if (!agrupados.containsKey(key)) {
-        agrupados[key] = [];
-      }
-      agrupados[key]!.add(acopio);
+      // Recargar acopios
+      await cargarAcopios();
+
+      print('✅ Traspaso registrado');
+      return exito;
+
+    } catch (e) {
+      _state = AcopioState.error;
+      _errorMessage = e.toString();
+      notifyListeners();
+
+      print('❌ Error al registrar traspaso: $e');
+      return false;
     }
-
-    return agrupados;
   }
 
-  /// Obtiene acopios agrupados por cliente
-  Map<String, List<AcopioDetalle>> obtenerAgrupadosPorCliente() {
-    final Map<String, List<AcopioDetalle>> agrupados = {};
-
-    for (var acopio in _acopios) {
-      final key = acopio.clienteRazonSocial;
-      if (!agrupados.containsKey(key)) {
-        agrupados[key] = [];
-      }
-      agrupados[key]!.add(acopio);
-    }
-
-    return agrupados;
-  }
-
-// ========================================
-// FILTRO POR FACTURA
-// ========================================
+  // ========================================
+  // FILTRO POR FACTURA
+  // ========================================
 
   /// Obtiene facturas únicas con sus estadísticas
   Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async {
@@ -400,6 +415,41 @@ class AcopioProvider extends ChangeNotifier {
       return {};
     }
   }
+
+  // ========================================
+  // UTILIDADES
+  // ========================================
+
+  /// Obtiene acopios agrupados por proveedor
+  Map<String, List<AcopioDetalle>> obtenerAgrupadosPorProveedor() {
+    final Map<String, List<AcopioDetalle>> agrupados = {};
+
+    for (var acopio in _acopios) {
+      final key = acopio.proveedorNombre;
+      if (!agrupados.containsKey(key)) {
+        agrupados[key] = [];
+      }
+      agrupados[key]!.add(acopio);
+    }
+
+    return agrupados;
+  }
+
+  /// Obtiene acopios agrupados por cliente
+  Map<String, List<AcopioDetalle>> obtenerAgrupadosPorCliente() {
+    final Map<String, List<AcopioDetalle>> agrupados = {};
+
+    for (var acopio in _acopios) {
+      final key = acopio.clienteRazonSocial;
+      if (!agrupados.containsKey(key)) {
+        agrupados[key] = [];
+      }
+      agrupados[key]!.add(acopio);
+    }
+
+    return agrupados;
+  }
+
   /// Limpia el estado
   void limpiar() {
     _state = AcopioState.initial;
@@ -409,6 +459,7 @@ class AcopioProvider extends ChangeNotifier {
     _clienteFiltro = null;
     _proveedorFiltro = null;
     _searchTerm = '';
+    _facturaFiltro = null;
     notifyListeners();
   }
 }

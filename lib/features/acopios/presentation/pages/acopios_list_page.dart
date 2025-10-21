@@ -6,6 +6,7 @@ import '../../data/models/acopio_model.dart';
 import '../providers/acopio_provider.dart';
 import 'acopio_movimiento_page.dart';
 import 'facturas_list_page.dart';
+import 'acopio_traspaso_page.dart';
 
 
 /// Pantalla principal de Acopios
@@ -142,23 +143,48 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
       // ========================================
       // FAB
       // ========================================
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AcopioMovimientoPage(),
-            ),
-          ).then((resultado) {
-            // Si se registró un movimiento, recargar la lista
-            if (resultado == true) {
-              context.read<AcopioProvider>().cargarTodo();
-            }
-          });
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('NUEVO MOVIMIENTO'),
-        backgroundColor: AppColors.primary,
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Botón de traspaso
+          FloatingActionButton(
+            heroTag: 'traspaso',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AcopioTraspasoPage(),
+                ),
+              ).then((resultado) {
+                if (resultado == true) {
+                  context.read<AcopioProvider>().cargarTodo();
+                }
+              });
+            },
+            backgroundColor: AppColors.secondary,
+            child: const Icon(Icons.swap_horiz),
+          ),
+          const SizedBox(height: 16),
+          // Botón de nuevo movimiento
+          FloatingActionButton.extended(
+            heroTag: 'movimiento',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AcopioMovimientoPage(),
+                ),
+              ).then((resultado) {
+                if (resultado == true) {
+                  context.read<AcopioProvider>().cargarTodo();
+                }
+              });
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('NUEVO MOVIMIENTO'),
+            backgroundColor: AppColors.primary,
+          ),
+        ],
       ),
     );
   }

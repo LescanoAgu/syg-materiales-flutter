@@ -120,8 +120,16 @@ class ProveedorModel extends Equatable {
     updatedAt,
   ];
 
-  // Helpers
+  // ========================================
+// HELPERS
+// ========================================
+
+  /// Indica si es el depósito de S&G
   bool get esDepositoSyg => tipo == TipoProveedor.deposito_syg;
-  bool get esProveedor => tipo == TipoProveedor.proveedor;
+
+  /// Indica si es un proveedor externo
+  bool get esProveedorExterno => tipo == TipoProveedor.proveedor;
+
+  /// Indica si está activo
   bool get estaActivo => estado == 'activo';
 }

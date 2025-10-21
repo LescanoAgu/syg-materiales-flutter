@@ -167,9 +167,19 @@ class AcopioDetalle extends Equatable {
   ];
 
   // Helpers
-  String get cantidadFormateada => acopio.cantidadDisponible.toStringAsFixed(0);
   String get descripcionCompleta => '$productoCodigo - $productoNombre';
   String get ubicacionCompleta => '$proveedorCodigo - $proveedorNombre';
   String get clienteCompleto => '$clienteCodigo - $clienteRazonSocial';
+
+  /// Indica si el acopio está en depósito S&G
   bool get esDepositoSyg => proveedorTipo == 'deposito_syg';
+
+  /// Formatea la cantidad con 2 decimales
+  String get cantidadFormateada {
+    if (acopio.cantidadDisponible % 1 == 0) {
+      return acopio.cantidadDisponible.toInt().toString();
+    }
+    return acopio.cantidadDisponible.toStringAsFixed(2);
+  }
+
 }

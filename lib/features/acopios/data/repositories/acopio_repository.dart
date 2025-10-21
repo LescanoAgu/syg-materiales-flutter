@@ -474,4 +474,140 @@ class AcopioRepository {
     }
   }
 
+  // ========================================
+// TRASPASOS ENTRE ACOPIOS
+// ========================================
+
+  /// Registra un traspaso entre dos acopios
+  ///
+  /// Ejemplo:
+  /// - Origen: Cliente A en Proveedor Angler
+  /// - Destino: Cliente B en Proveedor Angler
+  /// - Cantidad: 20 bolsas
+  Future<bool> registrarTraspaso({
+    required int productoId,
+    // Origen
+    required int origenClienteId,
+    required int origenProveedorId,
+    // Destino
+    required int destinoClienteId,
+    required int destinoProveedorId,
+    // Cantidad
+    required double cantidad,
+    String? motivo,
+    String? referencia,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    int? usuarioId,
+  }) async {
+    final db = await _dbHelper.database;
+
+    return await db.transaction((txn) async {
+      // ========================================
+      // 1. VALIDAR ACOPIO ORIGEN
+      // ========================================
+      final acopioOrigen = await txn.query(
+        _tableName,
+        where: 'producto_id = ? AND cliente_id = ? AND proveedor_id = ?',
+        whereArgs: [productoId, origenClienteId, origenProveedorId],
+      );
+
+      if (acopioOrigen.isEmpty) {
+        throw Exception('El acopio de origen no existe');
+      }
+
+      final cantidadOrigenActual = acopioOrigen.first['cantidad_disponible'] as double;
+      final origenId = acopioOrigen.first['id'] as int;
+
+      if (cantidadOrigenActual < cantidad) {
+        throw Exception(
+          'Saldo insuficiente en origen. Disponible: $cantidadOrigenActual, Requerido: $cantidad',
+        );
+      }
+
+      // ========================================
+      // 2. OBTENER O CREAR ACOPIO DESTINO
+      // ========================================
+      final acopioDestino = await txn.query(
+        _tableName,
+        where: 'producto_id = ? AND cliente_id = ? AND proveedor_id = ?',
+        whereArgs: [productoId, destinoClienteId, destinoProveedorId],
+      );
+
+      int destinoId;
+      double cantidadDestinoActual = 0;
+
+      if (acopioDestino.isNotEmpty) {
+        destinoId = acopioDestino.first['id'] as int;
+        cantidadDestinoActual = acopioDestino.first['cantidad_disponible'] as double;
+      } else {
+        // Crear nuevo acopio destino
+        destinoId = await txn.insert(_tableName, {
+          'producto_id': productoId,
+          'cliente_id': destinoClienteId,
+          'proveedor_id': destinoProveedorId,
+          'cantidad_disponible': 0,
+          'estado': 'activo',
+          'created_at': DateTime.now().toIso8601String(),
+        });
+      }
+
+      // ========================================
+      // 3. ACTUALIZAR SALDOS
+      // ========================================
+
+      // Restar del origen
+      final nuevaCantidadOrigen = cantidadOrigenActual - cantidad;
+      await txn.update(
+        _tableName,
+        {
+          'cantidad_disponible': nuevaCantidadOrigen,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [origenId],
+      );
+
+      // Sumar al destino
+      final nuevaCantidadDestino = cantidadDestinoActual + cantidad;
+      await txn.update(
+        _tableName,
+        {
+          'cantidad_disponible': nuevaCantidadDestino,
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [destinoId],
+      );
+
+      // ========================================
+      // 4. REGISTRAR MOVIMIENTO DE TRASPASO
+      // ========================================
+      final movimiento = MovimientoAcopioModel(
+        productoId: productoId,
+        tipo: TipoMovimientoAcopio.traspaso,
+        cantidad: cantidad,
+        origenTipo: 'acopio',
+        origenId: origenId,
+        destinoTipo: 'acopio',
+        destinoId: destinoId,
+        motivo: motivo ?? 'Traspaso entre acopios',
+        referencia: referencia,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
+        valorizado: false, // Los traspasos no se valorizan
+        usuarioId: usuarioId,
+        createdAt: DateTime.now(),
+      );
+
+      await txn.insert('movimientos_acopio', movimiento.toMap());
+
+      print('✅ Traspaso registrado: $cantidad unidades');
+      print('   📤 Origen: Cliente $origenClienteId en Proveedor $origenProveedorId → Saldo: $nuevaCantidadOrigen');
+      print('   📥 Destino: Cliente $destinoClienteId en Proveedor $destinoProveedorId → Saldo: $nuevaCantidadDestino');
+
+      return true;
+    });
+  }
+
 }
