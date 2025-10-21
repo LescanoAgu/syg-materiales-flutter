@@ -40,24 +40,44 @@ class MovimientoStockProvider extends ChangeNotifier {
   // ========================================
 
   MovimientoStockState get state => _state;
+
   List<MovimientoStock> get movimientos => _movimientos;
+
   String? get errorMessage => _errorMessage;
 
   bool get isLoading => _state == MovimientoStockState.loading;
+
   bool get isRegistering => _state == MovimientoStockState.registering;
+
   bool get hasError => _state == MovimientoStockState.error;
+
   bool get hasData => _movimientos.isNotEmpty;
 
   DateTime? get fechaDesde => _fechaDesde;
+
   DateTime? get fechaHasta => _fechaHasta;
+
   TipoMovimiento? get tipoFiltro => _tipoFiltro;
+
   int? get productoFiltro => _productoFiltro;
 
   // Estadísticas
   int get totalMovimientos => _movimientos.length;
-  int get totalEntradas => _movimientos.where((m) => m.tipo == TipoMovimiento.entrada).length;
-  int get totalSalidas => _movimientos.where((m) => m.tipo == TipoMovimiento.salida).length;
-  int get totalAjustes => _movimientos.where((m) => m.tipo == TipoMovimiento.ajuste).length;
+
+  int get totalEntradas =>
+      _movimientos
+          .where((m) => m.tipo == TipoMovimiento.entrada)
+          .length;
+
+  int get totalSalidas =>
+      _movimientos
+          .where((m) => m.tipo == TipoMovimiento.salida)
+          .length;
+
+  int get totalAjustes =>
+      _movimientos
+          .where((m) => m.tipo == TipoMovimiento.ajuste)
+          .length;
 
   // ========================================
   // OPERACIONES PRINCIPALES
@@ -110,7 +130,6 @@ class MovimientoStockProvider extends ChangeNotifier {
 
       print('✅ Movimiento registrado: ${tipo.name} de $cantidad unidades');
       return true;
-
     } catch (e) {
       _state = MovimientoStockState.error;
       _errorMessage = e.toString();
@@ -139,8 +158,8 @@ class MovimientoStockProvider extends ChangeNotifier {
       _state = MovimientoStockState.loaded;
       notifyListeners();
 
-      print('✅ ${_movimientos.length} movimientos cargados del producto $productoId');
-
+      print('✅ ${_movimientos
+          .length} movimientos cargados del producto $productoId');
     } catch (e) {
       _state = MovimientoStockState.error;
       _errorMessage = 'Error al cargar movimientos: $e';
@@ -191,7 +210,6 @@ class MovimientoStockProvider extends ChangeNotifier {
       notifyListeners();
 
       print('✅ ${_movimientos.length} movimientos cargados con filtros');
-
     } catch (e) {
       _state = MovimientoStockState.error;
       _errorMessage = 'Error al cargar movimientos: $e';
@@ -223,7 +241,8 @@ class MovimientoStockProvider extends ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      final movimientoCancelacion = await _repository.cancelarMovimiento(movimientoId);
+      final movimientoCancelacion = await _repository.cancelarMovimiento(
+          movimientoId);
 
       // Agregar el movimiento de cancelación a la lista
       _movimientos.insert(0, movimientoCancelacion);
@@ -233,7 +252,6 @@ class MovimientoStockProvider extends ChangeNotifier {
 
       print('✅ Movimiento cancelado');
       return true;
-
     } catch (e) {
       _state = MovimientoStockState.error;
       _errorMessage = 'Error al cancelar movimiento: $e';
@@ -290,8 +308,6 @@ class MovimientoStockProvider extends ChangeNotifier {
     _productoFiltro = null;
     notifyListeners();
   }
-
-  /// Refresca los movimientos con los filtros actuales
   Future<void> refrescar() async {
     if (_productoFiltro != null) {
       await cargarMovimientosDeProducto(_productoFiltro!);
@@ -306,19 +322,22 @@ class MovimientoStockProvider extends ChangeNotifier {
   /// Registra movimiento en lote (múltiples productos)
   Future<bool> registrarMovimientoEnLote({
     required List<Map<String, dynamic>> items,
-    required TipoMovimientoStock tipo,
+    required TipoMovimiento tipo,
     String? facturaNumero,
     DateTime? facturaFecha,
     String? motivo,
     String? referencia,
     String? remitoNumero,
     bool valorizado = false,
+    int? usuarioId,
   }) async {
     try {
-      _state = MovimientoStockState.loading;
+      _state = MovimientoStockState.registering;
+      _errorMessage = null;
       notifyListeners();
 
-      final exito = await _stockRepo.registrarMovimientoEnLote(
+      // Llamar al repositorio
+      final exito = await _repository.registrarMovimientoEnLote(
         items: items,
         tipo: tipo,
         facturaNumero: facturaNumero,
@@ -327,6 +346,7 @@ class MovimientoStockProvider extends ChangeNotifier {
         referencia: referencia,
         remitoNumero: remitoNumero,
         valorizado: valorizado,
+        usuarioId: usuarioId,
       );
 
       _state = MovimientoStockState.loaded;
@@ -337,10 +357,10 @@ class MovimientoStockProvider extends ChangeNotifier {
 
     } catch (e) {
       _state = MovimientoStockState.error;
-      _errorMessage = e.toString();
+      _errorMessage = 'Error al registrar lote: $e';
       notifyListeners();
 
-      print('❌ Error al registrar lote: $e');
+      print('❌ Error: $e');
       return false;
     }
   }

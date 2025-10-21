@@ -232,8 +232,16 @@ class _StockPageState extends State<StockPage> {
           // Botón movimiento individual
           FloatingActionButton.extended(
             heroTag: 'individual',
-            onPressed: () => _navegarARegistroMovimiento(context, null),
-            icon: const Icon(Icons.add),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MovimientoRegistroPage(),
+                ),
+              ).then((_) {
+                _cargarProductos();
+              });
+            },            icon: const Icon(Icons.add),
             label: const Text('MOVIMIENTO'),
             backgroundColor: AppColors.primary,
           ),

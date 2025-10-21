@@ -506,4 +506,23 @@ class AcopioProvider extends ChangeNotifier {
     _facturaFiltro = null;
     notifyListeners();
   }
+
+  /// Obtiene el historial de movimientos de un acopio específico
+  Future<List<MovimientoAcopioModel>> obtenerHistorialAcopio({
+    required int productoId,
+    required int clienteId,
+    required int proveedorId,
+  }) async {
+    try {
+      return await _acopioRepo.obtenerHistorialAcopio(
+        productoId: productoId,
+        clienteId: clienteId,
+        proveedorId: proveedorId,
+      );
+    } catch (e) {
+      print('❌ Error en provider al obtener historial: $e');
+      return [];
+    }
+  }
+
 }

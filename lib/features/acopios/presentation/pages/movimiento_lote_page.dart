@@ -920,8 +920,8 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
       // REGISTRO EN STOCK
       // ========================================
       final tipo = _esEntrada
-          ? TipoMovimientoStock.entrada
-          : TipoMovimientoStock.salida;
+          ? TipoMovimiento.entrada
+          : TipoMovimiento.salida;
 
       exito = await context.read<MovimientoStockProvider>().registrarMovimientoEnLote(
         items: items,

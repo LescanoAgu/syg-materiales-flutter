@@ -209,4 +209,105 @@ class MovimientoStockRepository {
       usuarioId: movimientoOriginal.usuarioId,
     );
   }
-}
+  /// Registra múltiples movimientos de stock en una sola transacción
+  Future<bool> registrarMovimientoEnLote({
+    required List<Map<String, dynamic>> items,
+    required TipoMovimiento tipo,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    String? motivo,
+    String? referencia,
+    String? remitoNumero,
+    bool valorizado = false,
+    int? usuarioId,
+  }) async {
+    final db = await _databaseHelper.database;
+
+    return await db.transaction((txn) async {
+      try {
+        int movimientosRegistrados = 0;
+
+        for (var item in items) {
+          final productoId = item['productoId'] as int;
+          final cantidad = item['cantidad'] as double;
+          final montoValorizado = item['montoValorizado'] as double?;
+
+          // 1. Obtener stock actual
+          final stockActual = await txn.query(
+            'stock',
+            where: 'producto_id = ?',
+            whereArgs: [productoId],
+          );
+
+          if (stockActual.isEmpty) {
+            throw Exception('Producto ID $productoId no tiene stock registrado');
+          }
+
+          final cantidadActual = stockActual.first['cantidad_disponible'] as double;
+
+          // 2. Calcular nueva cantidad según tipo
+          double cantidadPosterior;
+
+          switch (tipo) {
+            case TipoMovimiento.entrada:
+              cantidadPosterior = cantidadActual + cantidad;
+              break;
+
+            case TipoMovimiento.salida:
+              if (cantidadActual < cantidad) {
+                throw Exception(
+                  'Stock insuficiente en producto ID $productoId. '
+                      'Disponible: $cantidadActual, Requerido: $cantidad',
+                );
+              }
+              cantidadPosterior = cantidadActual - cantidad;
+              break;
+
+            case TipoMovimiento.ajuste:
+              cantidadPosterior = cantidad;
+              break;
+          }
+
+          // 3. Actualizar stock
+          await txn.update(
+            'stock',
+            {
+              'cantidad_disponible': cantidadPosterior,
+              'ultima_actualizacion': DateTime.now().toIso8601String(),
+            },
+            where: 'producto_id = ?',
+            whereArgs: [productoId],
+          );
+
+          // 4. Crear objeto movimiento
+          final movimiento = MovimientoStock(
+            productoId: productoId,
+            tipo: tipo,
+            cantidad: cantidad,
+            cantidadAnterior: cantidadActual,
+            cantidadPosterior: cantidadPosterior,
+            motivo: motivo,
+            referencia: referencia,
+            usuarioId: usuarioId,
+            createdAt: DateTime.now(),
+          );
+
+          // 5. Registrar movimiento
+          await txn.insert('movimientos_stock', movimiento.toMap());
+          movimientosRegistrados++;
+        }
+
+        print('✅ Movimiento en lote registrado: $movimientosRegistrados productos');
+        if (facturaNumero != null) {
+          print('   📄 Factura: $facturaNumero');
+        }
+
+        return true;
+
+      } catch (e) {
+        print('❌ Error en registro en lote: $e');
+        rethrow;
+      }
+    });
+  }
+}  // ← Cierre de la clase MovimientoStockRepository

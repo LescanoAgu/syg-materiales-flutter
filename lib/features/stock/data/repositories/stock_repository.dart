@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import '../../../../core/database/database_helper.dart';
 import '../models/stock_model.dart';
+import '../models/movimiento_stock_model.dart';
 
 /// Repositorio de Stock
 ///
@@ -412,7 +413,7 @@ class StockRepository {
   /// Registra múltiples movimientos de stock en una sola transacción
   Future<bool> registrarMovimientoEnLote({
     required List<Map<String, dynamic>> items, // Lista de {productoId, cantidad, montoValorizado}
-    required TipoMovimientoStock tipo,
+    required TipoMovimiento tipo,
     String? facturaNumero,
     DateTime? facturaFecha,
     String? motivo,
@@ -450,11 +451,11 @@ class StockRepository {
           double cantidadNueva;
 
           switch (tipo) {
-            case TipoMovimientoStock.entrada:
+            case TipoMovimiento.entrada:
               cantidadNueva = cantidadActual + cantidad;
               break;
 
-            case TipoMovimientoStock.salida:
+            case TipoMovimiento.salida:
               cantidadNueva = cantidadActual - cantidad;
               if (cantidadNueva < 0) {
                 throw Exception(
@@ -464,7 +465,7 @@ class StockRepository {
               }
               break;
 
-            case TipoMovimientoStock.ajuste:
+            case TipoMovimiento.ajuste:
               cantidadNueva = cantidad; // En ajuste, la cantidad es el nuevo total
               break;
 
