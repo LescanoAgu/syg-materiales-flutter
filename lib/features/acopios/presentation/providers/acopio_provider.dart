@@ -37,6 +37,7 @@ class AcopioProvider extends ChangeNotifier {
   int? _clienteFiltro;
   int? _proveedorFiltro;
   String _searchTerm = '';
+  String? _facturaFiltro;
 
   // ========================================
   // GETTERS
@@ -54,6 +55,7 @@ class AcopioProvider extends ChangeNotifier {
   int? get clienteFiltro => _clienteFiltro;
   int? get proveedorFiltro => _proveedorFiltro;
   String get searchTerm => _searchTerm;
+  String? get facturaFiltro => _facturaFiltro;
 
   // Estadísticas
   int get totalAcopios => _acopios.length;
@@ -200,6 +202,7 @@ class AcopioProvider extends ChangeNotifier {
     _clienteFiltro = null;
     _proveedorFiltro = null;
     _searchTerm = '';
+    _facturaFiltro = null;  // ← NUEVO
     await cargarAcopios();
   }
 
@@ -215,6 +218,8 @@ class AcopioProvider extends ChangeNotifier {
     required double cantidad,
     String? motivo,
     String? referencia,
+    String? facturaNumero,
+    DateTime? facturaFecha,
     bool valorizado = false,
     double? montoValorizado,
   }) async {
@@ -230,6 +235,8 @@ class AcopioProvider extends ChangeNotifier {
         cantidad: cantidad,
         motivo: motivo,
         referencia: referencia,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
         valorizado: valorizado,
         montoValorizado: montoValorizado,
       );
@@ -258,6 +265,8 @@ class AcopioProvider extends ChangeNotifier {
     required double cantidad,
     String? motivo,
     String? referencia,
+    String? facturaNumero,
+    DateTime? facturaFecha,
     String? remitoNumero,
     bool valorizado = false,
     double? montoValorizado,
@@ -274,6 +283,8 @@ class AcopioProvider extends ChangeNotifier {
         cantidad: cantidad,
         motivo: motivo,
         referencia: referencia,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
         remitoNumero: remitoNumero,
         valorizado: valorizado,
         montoValorizado: montoValorizado,
@@ -329,6 +340,66 @@ class AcopioProvider extends ChangeNotifier {
     return agrupados;
   }
 
+// ========================================
+// FILTRO POR FACTURA
+// ========================================
+
+  /// Obtiene facturas únicas con sus estadísticas
+  Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async {
+    try {
+      return await _acopioRepo.obtenerFacturasUnicas();
+    } catch (e) {
+      print('❌ Error al obtener facturas: $e');
+      return [];
+    }
+  }
+
+  /// Filtra acopios por número de factura
+  Future<void> filtrarPorFactura(String? facturaNumero) async {
+    try {
+      _state = AcopioState.loading;
+      _facturaFiltro = facturaNumero;
+      _clienteFiltro = null;
+      _proveedorFiltro = null;
+      notifyListeners();
+
+      if (facturaNumero == null || facturaNumero.isEmpty) {
+        await cargarAcopios();
+      } else {
+        // Obtener movimientos de esta factura
+        final movimientos = await _acopioRepo.obtenerMovimientosPorFactura(facturaNumero);
+
+        // Obtener los acopios relacionados
+        final acopiosIds = movimientos
+            .where((m) => m.origenId != null)
+            .map((m) => m.origenId!)
+            .toSet()
+            .toList();
+
+        // Cargar los detalles de esos acopios
+        _acopios = await _acopioRepo.obtenerTodosConDetalle(soloActivos: false);
+        _acopios = _acopios.where((a) => acopiosIds.contains(a.acopio.id)).toList();
+
+        _state = AcopioState.loaded;
+        notifyListeners();
+      }
+
+    } catch (e) {
+      _state = AcopioState.error;
+      _errorMessage = 'Error al filtrar por factura: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Obtiene resumen completo de una factura
+  Future<Map<String, dynamic>> obtenerResumenFactura(String facturaNumero) async {
+    try {
+      return await _acopioRepo.obtenerResumenPorFactura(facturaNumero);
+    } catch (e) {
+      print('❌ Error al obtener resumen de factura: $e');
+      return {};
+    }
+  }
   /// Limpia el estado
   void limpiar() {
     _state = AcopioState.initial;

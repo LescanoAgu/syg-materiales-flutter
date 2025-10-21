@@ -38,12 +38,15 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
   final _cantidadController = TextEditingController();
   final _motivoController = TextEditingController();
   final _referenciaController = TextEditingController();
+  final _facturaNumeroController = TextEditingController();
+
 
   TipoMovimientoAcopio _tipoMovimiento = TipoMovimientoAcopio.entrada;
   ProductoConStock? _productoSeleccionado;
   ClienteModel? _clienteSeleccionado;
   ProveedorModel? _proveedorSeleccionado;
   bool _valorizar = false;
+  DateTime? _facturaFecha;
 
   @override
   void initState() {
@@ -68,6 +71,7 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
     _cantidadController.dispose();
     _motivoController.dispose();
     _referenciaController.dispose();
+    _facturaNumeroController.dispose();
     super.dispose();
   }
 
@@ -161,7 +165,18 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
               _buildSeccionTitulo('Referencia (Opcional)'),
               _buildCampoReferencia(),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+
+              // ========================================
+              // DATOS DE FACTURA (OPCIONAL)
+              // ========================================
+              _buildSeccionTitulo('📄 Datos de Factura (Opcional)'),
+              _buildInfoFactura(),
+              _buildCampoFacturaNumero(),
+
+              const SizedBox(height: 16),
+
+              _buildCampoFacturaFecha(),
 
               // ========================================
               // BOTÓN REGISTRAR
@@ -715,6 +730,112 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
   }
 
   // ========================================
+// WIDGETS DE FACTURA
+// ========================================
+
+  Widget _buildInfoFactura() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.info.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.info.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: AppColors.info, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Vinculá este movimiento a una factura para facilitar la búsqueda y organización',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textDark,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampoFacturaNumero() {
+    return TextFormField(
+      controller: _facturaNumeroController,
+      decoration: InputDecoration(
+        labelText: 'Número de Factura',
+        hintText: 'Ej: 0001-00012345',
+        prefixIcon: const Icon(Icons.receipt_long),
+        suffixIcon: _facturaNumeroController.text.isNotEmpty
+            ? IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () {
+            setState(() {
+              _facturaNumeroController.clear();
+            });
+          },
+        )
+            : null,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      onChanged: (value) => setState(() {}),
+    );
+  }
+
+  Widget _buildCampoFacturaFecha() {
+    return InkWell(
+      onTap: () async {
+        final fecha = await showDatePicker(
+          context: context,
+          initialDate: _facturaFecha ?? DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime.now().add(const Duration(days: 365)),
+          locale: const Locale('es', 'AR'),
+        );
+
+        if (fecha != null) {
+          setState(() {
+            _facturaFecha = fecha;
+          });
+        }
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Fecha de Factura',
+          prefixIcon: const Icon(Icons.calendar_today),
+          suffixIcon: _facturaFecha != null
+              ? IconButton(
+            icon: const Icon(Icons.clear),
+            onPressed: () {
+              setState(() {
+                _facturaFecha = null;
+              });
+            },
+          )
+              : null,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: Text(
+          _facturaFecha != null
+              ? '${_facturaFecha!.day}/${_facturaFecha!.month}/${_facturaFecha!.year}'
+              : 'Seleccionar fecha',
+          style: TextStyle(
+            color: _facturaFecha != null ? AppColors.textDark : AppColors.textLight,
+          ),
+        ),
+      ),
+    );
+  }
+
+
+
+
+  // ========================================
   // LÓGICA DE REGISTRO
   // ========================================
 
@@ -748,6 +869,11 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
       montoValorizado = cantidad * _productoSeleccionado!.precioSinIva!;
     }
 
+    // Obtener datos de factura (opcionales)
+    final facturaNumero = _facturaNumeroController.text.trim().isEmpty
+        ? null
+        : _facturaNumeroController.text.trim();
+
     // Registrar según el tipo
     bool exito = false;
 
@@ -759,6 +885,8 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
         cantidad: cantidad,
         motivo: _motivoController.text.isEmpty ? null : _motivoController.text,
         referencia: _referenciaController.text.isEmpty ? null : _referenciaController.text,
+        facturaNumero: facturaNumero,      // ← NUEVO
+        facturaFecha: _facturaFecha,       // ← NUEVO
         valorizado: _valorizar,
         montoValorizado: montoValorizado,
       );
@@ -770,6 +898,8 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
         cantidad: cantidad,
         motivo: _motivoController.text.isEmpty ? null : _motivoController.text,
         referencia: _referenciaController.text.isEmpty ? null : _referenciaController.text,
+        facturaNumero: facturaNumero,      // ← NUEVO
+        facturaFecha: _facturaFecha,       // ← NUEVO
         valorizado: _valorizar,
         montoValorizado: montoValorizado,
       );
@@ -779,10 +909,11 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Movimiento registrado: ${_tipoMovimiento.name.toUpperCase()} de $cantidad ${_productoSeleccionado!.unidadBase}',
+            'Movimiento registrado: ${_tipoMovimiento.name.toUpperCase()} de $cantidad ${_productoSeleccionado!.unidadBase}'
+                '${facturaNumero != null ? "\n📄 Factura: $facturaNumero" : ""}',
           ),
           backgroundColor: AppColors.success,
-          duration: const Duration(seconds: 2),
+          duration: const Duration(seconds: 3),
         ),
       );
 
@@ -791,7 +922,6 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
       _mostrarError('Error al registrar el movimiento');
     }
   }
-
   void _mostrarError(String mensaje) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

@@ -5,6 +5,8 @@ import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/acopio_model.dart';
 import '../providers/acopio_provider.dart';
 import 'acopio_movimiento_page.dart';
+import 'facturas_list_page.dart';
+
 
 /// Pantalla principal de Acopios
 ///
@@ -77,6 +79,18 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const FacturasListPage(),
+                ),
+              );
+            },
+            tooltip: 'Ver Facturas',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () {

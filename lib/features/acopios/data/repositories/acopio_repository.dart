@@ -381,4 +381,97 @@ class AcopioRepository {
       return 0;
     }
   }
+
+  // ========================================
+// BÚSQUEDA POR FACTURA
+// ========================================
+
+  /// Obtiene todos los movimientos de una factura específica
+  Future<List<MovimientoAcopioModel>> obtenerMovimientosPorFactura(String facturaNumero) async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      final List<Map<String, dynamic>> maps = await db.query(
+        'movimientos_acopio',
+        where: 'factura_numero = ?',
+        whereArgs: [facturaNumero],
+        orderBy: 'created_at DESC',
+      );
+
+      return List.generate(maps.length, (i) {
+        return MovimientoAcopioModel.fromMap(maps[i]);
+      });
+    } catch (e) {
+      print('❌ Error al obtener movimientos por factura: $e');
+      return [];
+    }
+  }
+
+  /// Obtiene todas las facturas únicas registradas
+  Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      final String query = '''
+      SELECT DISTINCT
+        factura_numero,
+        factura_fecha,
+        COUNT(*) as cantidad_items,
+        SUM(cantidad) as cantidad_total,
+        SUM(CASE WHEN valorizado = 1 THEN monto_valorizado ELSE 0 END) as monto_total
+      FROM movimientos_acopio
+      WHERE factura_numero IS NOT NULL 
+        AND factura_numero != ''
+      GROUP BY factura_numero, factura_fecha
+      ORDER BY factura_fecha DESC, factura_numero DESC
+    ''';
+
+      final List<Map<String, dynamic>> facturas = await db.rawQuery(query);
+
+      print('✅ ${facturas.length} facturas encontradas');
+      return facturas;
+
+    } catch (e) {
+      print('❌ Error al obtener facturas únicas: $e');
+      return [];
+    }
+  }
+
+  /// Obtiene acopios con sus movimientos de factura
+  Future<Map<String, dynamic>> obtenerResumenPorFactura(String facturaNumero) async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      // Obtener movimientos de la factura con detalle
+      final String query = '''
+      SELECT 
+        m.*,
+        p.codigo as producto_codigo,
+        p.nombre as producto_nombre,
+        p.unidad_base,
+        c.razon_social as cliente_razon_social,
+        prov.nombre as proveedor_nombre
+      FROM movimientos_acopio m
+      INNER JOIN productos p ON m.producto_id = p.id
+      INNER JOIN acopios a ON m.origen_id = a.id
+      INNER JOIN clientes c ON a.cliente_id = c.id
+      INNER JOIN proveedores prov ON a.proveedor_id = prov.id
+      WHERE m.factura_numero = ?
+      ORDER BY m.created_at DESC
+    ''';
+
+      final List<Map<String, dynamic>> movimientos = await db.rawQuery(query, [facturaNumero]);
+
+      return {
+        'factura_numero': facturaNumero,
+        'movimientos': movimientos,
+        'cantidad_items': movimientos.length,
+      };
+
+    } catch (e) {
+      print('❌ Error al obtener resumen de factura: $e');
+      return {};
+    }
+  }
+
 }
