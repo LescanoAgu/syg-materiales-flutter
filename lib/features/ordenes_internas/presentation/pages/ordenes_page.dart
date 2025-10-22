@@ -255,57 +255,56 @@ class _OrdenesPageState extends State<OrdenesPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header: Número y Estado
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // Número de orden
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          orden.numero,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(estadoIcon, size: 18, color: estadoColor),
-                    ],
+// Header: Número y Estado
+            Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+// Número de orden
+          Row(
+          children: [
+          Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 4,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            orden.numero,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Icon(estadoIcon, size: 18, color: estadoColor),
+        ],
+      ),
+              // Badge de estado
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: estadoColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: estadoColor, width: 1),
+                ),
+                child: Text(
+                  _getEstadoLabel(orden.estado),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: estadoColor,
                   ),
-
-                  // Badge de estado
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: estadoColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: estadoColor, width: 1),
-                    ),
-                    child: Text(
-                      _getEstadoLabel(orden.estado),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: estadoColor,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
+            ],
+            ),
 
               const SizedBox(height: 12),
 
@@ -386,7 +385,7 @@ class _OrdenesPageState extends State<OrdenesPage> {
 
                   // Total
                   Text(
-                    ArgFormats.precio(orden.total),
+                    ArgFormats.moneda(orden.total),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -401,7 +400,6 @@ class _OrdenesPageState extends State<OrdenesPage> {
       ),
     );
   }
-
   Widget _buildEmptyState() {
     return Center(
       child: Column(
@@ -422,11 +420,9 @@ class _OrdenesPageState extends State<OrdenesPage> {
       ),
     );
   }
-
-  // ========================================
-  // HELPERS
-  // ========================================
-
+// ========================================
+// HELPERS
+// ========================================
   Color _getEstadoColor(String estado) {
     switch (estado) {
       case 'solicitado':
@@ -449,7 +445,6 @@ class _OrdenesPageState extends State<OrdenesPage> {
         return AppColors.textMedium;
     }
   }
-
   IconData _getEstadoIcon(String estado) {
     switch (estado) {
       case 'solicitado':
@@ -472,7 +467,6 @@ class _OrdenesPageState extends State<OrdenesPage> {
         return Icons.help_outline;
     }
   }
-
   String _getEstadoLabel(String estado) {
     switch (estado) {
       case 'solicitado':
@@ -495,11 +489,9 @@ class _OrdenesPageState extends State<OrdenesPage> {
         return estado.toUpperCase();
     }
   }
-
-  // ========================================
-  // NAVEGACIÓN
-  // ========================================
-
+// ========================================
+// NAVEGACIÓN
+// ========================================
   void _irACrearOrden() {
     Navigator.push(
       context,
@@ -508,7 +500,6 @@ class _OrdenesPageState extends State<OrdenesPage> {
       ),
     );
   }
-
   void _irADetalle(OrdenInternaDetalle orden) {
     Navigator.push(
       context,
@@ -517,9 +508,8 @@ class _OrdenesPageState extends State<OrdenesPage> {
       ),
     );
   }
-
   void _mostrarFiltros() {
-    // TODO: Implementar sheet de filtros avanzados
+// TODO: Implementar sheet de filtros avanzados
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(

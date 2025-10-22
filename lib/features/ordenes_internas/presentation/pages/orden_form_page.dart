@@ -6,17 +6,11 @@ import '../../../clientes/data/models/cliente_model.dart';
 import '../../../clientes/presentation/providers/cliente_provider.dart';
 import '../../../obras/data/models/obra_model.dart';
 import '../../../obras/presentation/providers/obra_provider.dart';
-import '../../../productos/data/models/producto_model.dart';
-import '../../../productos/presentation/providers/producto_provider.dart';
+import '../../../stock/data/models/stock_model.dart';
+import '../../../stock/presentation/providers/producto_provider.dart';
 import '../providers/orden_interna_provider.dart';
 
 /// Pantalla de Formulario de Orden Interna
-///
-/// Permite al cliente/responsable crear un nuevo pedido:
-/// 1. Seleccionar cliente y obra
-/// 2. Agregar productos con cantidades
-/// 3. Agregar observaciones
-/// 4. Crear la orden
 class OrdenFormPage extends StatefulWidget {
   const OrdenFormPage({super.key});
 
@@ -34,8 +28,8 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
   final _observacionesController = TextEditingController();
 
   // Selecciones
-  Cliente? _clienteSeleccionado;
-  Obra? _obraSeleccionada;
+  ClienteModel? _clienteSeleccionado;
+  ObraModel? _obraSeleccionada;
   DateTime? _fechaEntregaEstimada;
 
   // Lista de productos agregados
@@ -46,7 +40,6 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
   @override
   void initState() {
     super.initState();
-    // Cargar datos necesarios
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarClientes();
       context.read<ProductoProvider>().cargarProductos();
@@ -66,7 +59,6 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-
       appBar: AppBar(
         title: const Text('Nueva Orden Interna'),
         flexibleSpace: Container(
@@ -75,18 +67,13 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
           ),
         ),
       ),
-
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // ========================================
-            // SECCIÓN 1: DATOS DEL SOLICITANTE
-            // ========================================
             _buildSeccionHeader('👤 Datos del Solicitante'),
             const SizedBox(height: 12),
-
             TextFormField(
               controller: _solicitanteNombreController,
               decoration: const InputDecoration(
@@ -101,9 +88,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 return null;
               },
             ),
-
             const SizedBox(height: 12),
-
             TextFormField(
               controller: _solicitanteEmailController,
               decoration: const InputDecoration(
@@ -113,9 +98,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
               ),
               keyboardType: TextInputType.emailAddress,
             ),
-
             const SizedBox(height: 12),
-
             TextFormField(
               controller: _solicitanteTelefonoController,
               decoration: const InputDecoration(
@@ -125,19 +108,12 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
               ),
               keyboardType: TextInputType.phone,
             ),
-
             const SizedBox(height: 24),
-
-            // ========================================
-            // SECCIÓN 2: DESTINO
-            // ========================================
-            _buildSeccionHeader('📍 Destino del Pedido'),
+            _buildSeccionHeader('🏢 Destino del Pedido'),
             const SizedBox(height: 12),
-
-            // Selector de Cliente
             Consumer<ClienteProvider>(
               builder: (context, provider, child) {
-                return DropdownButtonFormField<Cliente>(
+                return DropdownButtonFormField<ClienteModel>(
                   value: _clienteSeleccionado,
                   decoration: const InputDecoration(
                     labelText: 'Cliente *',
@@ -155,10 +131,8 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                       _clienteSeleccionado = cliente;
                       _obraSeleccionada = null;
                     });
-
-                    // Cargar obras del cliente
                     if (cliente != null) {
-                      context.read<ObraProvider>().cargarObrasPorCliente(cliente.id!);
+                      context.read<ObraProvider>().cargarObrasPorCliente(cliente.id!, soloActivas: true);
                     }
                   },
                   validator: (value) {
@@ -170,24 +144,21 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 );
               },
             ),
-
             const SizedBox(height: 12),
-
-            // Selector de Obra (opcional)
             if (_clienteSeleccionado != null)
               Consumer<ObraProvider>(
                 builder: (context, provider, child) {
-                  return DropdownButtonFormField<Obra>(
+                  return DropdownButtonFormField<ObraModel>(
                     value: _obraSeleccionada,
                     decoration: const InputDecoration(
                       labelText: 'Obra (opcional)',
                       prefixIcon: Icon(Icons.location_on),
                       border: OutlineInputBorder(),
                     ),
-                    items: provider.obras.map((obra) {
+                    items: provider.obras.map((obraConCliente) {
                       return DropdownMenuItem(
-                        value: obra,
-                        child: Text(obra.nombre),
+                        value: obraConCliente.obra,
+                        child: Text(obraConCliente.obra.nombre),
                       );
                     }).toList(),
                     onChanged: (obra) {
@@ -198,10 +169,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                   );
                 },
               ),
-
             const SizedBox(height: 12),
-
-            // Fecha de entrega estimada
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.calendar_today, color: AppColors.primary),
@@ -217,16 +185,9 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 side: BorderSide(color: Colors.grey.shade300),
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // ========================================
-            // SECCIÓN 3: PRODUCTOS
-            // ========================================
             _buildSeccionHeader('📦 Productos'),
             const SizedBox(height: 12),
-
-            // Lista de productos agregados
             if (_productosAgregados.isEmpty)
               Container(
                 padding: const EdgeInsets.all(24),
@@ -254,10 +215,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 final producto = entry.value;
                 return _buildProductoItem(producto, index);
               }).toList(),
-
             const SizedBox(height: 12),
-
-            // Botón agregar producto
             OutlinedButton.icon(
               onPressed: _agregarProducto,
               icon: const Icon(Icons.add),
@@ -266,15 +224,9 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // ========================================
-            // SECCIÓN 4: OBSERVACIONES
-            // ========================================
             _buildSeccionHeader('📝 Observaciones'),
             const SizedBox(height: 12),
-
             TextFormField(
               controller: _observacionesController,
               decoration: const InputDecoration(
@@ -284,18 +236,11 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
               ),
               maxLines: 4,
             ),
-
             const SizedBox(height: 24),
-
-            // ========================================
-            // RESUMEN Y BOTÓN
-            // ========================================
             if (_productosAgregados.isNotEmpty) ...[
               _buildResumen(),
               const SizedBox(height: 24),
             ],
-
-            // Botón crear orden
             SizedBox(
               height: 56,
               child: ElevatedButton.icon(
@@ -323,10 +268,6 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
     );
   }
 
-  // ========================================
-  // WIDGETS
-  // ========================================
-
   Widget _buildSeccionHeader(String titulo) {
     return Text(
       titulo,
@@ -339,7 +280,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
   }
 
   Widget _buildProductoItem(Map<String, dynamic> producto, int index) {
-    final productoData = producto['producto'] as ProductoDetalle;
+    final productoData = producto['producto'] as ProductoConStock;
     final cantidad = producto['cantidad'] as double;
     final precio = producto['precio'] as double;
     final subtotal = cantidad * precio;
@@ -350,13 +291,12 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            // Info del producto
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    productoData.producto.nombre,
+                    productoData.productoNombre,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -364,7 +304,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${ArgFormats.decimal(cantidad)} ${productoData.producto.unidadBase} × ${ArgFormats.precio(precio)}',
+                    '${ArgFormats.decimal(cantidad)} ${productoData.unidadBase} × ${ArgFormats.moneda(precio)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: AppColors.textMedium,
@@ -372,7 +312,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Subtotal: ${ArgFormats.precio(subtotal)}',
+                    'Subtotal: ${ArgFormats.moneda(subtotal)}',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: AppColors.primary,
@@ -381,8 +321,6 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 ],
               ),
             ),
-
-            // Botones
             Column(
               children: [
                 IconButton(
@@ -446,7 +384,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 ),
               ),
               Text(
-                ArgFormats.precio(total),
+                ArgFormats.moneda(total),
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
@@ -459,10 +397,6 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
       ),
     );
   }
-
-  // ========================================
-  // ACCIONES
-  // ========================================
 
   Future<void> _seleccionarFechaEntrega() async {
     final fecha = await showDatePicker(
@@ -510,7 +444,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
       context: context,
       builder: (context) => _ProductoSelectorDialog(
         productos: context.read<ProductoProvider>().productos,
-        productoInicial: productoActual['producto'] as ProductoDetalle,
+        productoInicial: productoActual['producto'] as ProductoConStock,
         cantidadInicial: productoActual['cantidad'] as double,
         precioInicial: productoActual['precio'] as double,
       ),
@@ -544,9 +478,9 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
     setState(() => _isLoading = true);
 
     final items = _productosAgregados.map((p) {
-      final producto = p['producto'] as ProductoDetalle;
+      final producto = p['producto'] as ProductoConStock;
       return {
-        'productoId': producto.producto.id,
+        'productoId': producto.productoId,
         'cantidad': p['cantidad'],
         'precio': p['precio'],
       };
@@ -590,13 +524,10 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
   }
 }
 
-// ========================================
-// DIALOG SELECTOR DE PRODUCTO
-// ========================================
-
+// Dialog Selector de Producto
 class _ProductoSelectorDialog extends StatefulWidget {
-  final List<ProductoDetalle> productos;
-  final ProductoDetalle? productoInicial;
+  final List<ProductoConStock> productos;
+  final ProductoConStock? productoInicial;
   final double? cantidadInicial;
   final double? precioInicial;
 
@@ -614,7 +545,7 @@ class _ProductoSelectorDialog extends StatefulWidget {
 class _ProductoSelectorDialogState extends State<_ProductoSelectorDialog> {
   final _cantidadController = TextEditingController();
   final _precioController = TextEditingController();
-  ProductoDetalle? _productoSeleccionado;
+  ProductoConStock? _productoSeleccionado;
 
   @override
   void initState() {
@@ -639,8 +570,7 @@ class _ProductoSelectorDialogState extends State<_ProductoSelectorDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Selector de producto
-            DropdownButtonFormField<ProductoDetalle>(
+            DropdownButtonFormField<ProductoConStock>(
               value: _productoSeleccionado,
               decoration: const InputDecoration(
                 labelText: 'Producto',
@@ -649,36 +579,29 @@ class _ProductoSelectorDialogState extends State<_ProductoSelectorDialog> {
               items: widget.productos.map((producto) {
                 return DropdownMenuItem(
                   value: producto,
-                  child: Text(producto.producto.nombre),
+                  child: Text(producto.productoNombre),
                 );
               }).toList(),
               onChanged: (producto) {
                 setState(() {
                   _productoSeleccionado = producto;
-                  // Auto-completar precio si existe
-                  if (producto?.producto.precioSinIva != null) {
-                    _precioController.text = producto!.producto.precioSinIva!.toStringAsFixed(2);
+                  if (producto?.precioSinIva != null) {
+                    _precioController.text = producto!.precioSinIva!.toStringAsFixed(2);
                   }
                 });
               },
             ),
-
             const SizedBox(height: 16),
-
-            // Cantidad
             TextFormField(
               controller: _cantidadController,
               decoration: InputDecoration(
                 labelText: 'Cantidad',
-                suffix: Text(_productoSeleccionado?.producto.unidadBase ?? ''),
+                suffix: Text(_productoSeleccionado?.unidadBase ?? ''),
                 border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
             ),
-
             const SizedBox(height: 16),
-
-            // Precio
             TextFormField(
               controller: _precioController,
               decoration: const InputDecoration(
