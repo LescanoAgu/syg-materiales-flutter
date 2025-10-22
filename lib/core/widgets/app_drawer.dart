@@ -8,6 +8,8 @@ import '../../features/obras/presentation/pages/obras_list_page.dart';
 import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
 import '../../features/acopios/presentation/pages/acopios_list_page.dart';
 import '../../features/stock/presentation/pages/consultar_disponibilidad_page.dart';
+import '../../features/reportes/presentation/pages/reportes_menu_page.dart';
+
 
 
 
@@ -133,6 +135,21 @@ class AppDrawer extends StatelessWidget {
                 ),
                 _buildMenuItem(
                   context,
+                  icon: Icons.assessment,
+                  title: 'Reportes',
+                  subtitle: 'Informes y estadísticas',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ReportesMenuPage(),
+                      ),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context,
                   icon: Icons.shopping_cart,
                   title: 'Pedidos',
                   subtitle: 'Gestión de pedidos',
@@ -239,10 +256,6 @@ class AppDrawer extends StatelessWidget {
   // ========================================
   // ITEM DEL MENÚ
   // ========================================
-
-  // ========================================
-// ITEM DEL MENÚ
-// ========================================
   Widget _buildMenuItem(
       BuildContext context, {
         required IconData icon,
