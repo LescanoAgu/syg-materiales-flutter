@@ -28,7 +28,7 @@ class DatabaseHelper {
   // ========================================
 
   static const String _databaseName = 'syg_materiales.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 2;
 
   // La base de datos en sí
   static Database? _database;
@@ -86,6 +86,9 @@ class DatabaseHelper {
     await _createSaldosProveedorTable(db);
     await _createCuentasCorrientesTable(db);
     await _createMovimientosCuentaTable(db);
+    //ÓRDENES INTERNAS (v2)
+    await _createOrdenesInternasTable(db);
+    await _createOrdenItemsTable(db);
 
     // Carga datos iniciales
     await _seedCategorias(db);
@@ -97,11 +100,12 @@ class DatabaseHelper {
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     print('🔄 Actualizando base de datos de v$oldVersion a v$newVersion...');
 
-    // Acá irán las migraciones futuras
-    // Por ejemplo:
-    // if (oldVersion < 2) {
-    //   await db.execute('ALTER TABLE productos ADD COLUMN nuevo_campo TEXT');
-    // }
+    // Migración a versión 2: Órdenes Internas
+    if (oldVersion < 2) {
+      await _createOrdenesInternasTable(db);
+      await _createOrdenItemsTable(db);
+      print('✅ Migración v2: Órdenes Internas agregadas');
+    }
   }
 
   // ========================================
@@ -328,9 +332,11 @@ class DatabaseHelper {
     )
   ''');
 
-    await db.execute('CREATE INDEX idx_proveedores_codigo ON proveedores(codigo)');
+    await db.execute(
+        'CREATE INDEX idx_proveedores_codigo ON proveedores(codigo)');
     await db.execute('CREATE INDEX idx_proveedores_tipo ON proveedores(tipo)');
-    await db.execute('CREATE INDEX idx_proveedores_estado ON proveedores(estado)');
+    await db.execute(
+        'CREATE INDEX idx_proveedores_estado ON proveedores(estado)');
 
     print('  ✓ Tabla proveedores creada');
   }
@@ -356,9 +362,11 @@ class DatabaseHelper {
     )
   ''');
 
-    await db.execute('CREATE INDEX idx_acopios_producto ON acopios(producto_id)');
+    await db.execute(
+        'CREATE INDEX idx_acopios_producto ON acopios(producto_id)');
     await db.execute('CREATE INDEX idx_acopios_cliente ON acopios(cliente_id)');
-    await db.execute('CREATE INDEX idx_acopios_proveedor ON acopios(proveedor_id)');
+    await db.execute(
+        'CREATE INDEX idx_acopios_proveedor ON acopios(proveedor_id)');
     await db.execute('CREATE INDEX idx_acopios_estado ON acopios(estado)');
 
     print('  ✓ Tabla acopios creada');
@@ -401,14 +409,18 @@ class DatabaseHelper {
     )
   ''');
 
-    await db.execute('CREATE INDEX idx_movimientos_acopio_producto ON movimientos_acopio(producto_id)');
-    await db.execute('CREATE INDEX idx_movimientos_acopio_tipo ON movimientos_acopio(tipo)');
-    await db.execute('CREATE INDEX idx_movimientos_acopio_created_at ON movimientos_acopio(created_at)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_acopio_producto ON movimientos_acopio(producto_id)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_acopio_tipo ON movimientos_acopio(tipo)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_acopio_created_at ON movimientos_acopio(created_at)');
 
     // ========================================
     // NUEVO ÍNDICE PARA BUSCAR POR FACTURA
     // ========================================
-    await db.execute('CREATE INDEX idx_movimientos_acopio_factura ON movimientos_acopio(factura_numero)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_acopio_factura ON movimientos_acopio(factura_numero)');
 
     print('  ✓ Tabla movimientos_acopio creada');
   }
@@ -431,8 +443,10 @@ class DatabaseHelper {
     )
   ''');
 
-    await db.execute('CREATE INDEX idx_saldos_cliente ON saldos_proveedor(cliente_id)');
-    await db.execute('CREATE INDEX idx_saldos_proveedor ON saldos_proveedor(proveedor_id)');
+    await db.execute(
+        'CREATE INDEX idx_saldos_cliente ON saldos_proveedor(cliente_id)');
+    await db.execute(
+        'CREATE INDEX idx_saldos_proveedor ON saldos_proveedor(proveedor_id)');
 
     print('  ✓ Tabla saldos_proveedor creada');
   }
@@ -454,8 +468,10 @@ class DatabaseHelper {
     )
   ''');
 
-    await db.execute('CREATE INDEX idx_cuentas_tipo ON cuentas_corrientes(tipo)');
-    await db.execute('CREATE INDEX idx_cuentas_entidad ON cuentas_corrientes(entidad_id)');
+    await db.execute(
+        'CREATE INDEX idx_cuentas_tipo ON cuentas_corrientes(tipo)');
+    await db.execute(
+        'CREATE INDEX idx_cuentas_entidad ON cuentas_corrientes(entidad_id)');
 
     print('  ✓ Tabla cuentas_corrientes creada');
   }
@@ -496,19 +512,83 @@ class DatabaseHelper {
     )
   ''');
 
-    await db.execute('CREATE INDEX idx_movimientos_cuenta_cuenta ON movimientos_cuenta(cuenta_id)');
-    await db.execute('CREATE INDEX idx_movimientos_cuenta_tipo ON movimientos_cuenta(tipo)');
-    await db.execute('CREATE INDEX idx_movimientos_cuenta_estado ON movimientos_cuenta(estado)');
-    await db.execute('CREATE INDEX idx_movimientos_cuenta_fecha ON movimientos_cuenta(fecha)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_cuenta_cuenta ON movimientos_cuenta(cuenta_id)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_cuenta_tipo ON movimientos_cuenta(tipo)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_cuenta_estado ON movimientos_cuenta(estado)');
+    await db.execute(
+        'CREATE INDEX idx_movimientos_cuenta_fecha ON movimientos_cuenta(fecha)');
 
     print('  ✓ Tabla movimientos_cuenta creada');
   }
 
+  // ========================================
+  // TABLA ORDENES INTERNAS
+  // ========================================
+  Future<void> _createOrdenesInternasTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE ordenes_internas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero TEXT NOT NULL UNIQUE,
+        cliente_id INTEGER NOT NULL,
+        obra_id INTEGER,
+        solicitante_nombre TEXT NOT NULL,
+        solicitante_email TEXT,
+        solicitante_telefono TEXT,
+        fecha_pedido TEXT NOT NULL,
+        fecha_entrega_estimada TEXT,
+        estado TEXT NOT NULL DEFAULT 'solicitado',
+        observaciones_cliente TEXT,
+        observaciones_internas TEXT,
+        motivo_rechazo TEXT,
+        total REAL DEFAULT 0,
+        aprobado_por_usuario_id INTEGER,
+        aprobado_fecha TEXT,
+        usuario_creador_id INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT,
+        FOREIGN KEY (cliente_id) REFERENCES clientes (id),
+        FOREIGN KEY (obra_id) REFERENCES obras (id),
+        FOREIGN KEY (aprobado_por_usuario_id) REFERENCES usuarios (id),
+        FOREIGN KEY (usuario_creador_id) REFERENCES usuarios (id)
+      )
+    ''');
 
+    await db.execute('CREATE INDEX idx_ordenes_numero ON ordenes_internas(numero)');
+    await db.execute('CREATE INDEX idx_ordenes_cliente ON ordenes_internas(cliente_id)');
+    await db.execute('CREATE INDEX idx_ordenes_estado ON ordenes_internas(estado)');
+    await db.execute('CREATE INDEX idx_ordenes_fecha ON ordenes_internas(fecha_pedido)');
 
+    print('  ✓ Tabla ordenes_internas creada');
+  }
 
+  // ========================================
+  // TABLA ORDEN ITEMS
+  // ========================================
+  Future<void> _createOrdenItemsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE orden_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        orden_id INTEGER NOT NULL,
+        producto_id INTEGER NOT NULL,
+        cantidad_solicitada REAL NOT NULL,
+        cantidad_aprobada REAL,
+        precio_unitario REAL NOT NULL,
+        subtotal REAL NOT NULL,
+        observaciones TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (orden_id) REFERENCES ordenes_internas (id) ON DELETE CASCADE,
+        FOREIGN KEY (producto_id) REFERENCES productos (id)
+      )
+    ''');
 
+    await db.execute('CREATE INDEX idx_orden_items_orden ON orden_items(orden_id)');
+    await db.execute('CREATE INDEX idx_orden_items_producto ON orden_items(producto_id)');
 
+    print('  ✓ Tabla orden_items creada');
+  }
 
   /// Carga las categorías predefinidas
   Future<void> _seedCategorias(Database db) async {

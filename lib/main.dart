@@ -9,8 +9,10 @@ import 'features/stock/presentation/pages/catalogo_page.dart';
 import 'features/clientes/presentation/providers/cliente_provider.dart';
 import 'features/obras/presentation/providers/obra_provider.dart';
 import 'features/stock/presentation/providers/movimiento_stock_provider.dart';
-import 'features/acopios/presentation/providers/acopio_provider.dart';  // ← NUEVO IMPORT
-import 'features/acopios/presentation/pages/acopios_list_page.dart';  // ← NUEVO IMPORT'
+import 'features/acopios/presentation/providers/acopio_provider.dart';
+import 'features/acopios/presentation/pages/acopios_list_page.dart';
+import 'features/ordenes_internas/presentation/providers/orden_interna_provider.dart';
+
 /// Punto de entrada de la aplicación S&G Materiales
 void main() async {
   // Asegura que Flutter esté inicializado
@@ -50,12 +52,12 @@ class SyGMaterialesApp extends StatelessWidget {
     // MultiProvider para tener múltiples providers disponibles
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => ProductoProvider()),
-        ChangeNotifierProvider(create: (context) => ClienteProvider()),
-        ChangeNotifierProvider(create: (context) => ObraProvider()),
-        ChangeNotifierProvider(create: (context) => MovimientoStockProvider()),
-        ChangeNotifierProvider(create: (context) => AcopioProvider()),
-
+        ChangeNotifierProvider(create: (_) => ProductoProvider()),
+        ChangeNotifierProvider(create: (_) => ClienteProvider()),
+        ChangeNotifierProvider(create: (_) => ObraProvider()),
+        ChangeNotifierProvider(create: (_) => MovimientoStockProvider()),
+        ChangeNotifierProvider(create: (_) => AcopioProvider()),
+        ChangeNotifierProvider(create: (_) => OrdenInternaProvider()), // ← NUEVO
       ],
       child: MaterialApp(
         title: 'S&G Materiales',

@@ -9,7 +9,7 @@ import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
 import '../../features/acopios/presentation/pages/acopios_list_page.dart';
 import '../../features/stock/presentation/pages/consultar_disponibilidad_page.dart';
 import '../../features/reportes/presentation/pages/reportes_menu_page.dart';
-
+import '../../features/ordenes_internas/presentation/pages/ordenes_page.dart';
 
 
 
@@ -150,14 +150,16 @@ class AppDrawer extends StatelessWidget {
                 ),
                 _buildMenuItem(
                   context,
-                  icon: Icons.shopping_cart,
-                  title: 'Pedidos',
-                  subtitle: 'Gestión de pedidos',
+                  icon: Icons.receipt_long,
+                  title: 'Órdenes Internas',
+                  subtitle: 'Pedidos y despachos',
                   onTap: () {
                     Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Próximamente: Pedidos')),
-
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const OrdenesPage(),
+                      ),
                     );
                   },
                 ),
