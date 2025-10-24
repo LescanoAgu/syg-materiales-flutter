@@ -1,16 +1,14 @@
+// lib/features/ordenes_internas/presentation/pages/orden_form_page.dart
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../../clientes/data/models/cliente_model.dart';
 import '../../../clientes/presentation/providers/cliente_provider.dart';
-import '../../../obras/data/models/obra_model.dart';
 import '../../../obras/presentation/providers/obra_provider.dart';
-import '../../../stock/data/models/stock_model.dart';
-import '../../../stock/presentation/providers/producto_provider.dart';
 import '../providers/orden_interna_provider.dart';
 
-/// Pantalla de Formulario de Orden Interna
+/// Formulario para crear una nueva Orden Interna
 class OrdenFormPage extends StatefulWidget {
   const OrdenFormPage({super.key});
 
@@ -21,245 +19,93 @@ class OrdenFormPage extends StatefulWidget {
 class _OrdenFormPageState extends State<OrdenFormPage> {
   final _formKey = GlobalKey<FormState>();
 
-  // Controladores
-  final _solicitanteNombreController = TextEditingController();
-  final _solicitanteEmailController = TextEditingController();
-  final _solicitanteTelefonoController = TextEditingController();
+  // Controllers
   final _observacionesController = TextEditingController();
 
-  // Selecciones
-  ClienteModel? _clienteSeleccionado;
-  ObraModel? _obraSeleccionada;
-  DateTime? _fechaEntregaEstimada;
-
-  // Lista de productos agregados
-  List<Map<String, dynamic>> _productosAgregados = [];
-
-  bool _isLoading = false;
+  // Estado
+  int? _clienteSeleccionadoId;
+  int? _obraSeleccionadaId;  // ⭐ YA NO ES OPCIONAL
+  DateTime _fechaSolicitud = DateTime.now();
+  String _prioridad = 'normal';
 
   @override
   void initState() {
     super.initState();
+    // Cargar clientes y obras al iniciar
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarClientes();
-      context.read<ProductoProvider>().cargarProductos();
+      context.read<ObraProvider>().cargarObras();
     });
   }
 
   @override
   void dispose() {
-    _solicitanteNombreController.dispose();
-    _solicitanteEmailController.dispose();
-    _solicitanteTelefonoController.dispose();
     _observacionesController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Nueva Orden Interna'),
-        flexibleSpace: Container(
+    // ========================================
+    // 🔥 ARREGLO 1: PopScope para manejar botón volver
+    // ========================================
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (bool didPop) {
+        if (didPop) {
+          print('👈 Usuario volvió desde orden form');
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Nueva Orden Interna'),
+        ),
+        body: Container(
           decoration: const BoxDecoration(
-            gradient: AppColors.primaryGradient,
+            gradient: AppColors.backgroundGradient,
+          ),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _buildInfoCard(),
+                const SizedBox(height: 16),
+                _buildSelectorCliente(),
+                const SizedBox(height: 16),
+                _buildSelectorObra(),
+                const SizedBox(height: 16),
+                _buildSelectorFecha(),
+                const SizedBox(height: 16),
+                _buildSelectorPrioridad(),
+                const SizedBox(height: 16),
+                _buildCampoObservaciones(),
+                const SizedBox(height: 24),
+                _buildBotonCrear(),
+              ],
+            ),
           ),
         ),
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+    );
+  }
+
+  // ========================================
+  // INFORMACIÓN
+  // ========================================
+  Widget _buildInfoCard() {
+    return Card(
+      color: AppColors.info.withOpacity(0.1),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
           children: [
-            _buildSeccionHeader('👤 Datos del Solicitante'),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _solicitanteNombreController,
-              decoration: const InputDecoration(
-                labelText: 'Nombre completo *',
-                prefixIcon: Icon(Icons.person),
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'El nombre es obligatorio';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _solicitanteEmailController,
-              decoration: const InputDecoration(
-                labelText: 'Email (opcional)',
-                prefixIcon: Icon(Icons.email),
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _solicitanteTelefonoController,
-              decoration: const InputDecoration(
-                labelText: 'Teléfono (opcional)',
-                prefixIcon: Icon(Icons.phone),
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 24),
-            _buildSeccionHeader('🏢 Destino del Pedido'),
-            const SizedBox(height: 12),
-            Consumer<ClienteProvider>(
-              builder: (context, provider, child) {
-                return DropdownButtonFormField<ClienteModel>(
-                  value: _clienteSeleccionado,
-                  decoration: const InputDecoration(
-                    labelText: 'Cliente *',
-                    prefixIcon: Icon(Icons.business),
-                    border: OutlineInputBorder(),
-                  ),
-                  items: provider.clientes.map((cliente) {
-                    return DropdownMenuItem(
-                      value: cliente,
-                      child: Text(cliente.razonSocial),
-                    );
-                  }).toList(),
-                  onChanged: (cliente) {
-                    setState(() {
-                      _clienteSeleccionado = cliente;
-                      _obraSeleccionada = null;
-                    });
-                    if (cliente != null) {
-                      context.read<ObraProvider>().cargarObrasPorCliente(cliente.id!, soloActivas: true);
-                    }
-                  },
-                  validator: (value) {
-                    if (value == null) {
-                      return 'Seleccioná un cliente';
-                    }
-                    return null;
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 12),
-            if (_clienteSeleccionado != null)
-              Consumer<ObraProvider>(
-                builder: (context, provider, child) {
-                  return DropdownButtonFormField<ObraModel>(
-                    value: _obraSeleccionada,
-                    decoration: const InputDecoration(
-                      labelText: 'Obra (opcional)',
-                      prefixIcon: Icon(Icons.location_on),
-                      border: OutlineInputBorder(),
-                    ),
-                    items: provider.obras.map((obraConCliente) {
-                      return DropdownMenuItem(
-                        value: obraConCliente.obra,
-                        child: Text(obraConCliente.obra.nombre),
-                      );
-                    }).toList(),
-                    onChanged: (obra) {
-                      setState(() {
-                        _obraSeleccionada = obra;
-                      });
-                    },
-                  );
-                },
-              ),
-            const SizedBox(height: 12),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.calendar_today, color: AppColors.primary),
-              title: Text(
-                _fechaEntregaEstimada != null
-                    ? 'Entrega estimada: ${ArgFormats.fecha(_fechaEntregaEstimada!)}'
-                    : 'Fecha de entrega estimada (opcional)',
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: _seleccionarFechaEntrega,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-                side: BorderSide(color: Colors.grey.shade300),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _buildSeccionHeader('📦 Productos'),
-            const SizedBox(height: 12),
-            if (_productosAgregados.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  children: [
-                    Icon(Icons.inventory_2, size: 48, color: AppColors.textLight),
-                    const SizedBox(height: 8),
-                    const Text('No hay productos agregados'),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Presioná el botón + para agregar productos',
-                      style: TextStyle(fontSize: 12, color: AppColors.textMedium),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              )
-            else
-              ..._productosAgregados.asMap().entries.map((entry) {
-                final index = entry.key;
-                final producto = entry.value;
-                return _buildProductoItem(producto, index);
-              }).toList(),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _agregarProducto,
-              icon: const Icon(Icons.add),
-              label: const Text('Agregar Producto'),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-            const SizedBox(height: 24),
-            _buildSeccionHeader('📝 Observaciones'),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _observacionesController,
-              decoration: const InputDecoration(
-                labelText: 'Observaciones adicionales (opcional)',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-              maxLines: 4,
-            ),
-            const SizedBox(height: 24),
-            if (_productosAgregados.isNotEmpty) ...[
-              _buildResumen(),
-              const SizedBox(height: 24),
-            ],
-            SizedBox(
-              height: 56,
-              child: ElevatedButton.icon(
-                onPressed: _isLoading ? null : _crearOrden,
-                icon: _isLoading
-                    ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-                    : const Icon(Icons.send),
-                label: Text(_isLoading ? 'Creando...' : 'Crear Orden'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  textStyle: const TextStyle(fontSize: 16),
-                ),
+            const Icon(Icons.info_outline, color: AppColors.info),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Completa el formulario para crear una nueva orden interna. Todos los campos son obligatorios.',
+                style: TextStyle(color: AppColors.textDark),
               ),
             ),
           ],
@@ -268,70 +114,215 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
     );
   }
 
-  Widget _buildSeccionHeader(String titulo) {
-    return Text(
-      titulo,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.bold,
-        color: AppColors.primary,
+  // ========================================
+  // SELECTOR DE CLIENTE
+  // ========================================
+  Widget _buildSelectorCliente() {
+    return Card(
+      child: Consumer<ClienteProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const ListTile(
+              leading: CircularProgressIndicator(),
+              title: Text('Cargando clientes...'),
+            );
+          }
+
+          final clienteSeleccionado = provider.clientes
+              .where((c) => c.id == _clienteSeleccionadoId)
+              .firstOrNull;
+
+          return ListTile(
+            leading: const Icon(Icons.business, color: AppColors.primary),
+            title: Text(
+              clienteSeleccionado?.razonSocial ?? 'Seleccionar cliente',
+              style: TextStyle(
+                fontWeight: clienteSeleccionado != null
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+              ),
+            ),
+            subtitle: clienteSeleccionado != null
+                ? Text('Código: ${clienteSeleccionado.codigo}')
+                : const Text('Requerido'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () => _mostrarSelectorClientes(),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildProductoItem(Map<String, dynamic> producto, int index) {
-    final productoData = producto['producto'] as ProductoConStock;
-    final cantidad = producto['cantidad'] as double;
-    final precio = producto['precio'] as double;
-    final subtotal = cantidad * precio;
-
+  // ========================================
+  // SELECTOR DE OBRA
+  // ========================================
+  Widget _buildSelectorObra() {
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    productoData.productoNombre,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${ArgFormats.decimal(cantidad)} ${productoData.unidadBase} × ${ArgFormats.moneda(precio)}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMedium,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Subtotal: ${ArgFormats.moneda(subtotal)}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
+      // ⭐ ARREGLO 3: Obra obligatoria - fondo rojo si no está seleccionada
+      color: _obraSeleccionadaId == null
+          ? AppColors.error.withOpacity(0.05)
+          : null,
+      child: Consumer<ObraProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const ListTile(
+              leading: CircularProgressIndicator(),
+              title: Text('Cargando obras...'),
+            );
+          }
+
+          // Filtrar obras del cliente seleccionado
+          final obrasDelCliente = _clienteSeleccionadoId != null
+              ? provider.obras.where((o) => o.obra.clienteId == _clienteSeleccionadoId).toList()
+              : provider.obras;
+
+          final obraSeleccionada = obrasDelCliente
+              .where((o) => o.obra.id == _obraSeleccionadaId)
+              .firstOrNull;
+
+          return ListTile(
+            leading: Icon(
+              Icons.location_city,
+              color: _obraSeleccionadaId != null
+                  ? AppColors.primary
+                  : AppColors.error,
+            ),
+            title: Text(
+              obraSeleccionada?.obra.nombre ?? 'Seleccionar obra',
+              style: TextStyle(
+                fontWeight: obraSeleccionada != null
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: _obraSeleccionadaId == null
+                    ? AppColors.error
+                    : AppColors.textDark,
               ),
             ),
-            Column(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit, size: 20),
-                  onPressed: () => _editarProducto(index),
-                  color: AppColors.info,
+            subtitle: obraSeleccionada != null
+                ? Text('Código: ${obraSeleccionada.obra.codigo}')
+                : const Text('⚠️ OBLIGATORIO - Selecciona una obra'),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+            onTap: () {
+              if (_clienteSeleccionadoId == null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Primero selecciona un cliente'),
+                    backgroundColor: AppColors.warning,
+                  ),
+                );
+                return;
+              }
+              _mostrarSelectorObras(obrasDelCliente);
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  // ========================================
+  // SELECTOR DE FECHA
+  // ========================================
+  Widget _buildSelectorFecha() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+        title: const Text('Fecha de Solicitud'),
+        subtitle: Text(
+          DateFormat('dd/MM/yyyy').format(_fechaSolicitud),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Botón para limpiar fecha (volver a hoy)
+            if (_fechaSolicitud.day != DateTime.now().day ||
+                _fechaSolicitud.month != DateTime.now().month ||
+                _fechaSolicitud.year != DateTime.now().year)
+              IconButton(
+                icon: const Icon(Icons.refresh, size: 20),
+                onPressed: () {
+                  setState(() {
+                    _fechaSolicitud = DateTime.now();
+                  });
+                },
+                tooltip: 'Volver a hoy',
+              ),
+            const Icon(Icons.edit, size: 16),
+          ],
+        ),
+        onTap: () async {
+          // ========================================
+          // 🔥 ARREGLO 2: Selector de fecha corregido
+          // ========================================
+          final fechaSeleccionada = await showDatePicker(
+            context: context,
+            initialDate: _fechaSolicitud,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now().add(const Duration(days: 365)),
+            locale: const Locale('es', 'AR'),
+            helpText: 'Seleccionar fecha',
+            cancelText: 'Cancelar',
+            confirmText: 'Aceptar',
+            // Configuración regional para Argentina
+            builder: (context, child) {
+              return Theme(
+                data: Theme.of(context).copyWith(
+                  colorScheme: const ColorScheme.light(
+                    primary: AppColors.primary,
+                    onPrimary: Colors.white,
+                    onSurface: AppColors.textDark,
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete, size: 20),
-                  onPressed: () => _eliminarProducto(index),
-                  color: AppColors.error,
+                child: child!,
+              );
+            },
+          );
+
+          if (fechaSeleccionada != null && mounted) {
+            setState(() {
+              _fechaSolicitud = fechaSeleccionada;
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  // ========================================
+  // SELECTOR DE PRIORIDAD
+  // ========================================
+  Widget _buildSelectorPrioridad() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Prioridad',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildPrioridadChip('baja', 'Baja', AppColors.info),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildPrioridadChip('normal', 'Normal', AppColors.success),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildPrioridadChip('alta', 'Alta', AppColors.warning),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildPrioridadChip('urgente', 'Urgente', AppColors.error),
                 ),
               ],
             ),
@@ -341,304 +332,353 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
     );
   }
 
-  Widget _buildResumen() {
-    final total = _productosAgregados.fold<double>(
-      0,
-          (sum, item) => sum + ((item['cantidad'] as double) * (item['precio'] as double)),
+  Widget _buildPrioridadChip(String valor, String etiqueta, Color color) {
+    final isSelected = _prioridad == valor;
+
+    return InkWell(
+      onTap: () => setState(() => _prioridad = valor),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.15) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey.shade300,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Text(
+          etiqueta,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: isSelected ? color : Colors.grey.shade600,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            fontSize: 12,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ========================================
+  // CAMPO OBSERVACIONES
+  // ========================================
+  Widget _buildCampoObservaciones() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: TextFormField(
+          controller: _observacionesController,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Observaciones (Opcional)',
+            hintText: 'Escribe cualquier observación o nota adicional...',
+            border: InputBorder.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ========================================
+  // BOTÓN CREAR
+  // ========================================
+  Widget _buildBotonCrear() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: _validarYCrearOrden,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Text(
+          'Crear Orden Interna',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
+
+  // ========================================
+  // LÓGICA
+  // ========================================
+
+  Future<void> _mostrarSelectorClientes() async {
+    final clientes = context.read<ClienteProvider>().clientes;
+
+    if (clientes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay clientes disponibles'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    final clienteSeleccionado = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Seleccionar Cliente'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: clientes.length,
+              itemBuilder: (context, index) {
+                final cliente = clientes[index];
+                return ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.business),
+                  ),
+                  title: Text(cliente.razonSocial),
+                  subtitle: Text(cliente.codigo),
+                  onTap: () => Navigator.pop(context, cliente.id),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
     );
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primaryLight.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primary),
+    if (clienteSeleccionado != null && mounted) {
+      setState(() {
+        _clienteSeleccionadoId = clienteSeleccionado;
+        _obraSeleccionadaId = null; // Resetear obra al cambiar cliente
+      });
+
+      // Cargar obras del cliente
+      context.read<ObraProvider>().cargarObras();
+    }
+  }
+
+  Future<void> _mostrarSelectorObras(List<dynamic> obrasDelCliente) async {
+    if (obrasDelCliente.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Este cliente no tiene obras disponibles'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    final obraSeleccionada = await showDialog<int>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Seleccionar Obra'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: obrasDelCliente.length,
+              itemBuilder: (context, index) {
+                final obraData = obrasDelCliente[index];
+                final obra = obraData.obra;
+                return ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.location_city),
+                  ),
+                  title: Text(obra.nombre),
+                  subtitle: Text('${obra.codigo} - ${obra.direccion}'),
+                  onTap: () => Navigator.pop(context, obra.id),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (obraSeleccionada != null && mounted) {
+      setState(() {
+        _obraSeleccionadaId = obraSeleccionada;
+      });
+    }
+  }
+
+  Future<void> _validarYCrearOrden() async {
+    // ========================================
+    // VALIDACIONES OBLIGATORIAS
+    // ========================================
+
+    // Validar cliente
+    if (_clienteSeleccionadoId == null) {
+      _mostrarError('⚠️ Debes seleccionar un cliente');
+      return;
+    }
+
+    // ⭐ ARREGLO 3: Validar que la obra sea obligatoria
+    if (_obraSeleccionadaId == null) {
+      _mostrarError('⚠️ Debes seleccionar una obra (campo obligatorio)');
+      return;
+    }
+
+    // Validar formulario
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    // Mostrar confirmación
+    final confirmado = await _mostrarDialogoConfirmacion();
+    if (!confirmado) return;
+
+    // Mostrar loading
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
       ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    );
+
+    // Crear orden
+    try {
+      // ========================================
+      // 🔥 CORRECCIÓN: Usar los parámetros correctos del provider
+      // ========================================
+      final exito = await context.read<OrdenInternaProvider>().crearOrden(
+        clienteId: _clienteSeleccionadoId!,
+        obraId: _obraSeleccionadaId!,
+        solicitanteNombre: 'Usuario Sistema', // TODO: Obtener del usuario logueado
+        items: [], // Lista vacía inicial, se pueden agregar después
+        fechaSolicitud: _fechaSolicitud, // ✅ Ahora sí funciona
+        prioridad: _prioridad,           // ✅ Ahora sí funciona
+        observaciones: _observacionesController.text.trim().isEmpty
+            ? null
+            : _observacionesController.text.trim(), // ✅ Ahora sí funciona
+      );
+
+      // Cerrar loading
+      if (mounted) Navigator.pop(context);
+
+      if (exito) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Orden Interna creada correctamente'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+
+          // Volver a la pantalla anterior
+          Navigator.pop(context, true);
+        }
+      } else {
+        if (mounted) {
+          _mostrarError('Error al crear la orden interna');
+        }
+      }
+    } catch (e) {
+      // Cerrar loading
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        _mostrarError('Error: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<bool> _mostrarDialogoConfirmacion() async {
+    final cliente = context.read<ClienteProvider>().clientes
+        .firstWhere((c) => c.id == _clienteSeleccionadoId);
+
+    final obra = context.read<ObraProvider>().obras
+        .firstWhere((o) => o.obra.id == _obraSeleccionadaId);
+
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmar Orden Interna'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Total de productos:',
-                style: TextStyle(fontSize: 14),
+                '¿Deseas crear esta orden interna?',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              Text(
-                _productosAgregados.length.toString(),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
+              const SizedBox(height: 16),
+              _buildInfoRow('Cliente:', cliente.razonSocial),
+              _buildInfoRow('Obra:', obra.obra.nombre),
+              _buildInfoRow(
+                'Fecha:',
+                DateFormat('dd/MM/yyyy').format(_fechaSolicitud),
               ),
+              _buildInfoRow('Prioridad:', _prioridad.toUpperCase()),
             ],
           ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Total estimado:',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirmar'),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 13,
               ),
-              Text(
-                ArgFormats.moneda(total),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
               ),
-            ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _seleccionarFechaEntrega() async {
-    final fecha = await showDatePicker(
-      context: context,
-      initialDate: DateTime.now().add(const Duration(days: 7)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-
-    if (fecha != null) {
-      setState(() {
-        _fechaEntregaEstimada = fecha;
-      });
-    }
-  }
-
-  Future<void> _agregarProducto() async {
-    final productoProvider = context.read<ProductoProvider>();
-
-    if (productoProvider.productos.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay productos disponibles')),
-      );
-      return;
-    }
-
-    final resultado = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => _ProductoSelectorDialog(
-        productos: productoProvider.productos,
+  void _mostrarError(String mensaje) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(mensaje),
+        backgroundColor: AppColors.error,
       ),
-    );
-
-    if (resultado != null) {
-      setState(() {
-        _productosAgregados.add(resultado);
-      });
-    }
-  }
-
-  void _editarProducto(int index) async {
-    final productoActual = _productosAgregados[index];
-
-    final resultado = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => _ProductoSelectorDialog(
-        productos: context.read<ProductoProvider>().productos,
-        productoInicial: productoActual['producto'] as ProductoConStock,
-        cantidadInicial: productoActual['cantidad'] as double,
-        precioInicial: productoActual['precio'] as double,
-      ),
-    );
-
-    if (resultado != null) {
-      setState(() {
-        _productosAgregados[index] = resultado;
-      });
-    }
-  }
-
-  void _eliminarProducto(int index) {
-    setState(() {
-      _productosAgregados.removeAt(index);
-    });
-  }
-
-  Future<void> _crearOrden() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (_productosAgregados.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Agregá al menos un producto')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final items = _productosAgregados.map((p) {
-      final producto = p['producto'] as ProductoConStock;
-      return {
-        'productoId': producto.productoId,
-        'cantidad': p['cantidad'],
-        'precio': p['precio'],
-      };
-    }).toList();
-
-    final exito = await context.read<OrdenInternaProvider>().crearOrden(
-      clienteId: _clienteSeleccionado!.id!,
-      obraId: _obraSeleccionada?.id,
-      solicitanteNombre: _solicitanteNombreController.text.trim(),
-      solicitanteEmail: _solicitanteEmailController.text.trim().isEmpty
-          ? null
-          : _solicitanteEmailController.text.trim(),
-      solicitanteTelefono: _solicitanteTelefonoController.text.trim().isEmpty
-          ? null
-          : _solicitanteTelefonoController.text.trim(),
-      fechaEntregaEstimada: _fechaEntregaEstimada,
-      observacionesCliente: _observacionesController.text.trim().isEmpty
-          ? null
-          : _observacionesController.text.trim(),
-      items: items,
-    );
-
-    setState(() => _isLoading = false);
-
-    if (exito && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Orden creada exitosamente'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      Navigator.pop(context);
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('❌ Error al crear la orden'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-    }
-  }
-}
-
-// Dialog Selector de Producto
-class _ProductoSelectorDialog extends StatefulWidget {
-  final List<ProductoConStock> productos;
-  final ProductoConStock? productoInicial;
-  final double? cantidadInicial;
-  final double? precioInicial;
-
-  const _ProductoSelectorDialog({
-    required this.productos,
-    this.productoInicial,
-    this.cantidadInicial,
-    this.precioInicial,
-  });
-
-  @override
-  State<_ProductoSelectorDialog> createState() => _ProductoSelectorDialogState();
-}
-
-class _ProductoSelectorDialogState extends State<_ProductoSelectorDialog> {
-  final _cantidadController = TextEditingController();
-  final _precioController = TextEditingController();
-  ProductoConStock? _productoSeleccionado;
-
-  @override
-  void initState() {
-    super.initState();
-    _productoSeleccionado = widget.productoInicial;
-    _cantidadController.text = widget.cantidadInicial?.toString() ?? '';
-    _precioController.text = widget.precioInicial?.toStringAsFixed(2) ?? '';
-  }
-
-  @override
-  void dispose() {
-    _cantidadController.dispose();
-    _precioController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.productoInicial != null ? 'Editar Producto' : 'Agregar Producto'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<ProductoConStock>(
-              value: _productoSeleccionado,
-              decoration: const InputDecoration(
-                labelText: 'Producto',
-                border: OutlineInputBorder(),
-              ),
-              items: widget.productos.map((producto) {
-                return DropdownMenuItem(
-                  value: producto,
-                  child: Text(producto.productoNombre),
-                );
-              }).toList(),
-              onChanged: (producto) {
-                setState(() {
-                  _productoSeleccionado = producto;
-                  if (producto?.precioSinIva != null) {
-                    _precioController.text = producto!.precioSinIva!.toStringAsFixed(2);
-                  }
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _cantidadController,
-              decoration: InputDecoration(
-                labelText: 'Cantidad',
-                suffix: Text(_productoSeleccionado?.unidadBase ?? ''),
-                border: const OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _precioController,
-              decoration: const InputDecoration(
-                labelText: 'Precio unitario',
-                prefix: Text('\$ '),
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_productoSeleccionado == null ||
-                _cantidadController.text.isEmpty ||
-                _precioController.text.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Completá todos los campos')),
-              );
-              return;
-            }
-
-            Navigator.pop(context, {
-              'producto': _productoSeleccionado,
-              'cantidad': double.parse(_cantidadController.text),
-              'precio': double.parse(_precioController.text),
-            });
-          },
-          child: const Text('Agregar'),
-        ),
-      ],
     );
   }
 }

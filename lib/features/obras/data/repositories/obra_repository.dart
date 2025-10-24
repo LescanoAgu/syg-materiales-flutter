@@ -258,6 +258,57 @@ class ObraRepository {
     }
   }
 
+  /// Obtiene obras con paginación y cliente (lazy loading)
+  Future<List<ObraConCliente>> obtenerConPaginacion({
+    required int limit,
+    required int offset,
+    bool soloActivas = true,
+  }) async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      String query = '''
+      SELECT 
+        o.*,
+        c.codigo as cliente_codigo,
+        c.razon_social as cliente_razon_social
+      FROM $_tableName o
+      INNER JOIN clientes c ON o.cliente_id = c.id
+      ${soloActivas ? "WHERE o.estado = 'activa'" : ''}
+      ORDER BY o.nombre ASC
+      LIMIT ? OFFSET ?
+    ''';
+
+      final List<Map<String, dynamic>> maps = await db.rawQuery(
+        query,
+        [limit, offset],
+      );
+
+      return List.generate(maps.length, (i) {
+        return ObraConCliente.fromMap(maps[i]);
+      });
+    } catch (e) {
+      print('❌ Error al obtener obras con paginación: $e');
+      return [];
+    }
+  }
+
+  /// Cuenta el total de obras
+  Future<int> contarObras({bool soloActivas = true}) async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as total FROM $_tableName WHERE ${soloActivas ? "estado = 'activa'" : '1=1'}',
+      );
+
+      return Sqflite.firstIntValue(result) ?? 0;
+    } catch (e) {
+      print('❌ Error al contar obras: $e');
+      return 0;
+    }
+  }
+
   /// Cuenta obras por cliente
   Future<int> contarPorCliente(int clienteId, {bool soloActivas = true}) async {
     try {

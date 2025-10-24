@@ -306,6 +306,56 @@ class AcopioProvider extends ChangeNotifier {
     }
   }
 
+  /// Registra un movimiento (entrada o salida) - MÃ©todo unificado
+  Future<bool> registrarMovimiento({
+    required int productoId,
+    required int clienteId,
+    required int proveedorId,
+    required TipoMovimientoAcopio tipo,
+    required double cantidad,
+    String? motivo,
+    String? referencia,
+    String? remitoNumero,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    bool valorizado = false,
+    double? montoValorizado,
+  }) async {
+    try {
+      _state = AcopioState.loading;
+      notifyListeners();
+
+      await _acopioRepo.registrarMovimiento(
+        productoId: productoId,
+        clienteId: clienteId,
+        proveedorId: proveedorId,
+        tipo: tipo,
+        cantidad: cantidad,
+        motivo: motivo,
+        referencia: referencia,
+        remitoNumero: remitoNumero,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
+        valorizado: valorizado,
+        montoValorizado: montoValorizado,
+      );
+
+      // Recargar acopios
+      await cargarAcopios();
+
+      print('✅ Movimiento ${tipo.name} registrado');
+      return true;
+
+    } catch (e) {
+      _state = AcopioState.error;
+      _errorMessage = 'Error al registrar movimiento: $e';
+      notifyListeners();
+
+      print('❌ $_errorMessage');
+      return false;
+    }
+  }
+
   /// Registra traspaso entre acopios
   Future<bool> registrarTraspaso({
     required int productoId,

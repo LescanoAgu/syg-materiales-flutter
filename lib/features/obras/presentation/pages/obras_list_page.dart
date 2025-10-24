@@ -16,19 +16,32 @@ class ObrasListPage extends StatefulWidget {
 
 class _ObrasListPageState extends State<ObrasListPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();  // ← NUEVO
   String _filtroEstado = 'Activas';
 
   @override
   void initState() {
     super.initState();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ObraProvider>().cargarObras();
     });
+
+    // ← NUEVO: Escuchar el scroll para cargar más datos
+    _scrollController.addListener(_onScroll);
+  }
+
+// ← NUEVO MÉTODO
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
+      context.read<ObraProvider>().cargarMasObras();
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();  // ← NUEVO
     super.dispose();
   }
 
@@ -194,7 +207,7 @@ class _ObrasListPageState extends State<ObrasListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    total.toString(),
+                    '${provider.obras.length}/$total',  // ← Muestra "20/150"
                     style: AppTextStyles.h2.copyWith(color: AppColors.primary),
                   ),
                   Text(
@@ -214,13 +227,51 @@ class _ObrasListPageState extends State<ObrasListPage> {
   // LISTA DE OBRAS
   // ========================================
   Widget _buildObrasList(List<ObraConCliente> obras) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: obras.length,
-      itemBuilder: (context, index) {
-        final obraConCliente = obras[index];
-        return _buildObraCard(obraConCliente);
+    return Consumer<ObraProvider>(
+      builder: (context, provider, child) {
+        // Calcular cantidad de items (agregar 1 si hay más páginas)
+        final itemCount = provider.hayMasPaginas
+            ? obras.length + 1
+            : obras.length;
+
+        return ListView.builder(
+          controller: _scrollController,  // ← IMPORTANTE: Conectar el controller
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          itemCount: itemCount,
+          itemBuilder: (context, index) {
+            // Si es el último item Y hay más páginas, mostrar spinner
+            if (index >= obras.length) {
+              return _buildLoadingIndicator();
+            }
+
+            // Mostrar la obra normal
+            final obraConCliente = obras[index];
+            return _buildObraCard(obraConCliente);
+          },
+        );
       },
+    );
+  }
+
+  /// Indicador de carga para lazy loading
+  Widget _buildLoadingIndicator() {
+    return const Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Center(
+        child: Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 8),
+            Text(
+              'Cargando más obras...',
+              style: TextStyle(
+                color: AppColors.textLight,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

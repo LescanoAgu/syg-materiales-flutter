@@ -15,32 +15,100 @@ class ClienteProvider extends ChangeNotifier {
   // Estado de carga
   bool _isLoading = false;
 
+  // Estado de carga de más datos (scroll infinito)
+  bool _isLoadingMore = false;  // ← AGREGAR ESTA LÍNEA
+
   // Cliente seleccionado actualmente
   ClienteModel? _clienteSeleccionado;
+
+  // Página actual (empieza en 0)
+  int _paginaActual = 0;
+
+  // Cantidad de registros por página
+  static const int _registrosPorPagina = 20;
+
+  // ¿Hay más páginas por cargar?
+  bool _hayMasPaginas = true;
+
+  // Total de clientes en la base de datos
+  int _totalClientes = 0;
+
 
   // Getters
   List<ClienteModel> get clientes => _clientes;
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;  // ← NUEVO
   ClienteModel? get clienteSeleccionado => _clienteSeleccionado;
-  int get totalClientes => _clientes.length;
+  int get totalClientes => _totalClientes;    // ← MODIFICADO
+  bool get hayMasPaginas => _hayMasPaginas;  // ← NUEVO
+  int get paginaActual => _paginaActual;      // ← NUEVO
 
   // ========================================
   // CARGAR CLIENTES
   // ========================================
 
-  /// Carga todos los clientes desde la base de datos
+  /// Carga la primera página de clientes (limpia la lista)
   Future<void> cargarClientes({bool soloActivos = true}) async {
     _isLoading = true;
+    _paginaActual = 0;  // ← Reiniciar paginación
+    _hayMasPaginas = true;
     notifyListeners();
 
     try {
-      _clientes = await _repository.obtenerTodos(soloActivos: soloActivos);
-      print('✅ ${_clientes.length} clientes cargados en el provider');
+      // Primero contar cuántos clientes hay en total
+      _totalClientes = await _repository.contarClientes(soloActivos: soloActivos);
+
+      // Cargar la primera página
+      _clientes = await _repository.obtenerConPaginacion(
+        limit: _registrosPorPagina,
+        offset: 0,
+        soloActivos: soloActivos,
+      );
+
+      // Verificar si hay más páginas
+      _hayMasPaginas = _clientes.length < _totalClientes;
+
+      print('✅ ${_clientes.length} clientes cargados (total: $_totalClientes)');
     } catch (e) {
       print('❌ Error al cargar clientes en provider: $e');
       _clientes = [];
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Carga la siguiente página de clientes (agrega a la lista existente)
+  Future<void> cargarMasClientes({bool soloActivos = true}) async {
+    // Si ya estamos cargando o no hay más páginas, no hacer nada
+    if (_isLoadingMore || !_hayMasPaginas) return;
+
+    _isLoadingMore = true;
+    notifyListeners();
+
+    try {
+      _paginaActual++;  // ← Avanzar a la siguiente página
+
+      final int offset = _paginaActual * _registrosPorPagina;
+
+      final List<ClienteModel> nuevosClientes = await _repository.obtenerConPaginacion(
+        limit: _registrosPorPagina,
+        offset: offset,
+        soloActivos: soloActivos,
+      );
+
+      // Agregar los nuevos clientes a la lista existente
+      _clientes.addAll(nuevosClientes);
+
+      // Verificar si hay más páginas
+      _hayMasPaginas = _clientes.length < _totalClientes;
+
+      print('✅ ${nuevosClientes.length} clientes más cargados (total cargado: ${_clientes.length}/$_totalClientes)');
+    } catch (e) {
+      print('❌ Error al cargar más clientes: $e');
+      _paginaActual--;  // ← Retroceder la página si hubo error
+    } finally {
+      _isLoadingMore = false;
       notifyListeners();
     }
   }

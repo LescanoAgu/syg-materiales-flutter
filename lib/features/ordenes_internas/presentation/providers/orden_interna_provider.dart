@@ -1,409 +1,271 @@
-import 'package:flutter/foundation.dart';
-import '../../data/models/orden_interna_model.dart';
-import '../../data/repositories/orden_interna_repository.dart';
+// lib/features/ordenes_internas/presentation/providers/orden_interna_provider.dart
 
-/// Estados posibles del provider
-enum OrdenInternaState {
-  initial,
-  loading,
-  loaded,
-  error,
-  creating,
-  updating,
-}
+import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
+import '../../../../core/database/database_helper.dart';
 
 /// Provider de Órdenes Internas
-///
-/// Maneja el estado de las órdenes en la UI:
-/// - Lista de órdenes
-/// - Filtros
-/// - Crear nuevas órdenes
-/// - Aprobar/Rechazar
+/// VERSIÓN CORREGIDA - Acceso directo a BD
 class OrdenInternaProvider extends ChangeNotifier {
-  final OrdenInternaRepository _repository = OrdenInternaRepository();
+  final DatabaseHelper _dbHelper = DatabaseHelper();
 
-  // ========================================
-  // ESTADO
-  // ========================================
-
-  OrdenInternaState _state = OrdenInternaState.initial;
-  List<OrdenInternaDetalle> _ordenes = [];
-  OrdenInternaDetalle? _ordenSeleccionada;
+  // Estado
+  List<Map<String, dynamic>> _ordenes = [];
+  bool _isLoading = false;
   String? _errorMessage;
 
-  // Filtros
-  String? _estadoFiltro;
-  int? _clienteFiltro;
-  DateTime? _fechaDesde;
-  DateTime? _fechaHasta;
-
-  // Estadísticas
-  Map<String, int> _estadisticasPorEstado = {};
-
-  // ========================================
-  // GETTERS
-  // ========================================
-
-  OrdenInternaState get state => _state;
-  List<OrdenInternaDetalle> get ordenes => _ordenes;
-  OrdenInternaDetalle? get ordenSeleccionada => _ordenSeleccionada;
+  // Getters
+  List<Map<String, dynamic>> get ordenes => _ordenes;
+  bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  String? get estadoFiltro => _estadoFiltro;
-  int? get clienteFiltro => _clienteFiltro;
-  DateTime? get fechaDesde => _fechaDesde;
-  DateTime? get fechaHasta => _fechaHasta;
-  Map<String, int> get estadisticasPorEstado => _estadisticasPorEstado;
-
-  bool get isLoading => _state == OrdenInternaState.loading;
-  bool get isCreating => _state == OrdenInternaState.creating;
-  bool get isUpdating => _state == OrdenInternaState.updating;
-  bool get hasError => _state == OrdenInternaState.error;
   bool get hasData => _ordenes.isNotEmpty;
-
-  // Contadores por estado
-  int get totalOrdenes => _ordenes.length;
-  int get ordenesSolicitadas => _estadisticasPorEstado['solicitado'] ?? 0;
-  int get ordenesEnPreparacion => _estadisticasPorEstado['en_preparacion'] ?? 0;
-  int get ordenesListasEnvio => _estadisticasPorEstado['listo_envio'] ?? 0;
-  int get ordenesDespachadas => _estadisticasPorEstado['despachado'] ?? 0;
-
-  // ========================================
-  // CREAR ORDEN
-  // ========================================
-
-  /// Crea una nueva orden interna
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// final exito = await provider.crearOrden(
-  ///   clienteId: 1,
-  ///   solicitanteNombre: 'Juan Pérez',
-  ///   items: [
-  ///     {'productoId': 5, 'cantidad': 100.0, 'precio': 1500.0},
-  ///   ],
-  /// );
-  /// ```
-  Future<bool> crearOrden({
-    required int clienteId,
-    int? obraId,
-    required String solicitanteNombre,
-    String? solicitanteEmail,
-    String? solicitanteTelefono,
-    DateTime? fechaEntregaEstimada,
-    String? observacionesCliente,
-    required List<Map<String, dynamic>> items,
-    int? usuarioCreadorId,
-  }) async {
-    try {
-      _state = OrdenInternaState.creating;
-      _errorMessage = null;
-      notifyListeners();
-
-      final ordenId = await _repository.crearOrden(
-        clienteId: clienteId,
-        obraId: obraId,
-        solicitanteNombre: solicitanteNombre,
-        solicitanteEmail: solicitanteEmail,
-        solicitanteTelefono: solicitanteTelefono,
-        fechaEntregaEstimada: fechaEntregaEstimada,
-        observacionesCliente: observacionesCliente,
-        items: items,
-        usuarioCreadorId: usuarioCreadorId,
-      );
-
-      // Recargar lista
-      await cargarOrdenes();
-
-      print('✅ Orden creada con ID: $ordenId');
-      return true;
-
-    } catch (e) {
-      _state = OrdenInternaState.error;
-      _errorMessage = 'Error al crear orden: $e';
-      notifyListeners();
-
-      print('❌ $_errorMessage');
-      return false;
-    }
-  }
+  bool get hasError => _errorMessage != null;
 
   // ========================================
   // CARGAR ÓRDENES
   // ========================================
 
-  /// Carga órdenes con los filtros actuales
-  Future<void> cargarOrdenes({
-    String? estado,
-    int? clienteId,
-    DateTime? desde,
-    DateTime? hasta,
-    int? limit,
-  }) async {
+  Future<void> cargarOrdenes() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
     try {
-      _state = OrdenInternaState.loading;
-      _errorMessage = null;
-      notifyListeners();
-
-      // Actualizar filtros si se proporcionan
-      if (estado != null) _estadoFiltro = estado;
-      if (clienteId != null) _clienteFiltro = clienteId;
-      if (desde != null) _fechaDesde = desde;
-      if (hasta != null) _fechaHasta = hasta;
-
-      _ordenes = await _repository.getOrdenes(
-        estado: _estadoFiltro,
-        clienteId: _clienteFiltro,
-        desde: _fechaDesde,
-        hasta: _fechaHasta,
-        limit: limit,
-      );
-
-      // Cargar estadísticas
-      await _cargarEstadisticas();
-
-      _state = OrdenInternaState.loaded;
-      notifyListeners();
+      final db = await _dbHelper.database;
+      _ordenes = await db.rawQuery('''
+        SELECT 
+          oi.*,
+          c.razon_social as cliente_nombre,
+          o.nombre as obra_nombre
+        FROM ordenes_internas oi
+        LEFT JOIN clientes c ON oi.cliente_id = c.id
+        LEFT JOIN obras o ON oi.obra_id = o.id
+        ORDER BY oi.created_at DESC
+      ''');
 
       print('✅ ${_ordenes.length} órdenes cargadas');
-
     } catch (e) {
-      _state = OrdenInternaState.error;
-      _errorMessage = 'Error al cargar órdenes: $e';
-      notifyListeners();
-
+      _errorMessage = 'Error: $e';
       print('❌ $_errorMessage');
+      _ordenes = [];
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  /// Carga órdenes pendientes de aprobación
-  Future<void> cargarOrdenesPendientes() async {
-    await cargarOrdenes(estado: 'solicitado');
-  }
-
-  /// Carga órdenes de un cliente específico
-  Future<void> cargarOrdenesPorCliente(int clienteId) async {
-    await cargarOrdenes(clienteId: clienteId);
-  }
-
-  /// Carga una orden específica por ID
-  Future<void> cargarOrdenPorId(int ordenId) async {
-    try {
-      _state = OrdenInternaState.loading;
-      _errorMessage = null;
-      notifyListeners();
-
-      _ordenSeleccionada = await _repository.getOrdenPorId(ordenId);
-
-      _state = OrdenInternaState.loaded;
-      notifyListeners();
-
-      if (_ordenSeleccionada != null) {
-        print('✅ Orden ${_ordenSeleccionada!.orden.numero} cargada');
-      }
-
-    } catch (e) {
-      _state = OrdenInternaState.error;
-      _errorMessage = 'Error al cargar orden: $e';
-      notifyListeners();
-
-      print('❌ $_errorMessage');
-    }
-  }
+  Future<void> refrescar() => cargarOrdenes();
 
   // ========================================
-  // APROBAR / RECHAZAR
+  // CREAR ORDEN
   // ========================================
 
-  /// Aprueba una orden
-  Future<bool> aprobarOrden({
-    required int ordenId,
-    required int aprobadoPorUsuarioId,
-    List<Map<String, dynamic>>? itemsAjustados,
-    String? observacionesInternas,
+  Future<bool> crearOrden({
+    required int clienteId,
+    required int obraId,
+    required String solicitanteNombre,
+    List<Map<String, dynamic>>? items,
+    DateTime? fechaSolicitud,
+    String? prioridad,
+    String? observaciones,
+    int usuarioId = 1,
   }) async {
     try {
-      _state = OrdenInternaState.updating;
-      _errorMessage = null;
+      _isLoading = true;
       notifyListeners();
 
-      final exito = await _repository.aprobarOrden(
-        ordenId: ordenId,
-        aprobadoPorUsuarioId: aprobadoPorUsuarioId,
-        itemsAjustados: itemsAjustados,
-        observacionesInternas: observacionesInternas,
-      );
+      final db = await _dbHelper.database;
 
-      if (exito) {
-        await cargarOrdenes();
-        print('✅ Orden aprobada exitosamente');
+      // Generar código
+      final maxNum = Sqflite.firstIntValue(
+        await db.rawQuery('SELECT MAX(CAST(SUBSTR(codigo, 4) AS INTEGER)) FROM ordenes_internas WHERE codigo LIKE "OI-%"'),
+      ) ?? 0;
+      final codigo = 'OI-${(maxNum + 1).toString().padLeft(4, '0')}';
+
+      // Insertar orden
+      final ordenId = await db.insert('ordenes_internas', {
+        'codigo': codigo,
+        'cliente_id': clienteId,
+        'obra_id': obraId,
+        'solicitante_nombre': solicitanteNombre,
+        'fecha_solicitud': (fechaSolicitud ?? DateTime.now()).toIso8601String(),
+        'prioridad': prioridad ?? 'normal',
+        'estado': 'solicitado',
+        'observaciones': observaciones,
+        'usuario_id': usuarioId,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      print('✅ Orden creada con ID: $ordenId');
+
+      // Insertar items
+      if (items != null && items.isNotEmpty) {
+        for (var item in items) {
+          await db.insert('orden_items', {
+            'orden_id': ordenId,
+            'producto_id': item['productoId'],
+            'cantidad': item['cantidad'],
+            'precio_unitario': item['precioUnitario'],
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        }
+        print('✅ ${items.length} items agregados');
       }
 
-      return exito;
+      await cargarOrdenes();
+      _isLoading = false;
+      notifyListeners();
 
+      return true;
     } catch (e) {
-      _state = OrdenInternaState.error;
-      _errorMessage = 'Error al aprobar orden: $e';
+      _isLoading = false;
+      _errorMessage = 'Error: $e';
       notifyListeners();
-
-      print('❌ $_errorMessage');
-      return false;
-    }
-  }
-
-  /// Rechaza una orden
-  Future<bool> rechazarOrden({
-    required int ordenId,
-    required int rechazadoPorUsuarioId,
-    required String motivoRechazo,
-  }) async {
-    try {
-      _state = OrdenInternaState.updating;
-      _errorMessage = null;
-      notifyListeners();
-
-      final exito = await _repository.rechazarOrden(
-        ordenId: ordenId,
-        rechazadoPorUsuarioId: rechazadoPorUsuarioId,
-        motivoRechazo: motivoRechazo,
-      );
-
-      if (exito) {
-        await cargarOrdenes();
-        print('✅ Orden rechazada');
-      }
-
-      return exito;
-
-    } catch (e) {
-      _state = OrdenInternaState.error;
-      _errorMessage = 'Error al rechazar orden: $e';
-      notifyListeners();
-
       print('❌ $_errorMessage');
       return false;
     }
   }
 
   // ========================================
-  // CAMBIAR ESTADOS
+  // CAMBIAR ESTADO (método público que falta)
   // ========================================
 
-  /// Cambia el estado de una orden
   Future<bool> cambiarEstado({
     required int ordenId,
     required String nuevoEstado,
+    String? observaciones,
+  }) async {
+    return await _actualizarEstado(
+      ordenId: ordenId,
+      nuevoEstado: nuevoEstado,
+      observaciones: observaciones,
+    );
+  }
+
+  // ========================================
+  // APROBAR/RECHAZAR/CANCELAR
+  // ========================================
+
+  Future<bool> aprobarOrden(
+      int ordenId, {
+        int? aprobadoPorUsuarioId,
+        String? observacionesInternas,
+      }) async {
+    return await _actualizarEstado(
+      ordenId: ordenId,
+      nuevoEstado: 'aprobado',
+      observaciones: observacionesInternas,
+      usuarioId: aprobadoPorUsuarioId,
+    );
+  }
+
+  Future<bool> rechazarOrden(
+      int ordenId, {
+        int? rechazadoPorUsuarioId,
+        String? motivoRechazo,
+      }) async {
+    return await _actualizarEstado(
+      ordenId: ordenId,
+      nuevoEstado: 'rechazado',
+      observaciones: motivoRechazo,
+      usuarioId: rechazadoPorUsuarioId,
+    );
+  }
+
+  Future<bool> cancelarOrden(int ordenId, {String? motivo}) async {
+    return await _actualizarEstado(
+      ordenId: ordenId,
+      nuevoEstado: 'cancelado',
+      observaciones: motivo,
+    );
+  }
+
+  // ========================================
+  // ACTUALIZAR ESTADO (método privado)
+  // ========================================
+
+  Future<bool> _actualizarEstado({
+    required int ordenId,
+    required String nuevoEstado,
+    String? observaciones,
     int? usuarioId,
   }) async {
     try {
-      _state = OrdenInternaState.updating;
-      _errorMessage = null;
+      _isLoading = true;
       notifyListeners();
 
-      final exito = await _repository.cambiarEstado(
-        ordenId: ordenId,
-        nuevoEstado: nuevoEstado,
-        usuarioId: usuarioId,
-      );
+      final db = await _dbHelper.database;
 
-      if (exito) {
-        await cargarOrdenes();
-        print('✅ Estado cambiado a: $nuevoEstado');
+      final updateData = {
+        'estado': nuevoEstado,
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (observaciones != null) {
+        updateData['observaciones_internas'] = observaciones;
       }
 
-      return exito;
+      if (nuevoEstado == 'aprobado' && usuarioId != null) {
+        updateData['aprobado_por'] = usuarioId.toString(); // ← Convertir a String
+        updateData['aprobado_fecha'] = DateTime.now().toIso8601String();
+      }
 
-    } catch (e) {
-      _state = OrdenInternaState.error;
-      _errorMessage = 'Error al cambiar estado: $e';
+      if (nuevoEstado == 'rechazado') {
+        updateData['motivo_rechazo'] = observaciones ?? ''; // ← Manejar null
+        if (usuarioId != null) {
+          updateData['rechazado_por'] = usuarioId.toString(); // ← Convertir a String
+        }
+      }
+
+      await db.update(
+        'ordenes_internas',
+        updateData,
+        where: 'id = ?',
+        whereArgs: [ordenId],
+      );
+
+      await cargarOrdenes();
+      _isLoading = false;
       notifyListeners();
 
+      print('✅ Orden $ordenId -> $nuevoEstado');
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'Error: $e';
+      notifyListeners();
       print('❌ $_errorMessage');
       return false;
     }
-  }
-
-  /// Marca como lista para envío
-  Future<bool> marcarListoEnvio(int ordenId) async {
-    return await cambiarEstado(ordenId: ordenId, nuevoEstado: 'listo_envio');
-  }
-
-  /// Marca como despachado
-  Future<bool> marcarDespachado(int ordenId) async {
-    return await cambiarEstado(ordenId: ordenId, nuevoEstado: 'despachado');
-  }
-
-  /// Cancela una orden
-  Future<bool> cancelarOrden(int ordenId) async {
-    return await cambiarEstado(ordenId: ordenId, nuevoEstado: 'cancelado');
   }
 
   // ========================================
   // FILTROS
   // ========================================
 
-  /// Aplica filtro por estado
-  void filtrarPorEstado(String? estado) {
-    cargarOrdenes(estado: estado);
-  }
-
-  /// Aplica filtro por cliente
-  void filtrarPorCliente(int? clienteId) {
-    cargarOrdenes(clienteId: clienteId);
-  }
-
-  /// Aplica filtro por rango de fechas
-  void filtrarPorFechas(DateTime? desde, DateTime? hasta) {
-    cargarOrdenes(desde: desde, hasta: hasta);
-  }
-
-  /// Limpia todos los filtros
-  Future<void> limpiarFiltros() async {
-    _estadoFiltro = null;
-    _clienteFiltro = null;
-    _fechaDesde = null;
-    _fechaHasta = null;
+  Future<void> filtrarPorEstado(String? estado) async {
     await cargarOrdenes();
+    if (estado != null) {
+      _ordenes = _ordenes.where((o) => o['estado'] == estado).toList();
+      notifyListeners();
+    }
   }
 
   // ========================================
   // ESTADÍSTICAS
   // ========================================
 
-  /// Carga estadísticas de órdenes por estado
-  Future<void> _cargarEstadisticas() async {
-    try {
-      _estadisticasPorEstado = await _repository.getEstadisticasPorEstado();
-    } catch (e) {
-      print('❌ Error al cargar estadísticas: $e');
-    }
+  int contarPorEstado(String estado) {
+    return _ordenes.where((o) => o['estado'] == estado).length;
   }
 
-  // ========================================
-  // UTILIDADES
-  // ========================================
-
-  /// Limpia el estado del provider
-  void limpiar() {
-    _state = OrdenInternaState.initial;
-    _ordenes = [];
-    _ordenSeleccionada = null;
-    _errorMessage = null;
-    _estadoFiltro = null;
-    _clienteFiltro = null;
-    _fechaDesde = null;
-    _fechaHasta = null;
-    _estadisticasPorEstado = {};
-    notifyListeners();
-  }
-
-  /// Refresca las órdenes
-  Future<void> refrescar() async {
-    await cargarOrdenes();
-  }
-
-  /// Deselecciona la orden actual
-  void deseleccionarOrden() {
-    _ordenSeleccionada = null;
-    notifyListeners();
-  }
+  int get totalOrdenes => _ordenes.length;
+  int get ordenesPendientes =>
+      contarPorEstado('solicitado') +
+          contarPorEstado('aprobado') +
+          contarPorEstado('en_preparacion');
+  int get ordenesCompletadas => contarPorEstado('despachado');
+  int get ordenesSolicitadas => contarPorEstado('solicitado');
+  int get ordenesEnPreparacion => contarPorEstado('en_preparacion');
+  int get ordenesDespachadas => contarPorEstado('despachado');
 }

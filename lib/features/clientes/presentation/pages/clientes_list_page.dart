@@ -16,19 +16,34 @@ class ClientesListPage extends StatefulWidget {
 
 class _ClientesListPageState extends State<ClientesListPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+
     // Cargar clientes al iniciar
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ClienteProvider>().cargarClientes();
     });
+
+    // ← NUEVO: Escuchar el scroll para cargar más datos
+    _scrollController.addListener(_onScroll);
+  }
+
+// ← NUEVO MÉTODO: Se llama cada vez que el usuario hace scroll
+  void _onScroll() {
+    // Verificar si llegó al 80% del scroll (casi al final)
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
+      // Cargar más clientes
+      context.read<ClienteProvider>().cargarMasClientes();
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();  // ← NUEVO: Liberar recursos
     super.dispose();
   }
 
@@ -155,7 +170,7 @@ class _ClientesListPageState extends State<ClientesListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    total.toString(),
+                    '${provider.clientes.length}/$total',  // ← Muestra "20/150"
                     style: AppTextStyles.h2.copyWith(color: AppColors.primary),
                   ),
                   Text(
@@ -175,13 +190,50 @@ class _ClientesListPageState extends State<ClientesListPage> {
   // LISTA DE CLIENTES
   // ========================================
   Widget _buildClientesList(List<ClienteModel> clientes) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: clientes.length,
-      itemBuilder: (context, index) {
-        final cliente = clientes[index];
-        return _buildClienteCard(cliente);
+    return Consumer<ClienteProvider>(
+      builder: (context, provider, child) {
+        // Calcular cuántos items mostrar
+        // Si hay más páginas, agregamos un item extra para el spinner
+        final itemCount = provider.hayMasPaginas
+            ? clientes.length + 1  // ← +1 para el spinner de carga
+            : clientes.length;
+
+        return ListView.builder(
+          controller: _scrollController,  // ← IMPORTANTE: Conectar el controller
+          itemCount: itemCount,
+          itemBuilder: (context, index) {
+            // Si es el último item Y hay más páginas, mostrar spinner
+            if (index >= clientes.length) {
+              return _buildLoadingIndicator();
+            }
+
+            // Mostrar el cliente normal
+            final cliente = clientes[index];
+            return _buildClienteCard(cliente);
+          },
+        );
       },
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return const Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Center(
+        child: Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 8),
+            Text(
+              'Cargando más clientes...',
+              style: TextStyle(
+                color: AppColors.textLight,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

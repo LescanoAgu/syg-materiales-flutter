@@ -237,10 +237,20 @@ class _OrdenesPageState extends State<OrdenesPage> {
     );
   }
 
-  Widget _buildOrdenCard(OrdenInternaDetalle ordenDetalle) {
-    final orden = ordenDetalle.orden;
-    final estadoColor = _getEstadoColor(orden.estado);
-    final estadoIcon = _getEstadoIcon(orden.estado);
+  // REEMPLAZAR el método _buildOrdenCard en ordenes_page.dart
+
+  Widget _buildOrdenCard(Map<String, dynamic> ordenMap) {
+    // Extraer datos del Map
+    final estado = ordenMap['estado'] as String;
+    final numero = ordenMap['codigo'] as String;
+    final clienteNombre = ordenMap['cliente_nombre'] as String? ?? 'Sin cliente';
+    final obraNombre = ordenMap['obra_nombre'] as String?;
+    final fechaSolicitud = DateTime.parse(ordenMap['fecha_solicitud'] as String);
+    final total = (ordenMap['total'] as num?)?.toDouble() ?? 0.0;
+    final ordenId = ordenMap['id'] as int;
+
+    final estadoColor = _getEstadoColor(estado);
+    final estadoIcon = _getEstadoIcon(estado);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -249,62 +259,60 @@ class _OrdenesPageState extends State<OrdenesPage> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _irADetalle(ordenDetalle),
+        onTap: () {
+          // TODO: Necesitas cargar el detalle completo desde BD
+          // Por ahora solo muestra un mensaje
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ver detalle de orden $numero (ID: $ordenId)')),
+          );
+        },
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-// Header: Número y Estado
-            Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-// Número de orden
-          Row(
-          children: [
-          Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 4,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.primaryLight.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            orden.numero,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Icon(estadoIcon, size: 18, color: estadoColor),
-        ],
-      ),
-              // Badge de estado
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: estadoColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: estadoColor, width: 1),
-                ),
-                child: Text(
-                  _getEstadoLabel(orden.estado),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: estadoColor,
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          numero,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(estadoIcon, size: 18, color: estadoColor),
+                    ],
                   ),
-                ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: estadoColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: estadoColor, width: 1),
+                    ),
+                    child: Text(
+                      _getEstadoLabel(estado),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: estadoColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-            ),
 
               const SizedBox(height: 12),
 
@@ -315,18 +323,15 @@ class _OrdenesPageState extends State<OrdenesPage> {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      ordenDetalle.clienteRazonSocial,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                      ),
+                      clienteNombre,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                     ),
                   ),
                 ],
               ),
 
-              // Obra (si existe)
-              if (ordenDetalle.obraNombre != null) ...[
+              // Obra
+              if (obraNombre != null) ...[
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -334,11 +339,8 @@ class _OrdenesPageState extends State<OrdenesPage> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        ordenDetalle.obraNombre!,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textMedium,
-                        ),
+                        obraNombre,
+                        style: TextStyle(fontSize: 13, color: AppColors.textMedium),
                       ),
                     ),
                   ],
@@ -349,43 +351,22 @@ class _OrdenesPageState extends State<OrdenesPage> {
               const Divider(height: 1),
               const SizedBox(height: 8),
 
-              // Footer: Fecha, Productos, Total
+              // Footer
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Fecha
                   Row(
                     children: [
                       Icon(Icons.calendar_today, size: 14, color: AppColors.textLight),
                       const SizedBox(width: 4),
                       Text(
-                        ArgFormats.fecha(orden.fechaPedido),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMedium,
-                        ),
+                        ArgFormats.fecha(fechaSolicitud),
+                        style: TextStyle(fontSize: 12, color: AppColors.textMedium),
                       ),
                     ],
                   ),
-
-                  // Cantidad de productos
-                  Row(
-                    children: [
-                      Icon(Icons.inventory_2, size: 14, color: AppColors.textLight),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${ordenDetalle.cantidadProductos} productos',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  // Total
                   Text(
-                    ArgFormats.moneda(orden.total),
+                    ArgFormats.moneda(total),
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -400,6 +381,7 @@ class _OrdenesPageState extends State<OrdenesPage> {
       ),
     );
   }
+
   Widget _buildEmptyState() {
     return Center(
       child: Column(

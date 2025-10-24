@@ -33,7 +33,47 @@ class ClienteRepository {
       return [];
     }
   }
+  Future<List<ClienteModel>> obtenerConPaginacion({
+    required int limit,
+    required int offset,
+    bool soloActivos = true,
+  }) async {
+    try {
+      final Database db = await _dbHelper.database;
 
+      final List<Map<String, dynamic>> maps = await db.query(
+        _tableName,
+        where: soloActivos ? 'estado = ?' : null,
+        whereArgs: soloActivos ? ['activo'] : null,
+        orderBy: 'razon_social ASC',
+        limit: limit,      // ← CUÁNTOS traer
+        offset: offset,    // ← DESDE DÓNDE empezar
+      );
+
+      return List.generate(maps.length, (i) {
+        return ClienteModel.fromMap(maps[i]);
+      });
+    } catch (e) {
+      print('❌ Error al obtener clientes con paginación: $e');
+      return [];
+    }
+  }
+
+  /// Cuenta el total de clientes (para saber cuántas páginas hay)
+  Future<int> contarClientes({bool soloActivos = true}) async {
+    try {
+      final Database db = await _dbHelper.database;
+
+      final result = await db.rawQuery(
+        'SELECT COUNT(*) as total FROM $_tableName WHERE ${soloActivos ? 'estado = "activo"' : '1=1'}',
+      );
+
+      return Sqflite.firstIntValue(result) ?? 0;
+    } catch (e) {
+      print('❌ Error al contar clientes: $e');
+      return 0;
+    }
+  }
   /// Obtiene un cliente por su ID
   Future<ClienteModel?> obtenerPorId(int id) async {
     try {

@@ -14,32 +14,91 @@ class ObraProvider extends ChangeNotifier {
   // Estado de carga
   bool _isLoading = false;
 
+  // Estado de carga de más datos
+  bool _isLoadingMore = false;
+
   // Obra seleccionada actualmente
   ObraModel? _obraSeleccionada;
 
-  // Getters
+  // ========== NUEVAS VARIABLES PARA PAGINACIÓN ==========
+
+  int _paginaActual = 0;
+  static const int _registrosPorPagina = 20;
+  bool _hayMasPaginas = true;
+  int _totalObras = 0;
+
+  // ========== GETTERS ==========
+
   List<ObraConCliente> get obras => _obras;
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;
   ObraModel? get obraSeleccionada => _obraSeleccionada;
-  int get totalObras => _obras.length;
+  int get totalObras => _totalObras;
+  bool get hayMasPaginas => _hayMasPaginas;
+  int get paginaActual => _paginaActual;
 
   // ========================================
   // CARGAR OBRAS
   // ========================================
 
   /// Carga todas las obras con información del cliente
+  /// Carga la primera página de obras
   Future<void> cargarObras({bool soloActivas = true}) async {
     _isLoading = true;
+    _paginaActual = 0;
+    _hayMasPaginas = true;
     notifyListeners();
 
     try {
-      _obras = await _repository.obtenerTodasConCliente(soloActivas: soloActivas);
-      print('✅ ${_obras.length} obras cargadas en el provider');
+      // Contar total de obras
+      _totalObras = await _repository.contarObras(soloActivas: soloActivas);
+
+      // Cargar primera página
+      _obras = await _repository.obtenerConPaginacion(
+        limit: _registrosPorPagina,
+        offset: 0,
+        soloActivas: soloActivas,
+      );
+
+      // Verificar si hay más páginas
+      _hayMasPaginas = _obras.length < _totalObras;
+
+      print('✅ ${_obras.length} obras cargadas (total: $_totalObras)');
     } catch (e) {
       print('❌ Error al cargar obras en provider: $e');
       _obras = [];
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Carga la siguiente página de obras
+  Future<void> cargarMasObras({bool soloActivas = true}) async {
+    if (_isLoadingMore || !_hayMasPaginas) return;
+
+    _isLoadingMore = true;
+    notifyListeners();
+
+    try {
+      _paginaActual++;
+      final int offset = _paginaActual * _registrosPorPagina;
+
+      final List<ObraConCliente> nuevasObras = await _repository.obtenerConPaginacion(
+        limit: _registrosPorPagina,
+        offset: offset,
+        soloActivas: soloActivas,
+      );
+
+      _obras.addAll(nuevasObras);
+      _hayMasPaginas = _obras.length < _totalObras;
+
+      print('✅ ${nuevasObras.length} obras más cargadas (total: ${_obras.length}/$_totalObras)');
+    } catch (e) {
+      print('❌ Error al cargar más obras: $e');
+      _paginaActual--;
+    } finally {
+      _isLoadingMore = false;
       notifyListeners();
     }
   }

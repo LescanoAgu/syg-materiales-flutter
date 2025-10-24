@@ -600,7 +600,7 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
               setState(() => _isLoading = true);
 
               final exito = await context.read<OrdenInternaProvider>().aprobarOrden(
-                ordenId: orden.id!,
+                orden.id!,
                 aprobadoPorUsuarioId: 1,
                 observacionesInternas: obsController.text.trim().isEmpty
                     ? null
@@ -674,7 +674,7 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
               setState(() => _isLoading = true);
 
               final exito = await context.read<OrdenInternaProvider>().rechazarOrden(
-                ordenId: orden.id!,
+                orden.id!,
                 rechazadoPorUsuarioId: 1,
                 motivoRechazo: motivoController.text.trim(),
               );
