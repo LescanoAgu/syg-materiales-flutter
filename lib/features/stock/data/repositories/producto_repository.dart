@@ -1,90 +1,68 @@
-import 'package:sqflite/sqflite.dart';
-import '../../../../core/database/database_helper.dart';
-import '../models/producto_model.dart';
+// [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
+// Reemplaza tu: lib/features/stock/data/repositories/producto_repository.dart
 
-/// Repositorio de Productos
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/producto_model.dart';
+// Importamos el repo de categorías para poder obtener sus datos
+import 'categoria_repository.dart';
+
+/// Repositorio de Productos (Versión Firestore)
 ///
-/// Maneja todas las operaciones de base de datos relacionadas con productos.
-/// Incluye operaciones con JOIN para obtener productos con sus categorías.
+/// Maneja todas las operaciones de base de datos (Firestore) relacionadas con productos.
+/// Ahora incluye datos de categoría "desnormalizados" para evitar JOINs.
 class ProductoRepository {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  // Instancia de Firestore
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Nombre de la "colección" (equivalente a la "tabla")
   static const String _tableName = 'productos';
+
+  // Repositorio de categorías para obtener datos al crear/actualizar
+  final CategoriaRepository _categoriaRepo = CategoriaRepository();
 
   // ========================================
   // LECTURA (READ) - Operaciones básicas
   // ========================================
 
   /// Obtiene TODOS los productos activos ordenados por código
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// List<ProductoModel> productos = await repo.obtenerTodos();
-  /// print('Total: ${productos.length}');
-  /// ```
   Future<List<ProductoModel>> obtenerTodos({bool soloActivos = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      // 1. Apuntar a la colección
+      Query query = _firestore.collection(_tableName);
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: soloActivos ? 'estado = ?' : null,
-        whereArgs: soloActivos ? ['activo'] : null,
-        orderBy: 'codigo ASC',
-      );
+      // 2. Aplicar filtros (si es necesario)
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      return List.generate(maps.length, (i) {
-        return ProductoModel.fromMap(maps[i]);
-      });
+      // 3. Ordenar
+      query = query.orderBy('codigo');
+
+      // 4. Obtener los datos
+      final snapshot = await query.get();
+
+      // 5. Convertir cada "documento" a nuestro modelo
+      return snapshot.docs.map((doc) {
+        // Pasamos el ID del documento al modelo
+        return ProductoModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id); // Asignamos el ID de Firestore
+      }).toList();
 
     } catch (e) {
-      print('❌ Error al obtener productos: $e');
+      print('❌ Error al obtener productos desde Firestore: $e');
       return [];
     }
   }
 
-  /// Obtiene un producto por su ID
-  Future<ProductoModel?> obtenerPorId(int id) async {
-    try {
-      final Database db = await _dbHelper.database;
-
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ProductoModel.fromMap(maps.first);
-      }
-
-      return null;
-
-    } catch (e) {
-      print('❌ Error al obtener producto por id $id: $e');
-      return null;
-    }
-  }
-
-  /// Obtiene un producto por su código
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// ProductoModel? producto = await repo.obtenerPorCodigo('OG-001');
-  /// ```
+  /// Obtiene un producto por su ID (código)
+  /// OJO: En Firestore, el ID es el 'codigo' (ej: "OG-001")
   Future<ProductoModel?> obtenerPorCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ProductoModel.fromMap(maps.first);
+      if (doc.exists) {
+        return ProductoModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id); // Asignamos el ID de Firestore
       }
 
       return null;
@@ -96,46 +74,34 @@ class ProductoRepository {
   }
 
   // ========================================
-  // LECTURA CON JOIN (productos + categorías)
+  // LECTURA "CON CATEGORÍA" (Datos desnormalizados)
   // ========================================
 
   /// Obtiene todos los productos CON información de su categoría
   ///
-  /// Usa un JOIN para traer productos y categorías en una sola query.
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// List<ProductoConCategoria> productos = await repo.obtenerTodosConCategoria();
-  /// for (var item in productos) {
-  ///   print('${item.producto.nombre} - Categoría: ${item.categoriaNombre}');
-  /// }
-  /// ```
+  /// NOTA: Esto ahora es más rápido. Asumimos que al guardar el producto,
+  /// también guardamos 'categoriaNombre' y 'categoriaCodigo'.
   Future<List<ProductoConCategoria>> obtenerTodosConCategoria({
     bool soloActivos = true,
   }) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      // Query con JOIN
-      final String query = '''
-        SELECT 
-          p.*,
-          c.nombre as categoria_nombre,
-          c.codigo as categoria_codigo
-        FROM $_tableName p
-        INNER JOIN categorias c ON p.categoria_id = c.id
-        ${soloActivos ? 'WHERE p.estado = ?' : ''}
-        ORDER BY p.codigo ASC
-      ''';
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      final List<Map<String, dynamic>> maps = await db.rawQuery(
-        query,
-        soloActivos ? ['activo'] : null,
-      );
+      query = query.orderBy('codigo');
 
-      return List.generate(maps.length, (i) {
-        return ProductoConCategoria.fromMap(maps[i]);
-      });
+      final snapshot = await query.get();
+
+      // Mapeamos directamente a ProductoConCategoria
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        // Agregamos el ID del documento
+        data['id'] = doc.id;
+        return ProductoConCategoria.fromMap(data);
+      }).toList();
 
     } catch (e) {
       print('❌ Error al obtener productos con categoría: $e');
@@ -144,25 +110,14 @@ class ProductoRepository {
   }
 
   /// Obtiene un producto por ID con su categoría
-  Future<ProductoConCategoria?> obtenerPorIdConCategoria(int id) async {
+  Future<ProductoConCategoria?> obtenerPorIdConCategoria(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
 
-      final String query = '''
-        SELECT 
-          p.*,
-          c.nombre as categoria_nombre,
-          c.codigo as categoria_codigo
-        FROM $_tableName p
-        INNER JOIN categorias c ON p.categoria_id = c.id
-        WHERE p.id = ?
-        LIMIT 1
-      ''';
-
-      final List<Map<String, dynamic>> maps = await db.rawQuery(query, [id]);
-
-      if (maps.isNotEmpty) {
-        return ProductoConCategoria.fromMap(maps.first);
+      if (doc.exists) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return ProductoConCategoria.fromMap(data);
       }
 
       return null;
@@ -178,37 +133,25 @@ class ProductoRepository {
   // ========================================
 
   /// Obtiene productos de una categoría específica
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// // Obtener todos los productos de Obra General (id: 6)
-  /// List<ProductoModel> productos = await repo.obtenerPorCategoria(6);
-  /// ```
   Future<List<ProductoModel>> obtenerPorCategoria(
-      int categoriaId, {
+      int categoriaId, { // Mantenemos el "int" por ahora
         bool soloActivos = true,
       }) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      String where = 'categoria_id = ?';
-      List<dynamic> whereArgs = [categoriaId];
+      query = query.where('categoriaId', isEqualTo: categoriaId);
 
       if (soloActivos) {
-        where += ' AND estado = ?';
-        whereArgs.add('activo');
+        query = query.where('estado', isEqualTo: 'activo');
       }
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: where,
-        whereArgs: whereArgs,
-        orderBy: 'codigo ASC',
-      );
+      final snapshot = await query.get();
 
-      return List.generate(maps.length, (i) {
-        return ProductoModel.fromMap(maps[i]);
-      });
+      return snapshot.docs.map((doc) {
+        return ProductoModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
+      }).toList();
 
     } catch (e) {
       print('❌ Error al obtener productos por categoría: $e');
@@ -216,38 +159,34 @@ class ProductoRepository {
     }
   }
 
-  /// Busca productos por nombre o código (búsqueda flexible)
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// // Buscar "cemento" encuentra: "Cemento Portland", "Cemento CPF-40"
-  /// List<ProductoModel> resultados = await repo.buscar('cemento');
-  /// ```
+  /// Busca productos por nombre (búsqueda "empieza con")
+  /// OJO: Firestore no soporta 'LIKE %termino%'.
   Future<List<ProductoModel>> buscar(
       String termino, {
         bool soloActivos = true,
       }) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      String where = '(nombre LIKE ? OR codigo LIKE ?)';
-      List<dynamic> whereArgs = ['%$termino%', '%$termino%'];
-
-      if (soloActivos) {
-        where += ' AND estado = ?';
-        whereArgs.add('activo');
+      // Firestore no permite 'OR' en campos diferentes.
+      // La mejor forma es buscar por un solo campo o usar Algolia/Typesense.
+      // Por ahora, buscaremos por nombre.
+      if (termino.isNotEmpty) {
+        query = query
+            .where('nombre', isGreaterThanOrEqualTo: termino)
+            .where('nombre', isLessThanOrEqualTo: '$termino\uf8ff');
       }
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: where,
-        whereArgs: whereArgs,
-        orderBy: 'codigo ASC',
-      );
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      return List.generate(maps.length, (i) {
-        return ProductoModel.fromMap(maps[i]);
-      });
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ProductoModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
+      }).toList();
 
     } catch (e) {
       print('❌ Error al buscar productos: $e');
@@ -255,34 +194,33 @@ class ProductoRepository {
     }
   }
 
-  /// Busca productos CON categoría (más útil para la UI)
+  /// Busca productos CON categoría
   Future<List<ProductoConCategoria>> buscarConCategoria(
       String termino, {
         bool soloActivos = true,
       }) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      final String query = '''
-        SELECT 
-          p.*,
-          c.nombre as categoria_nombre,
-          c.codigo as categoria_codigo
-        FROM $_tableName p
-        INNER JOIN categorias c ON p.categoria_id = c.id
-        WHERE (p.nombre LIKE ? OR p.codigo LIKE ?)
-        ${soloActivos ? 'AND p.estado = ?' : ''}
-        ORDER BY p.codigo ASC
-      ''';
+      if (termino.isNotEmpty) {
+        query = query
+            .where('nombre', isGreaterThanOrEqualTo: termino)
+            .where('nombre', isLessThanOrEqualTo: '$termino\uf8ff');
+      }
 
-      List<dynamic> args = ['%$termino%', '%$termino%'];
-      if (soloActivos) args.add('activo');
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      final List<Map<String, dynamic>> maps = await db.rawQuery(query, args);
+      query = query.orderBy('nombre');
 
-      return List.generate(maps.length, (i) {
-        return ProductoConCategoria.fromMap(maps[i]);
-      });
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return ProductoConCategoria.fromMap(data);
+      }).toList();
 
     } catch (e) {
       print('❌ Error al buscar productos con categoría: $e');
@@ -291,38 +229,30 @@ class ProductoRepository {
   }
 
   /// Filtra productos por rango de precios
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// // Productos entre $10,000 y $20,000
-  /// List<ProductoModel> productos = await repo.filtrarPorPrecio(10000, 20000);
-  /// ```
   Future<List<ProductoModel>> filtrarPorPrecio(
       double precioMin,
       double precioMax, {
         bool soloActivos = true,
       }) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      String where = 'precio_sin_iva BETWEEN ? AND ?';
-      List<dynamic> whereArgs = [precioMin, precioMax];
+      query = query
+          .where('precioSinIva', isGreaterThanOrEqualTo: precioMin)
+          .where('precioSinIva', isLessThanOrEqualTo: precioMax);
 
       if (soloActivos) {
-        where += ' AND estado = ?';
-        whereArgs.add('activo');
+        query = query.where('estado', isEqualTo: 'activo');
       }
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: where,
-        whereArgs: whereArgs,
-        orderBy: 'precio_sin_iva ASC',
-      );
+      query = query.orderBy('precioSinIva');
 
-      return List.generate(maps.length, (i) {
-        return ProductoModel.fromMap(maps[i]);
-      });
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ProductoModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
+      }).toList();
 
     } catch (e) {
       print('❌ Error al filtrar por precio: $e');
@@ -335,31 +265,32 @@ class ProductoRepository {
   // ========================================
 
   /// Crea un nuevo producto
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// ProductoModel nuevo = ProductoModel(
-  ///   codigo: 'OG-001',
-  ///   categoriaId: 6,
-  ///   nombre: 'Cemento Portland',
-  ///   unidadBase: 'Bolsa',
-  ///   precioSinIva: 12500.0,
-  /// );
-  ///
-  /// int id = await repo.crear(nuevo);
-  /// ```
-  Future<int> crear(ProductoModel producto) async {
+  /// Usamos el 'codigo' como ID del documento
+  Future<void> crear(ProductoModel producto) async {
     try {
-      final Database db = await _dbHelper.database;
+      // 1. Buscamos la categoría para "desnormalizar" los datos
+      // ¡Asegúrate que tu CategoriaRepository también esté migrado!
+      final categoria = await _categoriaRepo.obtenerPorId(producto.categoriaId);
 
-      final int id = await db.insert(
-        _tableName,
-        producto.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.abort,
-      );
+      // 2. Convertimos el modelo a Map
+      Map<String, dynamic> productoMap = producto.toMap();
 
-      print('✅ Producto creado con id: $id');
-      return id;
+      // 3. Agregamos los datos de la categoría
+      if (categoria != null) {
+        productoMap['categoriaNombre'] = categoria.nombre;
+        productoMap['categoriaCodigo'] = categoria.codigo;
+      }
+
+      // 4. Quitamos el 'id' (int) que venía de SQLite
+      productoMap.remove('id');
+
+      // 5. Guardamos en Firestore usando el 'codigo' como ID
+      await _firestore
+          .collection(_tableName)
+          .doc(producto.codigo) // Usamos el código como ID
+          .set(productoMap); // .set() crea o sobrescribe
+
+      print('✅ Producto creado con código: ${producto.codigo}');
 
     } catch (e) {
       print('❌ Error al crear producto: $e');
@@ -368,24 +299,33 @@ class ProductoRepository {
   }
 
   /// Actualiza un producto existente
-  Future<int> actualizar(ProductoModel producto) async {
+  Future<void> actualizar(ProductoModel producto) async {
     try {
-      final Database db = await _dbHelper.database;
+      // 1. Buscamos la categoría por si cambió
+      final categoria = await _categoriaRepo.obtenerPorId(producto.categoriaId);
 
-      // Añadir fecha de actualización
+      // 2. Convertimos a Map
       final productoConFecha = producto.copyWith(
         updatedAt: DateTime.now().toIso8601String(),
       );
+      Map<String, dynamic> productoMap = productoConFecha.toMap();
 
-      final int count = await db.update(
-        _tableName,
-        productoConFecha.toMap(),
-        where: 'id = ?',
-        whereArgs: [producto.id],
-      );
+      // 3. Agregamos datos de categoría
+      if (categoria != null) {
+        productoMap['categoriaNombre'] = categoria.nombre;
+        productoMap['categoriaCodigo'] = categoria.codigo;
+      }
 
-      print('✅ Producto actualizado. Filas afectadas: $count');
-      return count;
+      // 4. Quitamos el 'id' (int)
+      productoMap.remove('id');
+
+      // 5. Actualizamos en Firestore usando el 'codigo'
+      await _firestore
+          .collection(_tableName)
+          .doc(producto.codigo)
+          .update(productoMap); // .update() actualiza campos
+
+      print('✅ Producto actualizado: ${producto.codigo}');
 
     } catch (e) {
       print('❌ Error al actualizar producto: $e');
@@ -394,24 +334,15 @@ class ProductoRepository {
   }
 
   /// Marca un producto como inactivo (soft delete)
-  ///
-  /// Mejor práctica: no eliminar físicamente, solo marcar como inactivo.
-  Future<int> desactivar(int id) async {
+  /// CAMBIO: Ahora recibe 'codigo' (String) en lugar de 'id' (int)
+  Future<void> desactivar(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
+      await _firestore.collection(_tableName).doc(codigo).update({
+        'estado': 'inactivo',
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
 
-      final int count = await db.update(
-        _tableName,
-        {
-          'estado': 'inactivo',
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-
-      print('✅ Producto desactivado. Filas afectadas: $count');
-      return count;
+      print('✅ Producto desactivado: $codigo');
 
     } catch (e) {
       print('❌ Error al desactivar producto: $e');
@@ -420,22 +351,15 @@ class ProductoRepository {
   }
 
   /// Reactiva un producto
-  Future<int> activar(int id) async {
+  /// CAMBIO: Ahora recibe 'codigo' (String) en lugar de 'id' (int)
+  Future<void> activar(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
+      await _firestore.collection(_tableName).doc(codigo).update({
+        'estado': 'activo',
+        'updatedAt': DateTime.now().toIso8601String(),
+      });
 
-      final int count = await db.update(
-        _tableName,
-        {
-          'estado': 'activo',
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-
-      print('✅ Producto activado. Filas afectadas: $count');
-      return count;
+      print('✅ Producto activado: $codigo');
 
     } catch (e) {
       print('❌ Error al activar producto: $e');
@@ -444,20 +368,11 @@ class ProductoRepository {
   }
 
   /// Elimina un producto permanentemente (hard delete)
-  /// ⚠️ Usar con precaución - solo para testing
-  Future<int> eliminar(int id) async {
+  /// CAMBIO: Ahora recibe 'codigo' (String) en lugar de 'id' (int)
+  Future<void> eliminar(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-
-      final int count = await db.delete(
-        _tableName,
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-
-      print('✅ Producto eliminado. Filas afectadas: $count');
-      return count;
-
+      await _firestore.collection(_tableName).doc(codigo).delete();
+      print('✅ Producto eliminado: $codigo');
     } catch (e) {
       print('❌ Error al eliminar producto: $e');
       rethrow;
@@ -471,17 +386,15 @@ class ProductoRepository {
   /// Cuenta el total de productos (activos o todos)
   Future<int> contar({bool soloActivos = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      final String query = soloActivos
-          ? 'SELECT COUNT(*) FROM $_tableName WHERE estado = ?'
-          : 'SELECT COUNT(*) FROM $_tableName';
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      final int? count = Sqflite.firstIntValue(
-        await db.rawQuery(query, soloActivos ? ['activo'] : null),
-      );
-
-      return count ?? 0;
+      // Usamos .count() para obtener solo el número
+      final snapshot = await query.count().get();
+      return snapshot.count ?? 0;
 
     } catch (e) {
       print('❌ Error al contar productos: $e');
@@ -490,27 +403,19 @@ class ProductoRepository {
   }
 
   /// Cuenta productos por categoría
-  ///
-  /// Devuelve un Map: {categoriaId: cantidad}
+  /// OJO: Firestore NO soporta 'GROUP BY'.
+  /// Esta lógica debe hacerse en el CLIENTE (en el Provider).
   Future<Map<int, int>> contarPorCategoria() async {
+    print('⚠️ ADVERTENCIA: contarPorCategoria() no es eficiente en Firestore.');
+    print('   -> Esta lógica debería moverse al ProductoProvider.');
     try {
-      final Database db = await _dbHelper.database;
-
-      final String query = '''
-        SELECT categoria_id, COUNT(*) as total
-        FROM $_tableName
-        WHERE estado = ?
-        GROUP BY categoria_id
-      ''';
-
-      final List<Map<String, dynamic>> result =
-      await db.rawQuery(query, ['activo']);
+      // Obtenemos TODOS los productos activos
+      final productos = await obtenerTodos(soloActivos: true);
 
       Map<int, int> conteo = {};
-      for (var row in result) {
-        conteo[row['categoria_id'] as int] = row['total'] as int;
+      for (var producto in productos) {
+        conteo.update(producto.categoriaId, (value) => value + 1, ifAbsent: () => 1);
       }
-
       return conteo;
 
     } catch (e) {
@@ -522,17 +427,8 @@ class ProductoRepository {
   /// Verifica si existe un código
   Future<bool> existeCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-
-      return maps.isNotEmpty;
-
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
+      return doc.exists;
     } catch (e) {
       print('❌ Error al verificar código: $e');
       return false;
@@ -540,31 +436,24 @@ class ProductoRepository {
   }
 
   /// Genera el siguiente código disponible para una categoría
-  ///
-  /// Ejemplo: Si existe OG-001, OG-002, devuelve "OG-003"
   Future<String> generarSiguienteCodigo(String codigoCategoria) async {
     try {
-      final Database db = await _dbHelper.database;
-
       // Buscar el último código de esa categoría
-      final String query = '''
-        SELECT codigo
-        FROM $_tableName
-        WHERE codigo LIKE ?
-        ORDER BY codigo DESC
-        LIMIT 1
-      ''';
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .where('codigo', isGreaterThanOrEqualTo: '$codigoCategoria-')
+          .where('codigo', isLessThan: '$codigoCategoria-Z')
+          .orderBy('codigo', descending: true)
+          .limit(1)
+          .get();
 
-      final List<Map<String, dynamic>> result =
-      await db.rawQuery(query, ['$codigoCategoria-%']);
-
-      if (result.isEmpty) {
+      if (snapshot.docs.isEmpty) {
         // Primera vez: OG-001
         return '$codigoCategoria-001';
       }
 
       // Extraer el número del último código
-      String ultimoCodigo = result.first['codigo'] as String;
+      String ultimoCodigo = snapshot.docs.first.id; // doc.id es el código
       String numeroStr = ultimoCodigo.split('-').last;
       int numero = int.parse(numeroStr);
 

@@ -1,12 +1,12 @@
+// [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Importar Firebase
 import '../../data/models/cliente_model.dart';
 import '../../data/repositories/cliente_repository.dart';
 
-/// Provider de Clientes
-///
-/// Gestiona el estado de los clientes en la aplicación.
-/// Usa ChangeNotifier para notificar cambios a los widgets.
+/// Provider de Clientes (Versión Firebase)
 class ClienteProvider extends ChangeNotifier {
+  // Asumimos que ClienteRepository ya fue migrado
   final ClienteRepository _repository = ClienteRepository();
 
   // Lista de clientes cargados
@@ -14,15 +14,15 @@ class ClienteProvider extends ChangeNotifier {
 
   // Estado de carga
   bool _isLoading = false;
-
-  // Estado de carga de más datos (scroll infinito)
-  bool _isLoadingMore = false;  // ← AGREGAR ESTA LÍNEA
+  bool _isLoadingMore = false;
 
   // Cliente seleccionado actualmente
   ClienteModel? _clienteSeleccionado;
 
-  // Página actual (empieza en 0)
-  int _paginaActual = 0;
+  // Total de clientes en la base de datos
+  int _totalClientes = 0;
+
+  // ========== ESTADO PARA PAGINACIÓN FIREBASE ==========
 
   // Cantidad de registros por página
   static const int _registrosPorPagina = 20;
@@ -30,18 +30,20 @@ class ClienteProvider extends ChangeNotifier {
   // ¿Hay más páginas por cargar?
   bool _hayMasPaginas = true;
 
-  // Total de clientes en la base de datos
-  int _totalClientes = 0;
+  // Referencia al último documento cargado (para 'startAfterDocument')
+  DocumentSnapshot? _ultimoDocumento;
 
+  // ========================================
+  // GETTERS
+  // ========================================
 
-  // Getters
   List<ClienteModel> get clientes => _clientes;
   bool get isLoading => _isLoading;
-  bool get isLoadingMore => _isLoadingMore;  // ← NUEVO
+  bool get isLoadingMore => _isLoadingMore;
   ClienteModel? get clienteSeleccionado => _clienteSeleccionado;
-  int get totalClientes => _totalClientes;    // ← MODIFICADO
-  bool get hayMasPaginas => _hayMasPaginas;  // ← NUEVO
-  int get paginaActual => _paginaActual;      // ← NUEVO
+  int get totalClientes => _totalClientes;
+  bool get hayMasPaginas => _hayMasPaginas;
+
 
   // ========================================
   // CARGAR CLIENTES
@@ -50,22 +52,32 @@ class ClienteProvider extends ChangeNotifier {
   /// Carga la primera página de clientes (limpia la lista)
   Future<void> cargarClientes({bool soloActivos = true}) async {
     _isLoading = true;
-    _paginaActual = 0;  // ← Reiniciar paginación
     _hayMasPaginas = true;
+    _ultimoDocumento = null; // Reiniciar
     notifyListeners();
 
     try {
       // Primero contar cuántos clientes hay en total
       _totalClientes = await _repository.contarClientes(soloActivos: soloActivos);
 
-      // Cargar la primera página
+      // Cargar la primera página (sin documento de inicio)
       _clientes = await _repository.obtenerConPaginacion(
         limit: _registrosPorPagina,
-        offset: 0,
+        ultimoDocumento: null,
         soloActivos: soloActivos,
       );
 
-      // Verificar si hay más páginas
+      // Obtener el último documento de esta carga
+      if (_clientes.length < _totalClientes) {
+        _ultimoDocumento = await _repository.obtenerUltimoDocumentoDePagina(
+          limit: _registrosPorPagina,
+          soloActivos: soloActivos,
+        );
+      } else {
+        _ultimoDocumento = null;
+      }
+
+      // Verificar si hay más páginas (si se cargaron menos de 20, ya no hay más)
       _hayMasPaginas = _clientes.length < _totalClientes;
 
       print('✅ ${_clientes.length} clientes cargados (total: $_totalClientes)');
@@ -81,32 +93,41 @@ class ClienteProvider extends ChangeNotifier {
   /// Carga la siguiente página de clientes (agrega a la lista existente)
   Future<void> cargarMasClientes({bool soloActivos = true}) async {
     // Si ya estamos cargando o no hay más páginas, no hacer nada
-    if (_isLoadingMore || !_hayMasPaginas) return;
+    if (_isLoadingMore || !_hayMasPaginas || _ultimoDocumento == null) return;
 
     _isLoadingMore = true;
     notifyListeners();
 
     try {
-      _paginaActual++;  // ← Avanzar a la siguiente página
-
-      final int offset = _paginaActual * _registrosPorPagina;
-
+      // Cargar la siguiente página, iniciando después del último documento
       final List<ClienteModel> nuevosClientes = await _repository.obtenerConPaginacion(
         limit: _registrosPorPagina,
-        offset: offset,
+        ultimoDocumento: _ultimoDocumento, // Pasar el último documento para el 'startAfter'
         soloActivos: soloActivos,
       );
 
-      // Agregar los nuevos clientes a la lista existente
-      _clientes.addAll(nuevosClientes);
+      // Si no vinieron nuevos, no hay más páginas
+      if (nuevosClientes.isEmpty) {
+        _hayMasPaginas = false;
+        _ultimoDocumento = null;
+      } else {
+        // Actualizamos el puntero al último documento
+        _ultimoDocumento = await _repository.obtenerUltimoDocumentoDePagina(
+          limit: _registrosPorPagina,
+          soloActivos: soloActivos,
+        );
 
-      // Verificar si hay más páginas
-      _hayMasPaginas = _clientes.length < _totalClientes;
+        // Agregar los nuevos clientes a la lista existente
+        _clientes.addAll(nuevosClientes);
+
+        // Verificar si hay más páginas
+        _hayMasPaginas = _clientes.length < _totalClientes;
+      }
 
       print('✅ ${nuevosClientes.length} clientes más cargados (total cargado: ${_clientes.length}/$_totalClientes)');
     } catch (e) {
       print('❌ Error al cargar más clientes: $e');
-      _paginaActual--;  // ← Retroceder la página si hubo error
+      // No retrocedemos la página, simplemente no avanzamos el puntero
     } finally {
       _isLoadingMore = false;
       notifyListeners();
@@ -116,12 +137,15 @@ class ClienteProvider extends ChangeNotifier {
   /// Busca clientes por término
   Future<void> buscarClientes(String termino, {bool soloActivos = true}) async {
     _isLoading = true;
+    _hayMasPaginas = false; // Desactivamos paginación en búsqueda
     notifyListeners();
 
     try {
       if (termino.isEmpty) {
+        // Si borra la búsqueda, volvemos a la carga normal
         await cargarClientes(soloActivos: soloActivos);
       } else {
+        // La búsqueda se hace sin paginación (menos óptimo pero simple)
         _clientes = await _repository.buscar(termino, soloActivos: soloActivos);
       }
     } catch (e) {
@@ -140,11 +164,11 @@ class ClienteProvider extends ChangeNotifier {
   /// Crea un nuevo cliente
   Future<bool> crearCliente(ClienteModel cliente) async {
     try {
-      final int id = await _repository.crear(cliente);
+      // El repositorio ya no devuelve un int id, sino que usa el código.
+      await _repository.crear(cliente);
 
-      // Agregar a la lista local
-      _clientes.add(cliente.copyWith(id: id));
-      notifyListeners();
+      // Recargar la lista completa para mantener la coherencia
+      await cargarClientes();
 
       return true;
     } catch (e) {
@@ -156,14 +180,11 @@ class ClienteProvider extends ChangeNotifier {
   /// Actualiza un cliente existente
   Future<bool> actualizarCliente(ClienteModel cliente) async {
     try {
+      // El id en el modelo ClienteModel debe ser el código (String)
       await _repository.actualizar(cliente);
 
-      // Actualizar en la lista local
-      final index = _clientes.indexWhere((c) => c.id == cliente.id);
-      if (index != -1) {
-        _clientes[index] = cliente;
-        notifyListeners();
-      }
+      // Recargar la lista completa para mantener la coherencia
+      await cargarClientes();
 
       return true;
     } catch (e) {
@@ -173,13 +194,13 @@ class ClienteProvider extends ChangeNotifier {
   }
 
   /// Elimina un cliente (soft delete)
-  Future<bool> eliminarCliente(int id) async {
+  /// CAMBIO: Ahora recibe el código (String)
+  Future<bool> eliminarCliente(String codigo) async {
     try {
-      await _repository.eliminar(id);
+      await _repository.eliminar(codigo); // Llamada con String
 
-      // Remover de la lista local
-      _clientes.removeWhere((c) => c.id == id);
-      notifyListeners();
+      // Recargar la lista
+      await cargarClientes();
 
       return true;
     } catch (e) {

@@ -1,22 +1,18 @@
-import 'package:sqflite/sqflite.dart';
-import '../../../../core/database/database_helper.dart';
+// [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
+// Reemplaza tu: lib/features/stock/data/repositories/categoria_repository.dart
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/categoria_model.dart';
 
-/// Repositorio de Categorías
-/// 
-/// Esta clase maneja TODAS las operaciones de base de datos
+/// Repositorio de Categorías (Versión Firestore)
+///
+/// Maneja TODAS las operaciones de base de datos (Firestore)
 /// relacionadas con categorías.
-/// 
-/// Responsabilidades:
-/// - Obtener categorías (todas, por id, por código)
-/// - Crear nuevas categorías
-/// - Actualizar categorías existentes
-/// - Eliminar categorías (soft delete)
 class CategoriaRepository {
-  // Instancia del helper de base de datos
-  final DatabaseHelper _dbHelper = DatabaseHelper();
-  
-  // Nombre de la tabla
+  // Instancia de Firestore
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Nombre de la "colección" (tabla)
   static const String _tableName = 'categorias';
 
   // ========================================
@@ -24,128 +20,91 @@ class CategoriaRepository {
   // ========================================
 
   /// Obtiene TODAS las categorías ordenadas por 'orden'
-  /// 
-  /// Ejemplo de uso:
-  /// ```dart
-  /// CategoriaRepository repo = CategoriaRepository();
-  /// List<CategoriaModel> categorias = await repo.obtenerTodas();
-  /// print('Total: ${categorias.length}'); // Total: 8
-  /// ```
   Future<List<CategoriaModel>> obtenerTodas() async {
     try {
-      // 1. Obtener la base de datos
-      final Database db = await _dbHelper.database;
-      
-      // 2. Hacer la query (consulta)
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        orderBy: 'orden ASC', // Ordenar por el campo 'orden' ascendente
-      );
-      
-      // 3. Convertir cada Map en un CategoriaModel
-      return List.generate(maps.length, (i) {
-        return CategoriaModel.fromMap(maps[i]);
-      });
-      
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .orderBy('orden')
+          .get();
+
+      // Convertir cada "documento" a un CategoriaModel
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        // Asignamos el ID de Firestore (que es el 'codigo')
+        return CategoriaModel.fromMap(data).copyWith(id: doc.id);
+      }).toList();
     } catch (e) {
-      print('❌ Error al obtener categorías: $e');
-      return []; // Si hay error, devolver lista vacía
+      print('❌ Error al obtener categorías desde Firestore: $e');
+      return []; // Devolver lista vacía en caso de error
     }
   }
 
-  /// Obtiene una categoría por su ID
-  /// 
-  /// Devuelve null si no encuentra la categoría.
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// CategoriaModel? categoria = await repo.obtenerPorId(1);
-  /// if (categoria != null) {
-  ///   print('Encontrada: ${categoria.nombre}');
-  /// } else {
-  ///   print('No existe');
-  /// }
-  /// ```
-  Future<CategoriaModel?> obtenerPorId(int id) async {
-    try {
-      final Database db = await _dbHelper.database;
-      
-      // Query con WHERE
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'id = ?', // El ? es un placeholder
-        whereArgs: [id], // Se reemplaza por el valor de id
-        limit: 1, // Solo traer 1 resultado
-      );
-      
-      // Si encontró algo, convertir a modelo
-      if (maps.isNotEmpty) {
-        return CategoriaModel.fromMap(maps.first);
-      }
-      
-      return null; // No encontró nada
-      
-    } catch (e) {
-      print('❌ Error al obtener categoría por id $id: $e');
-      return null;
-    }
-  }
-
-  /// Obtiene una categoría por su código (A, E, G, H, etc.)
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// CategoriaModel? categoria = await repo.obtenerPorCodigo('OG');
-  /// print(categoria?.nombre); // Obra General
-  /// ```
+  /// Obtiene una categoría por su ID (que ahora es el CÓDIGO)
   Future<CategoriaModel?> obtenerPorCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-      
-      if (maps.isNotEmpty) {
-        return CategoriaModel.fromMap(maps.first);
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
+
+      if (doc.exists) {
+        return CategoriaModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
       }
-      
+
       return null;
-      
     } catch (e) {
       print('❌ Error al obtener categoría por código $codigo: $e');
       return null;
     }
   }
 
-  /// Busca categorías por nombre (búsqueda parcial)
-  /// 
-  /// Usa LIKE para búsqueda flexible.
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// List<CategoriaModel> resultados = await repo.buscarPorNombre('obra');
-  /// // Encuentra: "Obra General"
-  /// ```
+  /// (Este método es por compatibilidad, ya que 'producto' usa categoriaId (int))
+  /// (Lo ideal a futuro es que ProductoModel use 'categoriaCodigo' (String))
+  Future<CategoriaModel?> obtenerPorId(int id) async {
+    try {
+      print("⚠️ ADVERTENCIA: Se está buscando categoría por 'id' numérico (int). Lo ideal es buscar por 'codigo' (String).");
+      // Esta query es menos eficiente, pero mantiene compatibilidad
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .where('id_sqlite', isEqualTo: id) // Asumimos un campo 'id_sqlite' si lo necesitaras
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return CategoriaModel.fromMap(doc.data()).copyWith(id: doc.id);
+      }
+
+      // Fallback por si 'id' se guardó como int (mala práctica en Firestore)
+      // Esto fallará si el id es un string.
+      try {
+        final doc = await _firestore.collection(_tableName).doc(id.toString()).get();
+        if (doc.exists) {
+          return CategoriaModel.fromMap(doc.data() as Map<String, dynamic>).copyWith(id: doc.id);
+        }
+      } catch (e) {
+        // Ignorar error, probablemente era un String
+      }
+
+      return null;
+    } catch (e) {
+      print('❌ Error al obtener categoría por id $id: $e');
+      return null;
+    }
+  }
+
+
+  /// Busca categorías por nombre (búsqueda "empieza con")
   Future<List<CategoriaModel>> buscarPorNombre(String termino) async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      // LIKE '%termino%' busca en cualquier parte del nombre
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'nombre LIKE ?',
-        whereArgs: ['%$termino%'], // % significa "cualquier texto"
-        orderBy: 'orden ASC',
-      );
-      
-      return List.generate(maps.length, (i) {
-        return CategoriaModel.fromMap(maps[i]);
-      });
-      
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .where('nombre', isGreaterThanOrEqualTo: termino)
+          .where('nombre', isLessThanOrEqualTo: '$termino\uf8ff')
+          .orderBy('nombre')
+          .get();
+
+      return snapshot.docs.map((doc) {
+        return CategoriaModel.fromMap(doc.data()).copyWith(id: doc.id);
+      }).toList();
     } catch (e) {
       print('❌ Error al buscar categorías por nombre "$termino": $e');
       return [];
@@ -157,101 +116,45 @@ class CategoriaRepository {
   // ========================================
 
   /// Crea una nueva categoría
-  /// 
-  /// Devuelve el ID generado por la base de datos.
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// CategoriaModel nueva = CategoriaModel(
-  ///   codigo: 'TEST',
-  ///   nombre: 'Categoría de Prueba',
-  ///   orden: 99,
-  /// );
-  /// 
-  /// int id = await repo.crear(nueva);
-  /// print('Categoría creada con id: $id');
-  /// ```
-  Future<int> crear(CategoriaModel categoria) async {
+  Future<void> crear(CategoriaModel categoria) async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      // insert devuelve el id generado
-      final int id = await db.insert(
-        _tableName,
-        categoria.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.abort, // Si hay conflicto (código duplicado), abortar
-      );
-      
-      print('✅ Categoría creada con id: $id');
-      return id;
-      
+      // Usamos el 'codigo' como ID del documento
+      await _firestore
+          .collection(_tableName)
+          .doc(categoria.codigo)
+          .set(categoria.toMap());
+
+      print('✅ Categoría creada con código: ${categoria.codigo}');
     } catch (e) {
       print('❌ Error al crear categoría: $e');
-      rethrow; // Re-lanzar el error para que quien llame pueda manejarlo
+      rethrow;
     }
   }
 
   /// Actualiza una categoría existente
-  /// 
-  /// Devuelve el número de filas afectadas (debería ser 1).
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// CategoriaModel categoria = await repo.obtenerPorId(1);
-  /// CategoriaModel actualizada = categoria.copyWith(
-  ///   nombre: 'Nuevo Nombre',
-  /// );
-  /// 
-  /// int filasAfectadas = await repo.actualizar(actualizada);
-  /// ```
-  Future<int> actualizar(CategoriaModel categoria) async {
+  Future<void> actualizar(CategoriaModel categoria) async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      // update devuelve el número de filas afectadas
-      final int count = await db.update(
-        _tableName,
-        categoria.toMap(),
-        where: 'id = ?',
-        whereArgs: [categoria.id],
-      );
-      
-      print('✅ Categoría actualizada. Filas afectadas: $count');
-      return count;
-      
+      // Usamos el 'codigo' (que está en el 'id' del modelo) para actualizar
+      if (categoria.id == null) {
+        throw Exception("El ID (código) de la categoría no puede ser nulo al actualizar");
+      }
+      await _firestore
+          .collection(_tableName)
+          .doc(categoria.id!)
+          .update(categoria.toMap());
+
+      print('✅ Categoría actualizada: ${categoria.id}');
     } catch (e) {
       print('❌ Error al actualizar categoría: $e');
       rethrow;
     }
   }
 
-  /// Elimina una categoría (hard delete - eliminación física)
-  /// 
-  /// ⚠️ ADVERTENCIA: Esto elimina permanentemente el registro.
-  /// En producción, normalmente usarías soft delete (marcar como inactiva).
-  /// 
-  /// Devuelve el número de filas eliminadas (debería ser 1).
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// int eliminadas = await repo.eliminar(1);
-  /// if (eliminadas > 0) {
-  ///   print('Categoría eliminada');
-  /// }
-  /// ```
-  Future<int> eliminar(int id) async {
+  /// Elimina una categoría permanentemente
+  Future<void> eliminar(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      final int count = await db.delete(
-        _tableName,
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-      
-      print('✅ Categoría eliminada. Filas afectadas: $count');
-      return count;
-      
+      await _firestore.collection(_tableName).doc(codigo).delete();
+      print('✅ Categoría eliminada: $codigo');
     } catch (e) {
       print('❌ Error al eliminar categoría: $e');
       rethrow;
@@ -263,23 +166,10 @@ class CategoriaRepository {
   // ========================================
 
   /// Cuenta el total de categorías
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// int total = await repo.contarTodas();
-  /// print('Total de categorías: $total'); // 8
-  /// ```
   Future<int> contarTodas() async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      // Sqflite.firstIntValue() extrae el primer valor entero del resultado
-      final int? count = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM $_tableName'),
-      );
-      
-      return count ?? 0; // Si es null, devolver 0
-      
+      final snapshot = await _firestore.collection(_tableName).count().get();
+      return snapshot.count ?? 0;
     } catch (e) {
       print('❌ Error al contar categorías: $e');
       return 0;
@@ -287,29 +177,10 @@ class CategoriaRepository {
   }
 
   /// Verifica si existe una categoría con un código dado
-  /// 
-  /// Útil antes de crear una nueva categoría.
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// bool existe = await repo.existeCodigo('OG');
-  /// if (existe) {
-  ///   print('El código OG ya está en uso');
-  /// }
-  /// ```
   Future<bool> existeCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-      
-      return maps.isNotEmpty;
-      
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
+      return doc.exists;
     } catch (e) {
       print('❌ Error al verificar código: $e');
       return false;
@@ -317,30 +188,20 @@ class CategoriaRepository {
   }
 
   /// Obtiene la categoría con el orden más alto (último)
-  /// 
-  /// Útil para saber qué orden asignar a una nueva categoría.
-  /// 
-  /// Ejemplo:
-  /// ```dart
-  /// CategoriaModel? ultima = await repo.obtenerUltima();
-  /// int nuevoOrden = (ultima?.orden ?? 0) + 1;
-  /// ```
   Future<CategoriaModel?> obtenerUltima() async {
     try {
-      final Database db = await _dbHelper.database;
-      
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        orderBy: 'orden DESC', // Descendente: del más alto al más bajo
-        limit: 1,
-      );
-      
-      if (maps.isNotEmpty) {
-        return CategoriaModel.fromMap(maps.first);
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .orderBy('orden', descending: true)
+          .limit(1)
+          .get();
+
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return CategoriaModel.fromMap(doc.data()).copyWith(id: doc.id);
       }
-      
+
       return null;
-      
     } catch (e) {
       print('❌ Error al obtener última categoría: $e');
       return null;

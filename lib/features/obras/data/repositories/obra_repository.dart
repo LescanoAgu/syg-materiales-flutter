@@ -1,13 +1,21 @@
-import 'package:sqflite/sqflite.dart';
-import '../../../../core/database/database_helper.dart';
-import '../models/obra_model.dart';
+// [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
+// Reemplaza tu: lib/features/obras/data/repositories/obra_repository.dart
 
-/// Repositorio de Obras
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/obra_model.dart';
+// Importamos el repo de clientes para desnormalizar
+import '../../../clientes/data/repositories/cliente_repository.dart';
+
+/// Repositorio de Obras (Versión Firestore)
 ///
-/// Maneja todas las operaciones de base de datos relacionadas con obras.
+/// Maneja todas las operaciones de Firestore relacionadas con obras.
 class ObraRepository {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  // Instancia de Firestore
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _tableName = 'obras';
+
+  // Repositorio de clientes para obtener datos
+  final ClienteRepository _clienteRepo = ClienteRepository();
 
   // ========================================
   // OPERACIONES DE LECTURA (READ)
@@ -16,90 +24,65 @@ class ObraRepository {
   /// Obtiene TODAS las obras
   Future<List<ObraModel>> obtenerTodas({bool soloActivas = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: soloActivas ? 'estado = ?' : null,
-        whereArgs: soloActivas ? ['activa'] : null,
-        orderBy: 'nombre ASC',
-      );
+      if (soloActivas) {
+        query = query.where('estado', isEqualTo: 'activa');
+      }
 
-      return List.generate(maps.length, (i) {
-        return ObraModel.fromMap(maps[i]);
-      });
+      query = query.orderBy('nombre');
+
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ObraModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
+      }).toList();
+
     } catch (e) {
       print('❌ Error al obtener obras: $e');
       return [];
     }
   }
 
-  /// Obtiene todas las obras con información del cliente (JOIN)
+  /// Obtiene todas las obras con información del cliente (SIN JOIN)
+  ///
+  /// ¡Esto ahora es un query simple! Los datos del cliente ya están
+  /// guardados (desnormalizados) en el documento de la obra.
   Future<List<ObraConCliente>> obtenerTodasConCliente({bool soloActivas = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      final String query = '''
-        SELECT 
-          o.*,
-          c.codigo as cliente_codigo,
-          c.razon_social as cliente_razon_social
-        FROM obras o
-        INNER JOIN clientes c ON o.cliente_id = c.id
-        ${soloActivas ? "WHERE o.estado = 'activa'" : ''}
-        ORDER BY o.nombre ASC
-      ''';
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activa');
+      }
 
-      final List<Map<String, dynamic>> maps = await db.rawQuery(query);
+      query = query.orderBy('nombre');
 
-      return List.generate(maps.length, (i) {
-        return ObraConCliente.fromMap(maps[i]);
-      });
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        // Asumimos que ObraConCliente.fromMap puede manejar el mapa
+        // que ya contiene 'cliente_codigo' y 'cliente_razon_social'
+        return ObraConCliente.fromMap(data);
+      }).toList();
+
     } catch (e) {
       print('❌ Error al obtener obras con cliente: $e');
       return [];
     }
   }
 
-  /// Obtiene una obra por su ID
-  Future<ObraModel?> obtenerPorId(int id) async {
-    try {
-      final Database db = await _dbHelper.database;
-
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ObraModel.fromMap(maps.first);
-      }
-
-      return null;
-    } catch (e) {
-      print('❌ Error al obtener obra por id $id: $e');
-      return null;
-    }
-  }
-
-  /// Obtiene una obra por su código
+  /// Obtiene una obra por su ID (código)
   Future<ObraModel?> obtenerPorCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ObraModel.fromMap(maps.first);
+      if (doc.exists) {
+        return ObraModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
       }
-
       return null;
     } catch (e) {
       print('❌ Error al obtener obra por código $codigo: $e');
@@ -107,63 +90,59 @@ class ObraRepository {
     }
   }
 
-  /// Obtiene todas las obras de un cliente específico
-  Future<List<ObraModel>> obtenerPorCliente(int clienteId, {bool soloActivas = true}) async {
-    try {
-      final Database db = await _dbHelper.database;
+  /// (Mantenido por compatibilidad)
+  Future<ObraModel?> obtenerPorId(String id) async {
+    return obtenerPorCodigo(id);
+  }
 
-      String whereClause = 'cliente_id = ?';
-      List<dynamic> whereArgs = [clienteId];
+  /// Obtiene todas las obras de un cliente específico
+  Future<List<ObraModel>> obtenerPorCliente(String clienteCodigo, {bool soloActivas = true}) async {
+    try {
+      Query query = _firestore.collection(_tableName);
+
+      query = query.where('clienteId', isEqualTo: clienteCodigo); // Buscamos por código
 
       if (soloActivas) {
-        whereClause += ' AND estado = ?';
-        whereArgs.add('activa');
+        query = query.where('estado', isEqualTo: 'activa');
       }
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: whereClause,
-        whereArgs: whereArgs,
-        orderBy: 'nombre ASC',
-      );
+      query = query.orderBy('nombre');
+      final snapshot = await query.get();
 
-      return List.generate(maps.length, (i) {
-        return ObraModel.fromMap(maps[i]);
-      });
+      return snapshot.docs.map((doc) {
+        return ObraModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
+      }).toList();
+
     } catch (e) {
-      print('❌ Error al obtener obras del cliente $clienteId: $e');
+      print('❌ Error al obtener obras del cliente $clienteCodigo: $e');
       return [];
     }
   }
 
-  /// Busca obras por nombre o dirección
+  /// Busca obras por nombre
   Future<List<ObraConCliente>> buscar(String termino, {bool soloActivas = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      String query = '''
-        SELECT 
-          o.*,
-          c.codigo as cliente_codigo,
-          c.razon_social as cliente_razon_social
-        FROM obras o
-        INNER JOIN clientes c ON o.cliente_id = c.id
-        WHERE (o.nombre LIKE ? OR o.direccion LIKE ? OR o.codigo LIKE ? OR c.razon_social LIKE ?)
-      ''';
-
-      List<dynamic> args = ['%$termino%', '%$termino%', '%$termino%', '%$termino%'];
-
-      if (soloActivas) {
-        query += " AND o.estado = 'activa'";
+      if (termino.isNotEmpty) {
+        query = query
+            .where('nombre', isGreaterThanOrEqualTo: termino)
+            .where('nombre', isLessThanOrEqualTo: '$termino\uf8ff');
       }
 
-      query += ' ORDER BY o.nombre ASC';
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activa');
+      }
 
-      final List<Map<String, dynamic>> maps = await db.rawQuery(query, args);
+      query = query.orderBy('nombre');
 
-      return List.generate(maps.length, (i) {
-        return ObraConCliente.fromMap(maps[i]);
-      });
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ObraConCliente.fromMap(doc.data() as Map<String, dynamic>);
+      }).toList();
+
     } catch (e) {
       print('❌ Error al buscar obras: $e');
       return [];
@@ -174,19 +153,27 @@ class ObraRepository {
   // OPERACIONES DE ESCRITURA (CREATE/UPDATE/DELETE)
   // ========================================
 
-  /// Crea una nueva obra
-  Future<int> crear(ObraModel obra) async {
+  /// Crea una nueva obra (con desnormalización)
+  Future<void> crear(ObraModel obra) async {
     try {
-      final Database db = await _dbHelper.database;
+      // 1. Obtenemos el cliente para desnormalizar
+      final cliente = await _clienteRepo.obtenerPorCodigo(obra.clienteId); // Asumimos que clienteId es el código
 
-      final int id = await db.insert(
-        _tableName,
-        obra.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.abort,
-      );
+      Map<String, dynamic> obraMap = obra.toMap();
 
-      print('✅ Obra creada con id: $id');
-      return id;
+      // 2. Agregamos los datos del cliente al mapa de la obra
+      if (cliente != null) {
+        obraMap['cliente_codigo'] = cliente.codigo;
+        obraMap['cliente_razon_social'] = cliente.razonSocial;
+      }
+
+      // 3. Usamos el 'codigo' de la obra como ID del documento
+      await _firestore
+          .collection(_tableName)
+          .doc(obra.codigo)
+          .set(obraMap);
+
+      print('✅ Obra creada con código: ${obra.codigo}');
     } catch (e) {
       print('❌ Error al crear obra: $e');
       rethrow;
@@ -194,19 +181,29 @@ class ObraRepository {
   }
 
   /// Actualiza una obra existente
-  Future<int> actualizar(ObraModel obra) async {
+  Future<void> actualizar(ObraModel obra) async {
     try {
-      final Database db = await _dbHelper.database;
+      if (obra.id == null) {
+        throw Exception("El ID (código) de la obra no puede ser nulo al actualizar");
+      }
 
-      final int count = await db.update(
-        _tableName,
-        obra.toMap(),
-        where: 'id = ?',
-        whereArgs: [obra.id],
-      );
+      // 1. Obtenemos el cliente para desnormalizar
+      final cliente = await _clienteRepo.obtenerPorCodigo(obra.clienteId);
 
-      print('✅ Obra actualizada. Filas afectadas: $count');
-      return count;
+      Map<String, dynamic> obraMap = obra.toMap();
+
+      // 2. Agregamos los datos del cliente al mapa de la obra
+      if (cliente != null) {
+        obraMap['cliente_codigo'] = cliente.codigo;
+        obraMap['cliente_razon_social'] = cliente.razonSocial;
+      }
+
+      await _firestore
+          .collection(_tableName)
+          .doc(obra.id!)
+          .update(obraMap);
+
+      print('✅ Obra actualizada: ${obra.id}');
     } catch (e) {
       print('❌ Error al actualizar obra: $e');
       rethrow;
@@ -214,22 +211,14 @@ class ObraRepository {
   }
 
   /// Cambia el estado de una obra
-  Future<int> cambiarEstado(int id, String nuevoEstado) async {
+  Future<void> cambiarEstado(String codigo, String nuevoEstado) async {
     try {
-      final Database db = await _dbHelper.database;
+      await _firestore.collection(_tableName).doc(codigo).update({
+        'estado': nuevoEstado,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
 
-      final int count = await db.update(
-        _tableName,
-        {
-          'estado': nuevoEstado,
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
-
-      print('✅ Estado de obra actualizado a $nuevoEstado. Filas afectadas: $count');
-      return count;
+      print('✅ Estado de obra $codigo actualizado a $nuevoEstado');
     } catch (e) {
       print('❌ Error al cambiar estado de obra: $e');
       rethrow;
@@ -242,51 +231,34 @@ class ObraRepository {
 
   /// Cuenta el total de obras
   Future<int> contar({bool soloActivas = true}) async {
-    try {
-      final Database db = await _dbHelper.database;
-
-      final int? count = Sqflite.firstIntValue(
-        await db.rawQuery(
-          'SELECT COUNT(*) FROM $_tableName${soloActivas ? " WHERE estado = 'activa'" : ""}',
-        ),
-      );
-
-      return count ?? 0;
-    } catch (e) {
-      print('❌ Error al contar obras: $e');
-      return 0;
-    }
+    return contarObras(soloActivas: soloActivas);
   }
 
-  /// Obtiene obras con paginación y cliente (lazy loading)
+  /// Obtiene obras con paginación y cliente
   Future<List<ObraConCliente>> obtenerConPaginacion({
     required int limit,
-    required int offset,
+    DocumentSnapshot? ultimoDocumento,
     bool soloActivas = true,
   }) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      String query = '''
-      SELECT 
-        o.*,
-        c.codigo as cliente_codigo,
-        c.razon_social as cliente_razon_social
-      FROM $_tableName o
-      INNER JOIN clientes c ON o.cliente_id = c.id
-      ${soloActivas ? "WHERE o.estado = 'activa'" : ''}
-      ORDER BY o.nombre ASC
-      LIMIT ? OFFSET ?
-    ''';
+      if (soloActivas) {
+        query = query.where('estado', isEqualTo: 'activa');
+      }
 
-      final List<Map<String, dynamic>> maps = await db.rawQuery(
-        query,
-        [limit, offset],
-      );
+      query = query.orderBy('nombre').limit(limit);
 
-      return List.generate(maps.length, (i) {
-        return ObraConCliente.fromMap(maps[i]);
-      });
+      if (ultimoDocumento != null) {
+        query = query.startAfterDocument(ultimoDocumento);
+      }
+
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ObraConCliente.fromMap(doc.data() as Map<String, dynamic>);
+      }).toList();
+
     } catch (e) {
       print('❌ Error al obtener obras con paginación: $e');
       return [];
@@ -294,15 +266,15 @@ class ObraRepository {
   }
 
   /// Cuenta el total de obras
-  Future<int> contarObras({bool soloActivas = true}) async {
+  Future<int> contarObras({bool soloActivos = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activa');
+      }
 
-      final result = await db.rawQuery(
-        'SELECT COUNT(*) as total FROM $_tableName WHERE ${soloActivas ? "estado = 'activa'" : '1=1'}',
-      );
-
-      return Sqflite.firstIntValue(result) ?? 0;
+      final snapshot = await query.count().get();
+      return snapshot.count ?? 0;
     } catch (e) {
       print('❌ Error al contar obras: $e');
       return 0;
@@ -310,25 +282,17 @@ class ObraRepository {
   }
 
   /// Cuenta obras por cliente
-  Future<int> contarPorCliente(int clienteId, {bool soloActivas = true}) async {
+  Future<int> contarPorCliente(String clienteCodigo, {bool soloActivos = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
+      query = query.where('clienteId', isEqualTo: clienteCodigo);
 
-      String whereClause = 'cliente_id = ?';
-      List<dynamic> whereArgs = [clienteId];
-
-      if (soloActivas) {
-        whereClause += " AND estado = 'activa'";
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activa');
       }
 
-      final int? count = Sqflite.firstIntValue(
-        await db.rawQuery(
-          'SELECT COUNT(*) FROM $_tableName WHERE $whereClause',
-          whereArgs,
-        ),
-      );
-
-      return count ?? 0;
+      final snapshot = await query.count().get();
+      return snapshot.count ?? 0;
     } catch (e) {
       print('❌ Error al contar obras del cliente: $e');
       return 0;
@@ -338,16 +302,8 @@ class ObraRepository {
   /// Verifica si existe una obra con un código dado
   Future<bool> existeCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-
-      return maps.isNotEmpty;
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
+      return doc.exists;
     } catch (e) {
       print('❌ Error al verificar código: $e');
       return false;
@@ -356,25 +312,22 @@ class ObraRepository {
 
   /// Genera el siguiente código de obra para un cliente
   /// Formato: OB-XXX-CL-YYY
-  Future<String> generarSiguienteCodigoParaCliente(int clienteId, String codigoCliente) async {
+  Future<String> generarSiguienteCodigoParaCliente(String codigoCliente) async {
     try {
-      final Database db = await _dbHelper.database;
-
       // Obtener la última obra del cliente
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'cliente_id = ?',
-        whereArgs: [clienteId],
-        orderBy: 'id DESC',
-        limit: 1,
-      );
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .where('clienteId', isEqualTo: codigoCliente)
+          .orderBy('codigo', descending: true)
+          .limit(1)
+          .get();
 
-      if (maps.isEmpty) {
+      if (snapshot.docs.isEmpty) {
         return 'OB-001-$codigoCliente';
       }
 
       // Extraer el número del último código (OB-001-CL-001 -> 001)
-      String ultimoCodigo = maps.first['codigo'] as String;
+      String ultimoCodigo = snapshot.docs.first.id;
       String numeroStr = ultimoCodigo.split('-')[1];
       int numero = int.parse(numeroStr);
 

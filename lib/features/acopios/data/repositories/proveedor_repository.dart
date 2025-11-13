@@ -1,12 +1,17 @@
-import 'package:sqflite/sqflite.dart';
-import '../../../../core/database/database_helper.dart';
+// [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
+// Reemplaza tu: lib/features/acopios/data/repositories/proveedor_repository.dart
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/proveedor_model.dart';
 
-/// Repositorio de Proveedores/Ubicaciones
+/// Repositorio de Proveedores/Ubicaciones (Versión Firestore)
 ///
 /// Maneja todas las operaciones de BD relacionadas con proveedores.
 class ProveedorRepository {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  // Instancia de Firestore
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Nombre de la "colección" (tabla)
   static const String _tableName = 'proveedores';
 
   // ========================================
@@ -16,61 +21,35 @@ class ProveedorRepository {
   /// Obtiene TODOS los proveedores
   Future<List<ProveedorModel>> obtenerTodos({bool soloActivos = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: soloActivos ? 'estado = ?' : null,
-        whereArgs: soloActivos ? ['activo'] : null,
-        orderBy: 'nombre ASC',
-      );
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      return List.generate(maps.length, (i) {
-        return ProveedorModel.fromMap(maps[i]);
-      });
+      query = query.orderBy('nombre');
+
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ProveedorModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id); // Asignamos el ID de Firestore
+      }).toList();
+
     } catch (e) {
       print('❌ Error al obtener proveedores: $e');
       return [];
     }
   }
 
-  /// Obtiene un proveedor por ID
-  Future<ProveedorModel?> obtenerPorId(int id) async {
-    try {
-      final Database db = await _dbHelper.database;
-
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'id = ?',
-        whereArgs: [id],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ProveedorModel.fromMap(maps.first);
-      }
-
-      return null;
-    } catch (e) {
-      print('❌ Error al obtener proveedor por id $id: $e');
-      return null;
-    }
-  }
-
-  /// Obtiene un proveedor por código
+  /// Obtiene un proveedor por ID (código)
   Future<ProveedorModel?> obtenerPorCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'codigo = ?',
-        whereArgs: [codigo],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ProveedorModel.fromMap(maps.first);
+      if (doc.exists) {
+        return ProveedorModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
       }
 
       return null;
@@ -80,20 +59,24 @@ class ProveedorRepository {
     }
   }
 
+  /// (Mantenido por compatibilidad, idealmente migrar a 'obtenerPorCodigo')
+  Future<ProveedorModel?> obtenerPorId(String id) async {
+    return obtenerPorCodigo(id);
+  }
+
   /// Obtiene el depósito S&G
   Future<ProveedorModel?> obtenerDepositoSyg() async {
     try {
-      final Database db = await _dbHelper.database;
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .where('tipo', isEqualTo: 'deposito_syg')
+          .limit(1)
+          .get();
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: 'tipo = ?',
-        whereArgs: ['deposito_syg'],
-        limit: 1,
-      );
-
-      if (maps.isNotEmpty) {
-        return ProveedorModel.fromMap(maps.first);
+      if (snapshot.docs.isNotEmpty) {
+        final doc = snapshot.docs.first;
+        return ProveedorModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
       }
 
       return null;
@@ -103,28 +86,30 @@ class ProveedorRepository {
     }
   }
 
-  /// Busca proveedores por nombre o código
+  /// Busca proveedores por nombre (empieza con...)
   Future<List<ProveedorModel>> buscar(String termino, {bool soloActivos = true}) async {
     try {
-      final Database db = await _dbHelper.database;
+      Query query = _firestore.collection(_tableName);
 
-      String whereClause = '(nombre LIKE ? OR codigo LIKE ?)';
-      if (soloActivos) {
-        whereClause += ' AND estado = ?';
+      if (termino.isNotEmpty) {
+        query = query
+            .where('nombre', isGreaterThanOrEqualTo: termino)
+            .where('nombre', isLessThanOrEqualTo: '$termino\uf8ff');
       }
 
-      final List<Map<String, dynamic>> maps = await db.query(
-        _tableName,
-        where: whereClause,
-        whereArgs: soloActivos
-            ? ['%$termino%', '%$termino%', 'activo']
-            : ['%$termino%', '%$termino%'],
-        orderBy: 'nombre ASC',
-      );
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
 
-      return List.generate(maps.length, (i) {
-        return ProveedorModel.fromMap(maps[i]);
-      });
+      query = query.orderBy('nombre');
+
+      final snapshot = await query.get();
+
+      return snapshot.docs.map((doc) {
+        return ProveedorModel.fromMap(doc.data() as Map<String, dynamic>)
+            .copyWith(id: doc.id);
+      }).toList();
+
     } catch (e) {
       print('❌ Error al buscar proveedores: $e');
       return [];
@@ -136,18 +121,15 @@ class ProveedorRepository {
   // ========================================
 
   /// Crea un nuevo proveedor
-  Future<int> crear(ProveedorModel proveedor) async {
+  Future<void> crear(ProveedorModel proveedor) async {
     try {
-      final Database db = await _dbHelper.database;
+      // Usamos el 'codigo' como ID del documento
+      await _firestore
+          .collection(_tableName)
+          .doc(proveedor.codigo)
+          .set(proveedor.toMap());
 
-      final id = await db.insert(
-        _tableName,
-        proveedor.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.abort,
-      );
-
-      print('✅ Proveedor creado con id: $id');
-      return id;
+      print('✅ Proveedor creado con código: ${proveedor.codigo}');
     } catch (e) {
       print('❌ Error al crear proveedor: $e');
       rethrow;
@@ -157,14 +139,17 @@ class ProveedorRepository {
   /// Actualiza un proveedor existente
   Future<void> actualizar(ProveedorModel proveedor) async {
     try {
-      final Database db = await _dbHelper.database;
+      // Usamos el 'codigo' (guardado en 'id')
+      if (proveedor.id == null) {
+        throw Exception("El ID (código) del proveedor no puede ser nulo al actualizar");
+      }
 
-      await db.update(
-        _tableName,
-        proveedor.copyWith(updatedAt: DateTime.now()).toMap(),
-        where: 'id = ?',
-        whereArgs: [proveedor.id],
-      );
+      final provConFecha = proveedor.copyWith(updatedAt: DateTime.now());
+
+      await _firestore
+          .collection(_tableName)
+          .doc(proveedor.id!)
+          .update(provConFecha.toMap());
 
       print('✅ Proveedor actualizado');
     } catch (e) {
@@ -174,19 +159,12 @@ class ProveedorRepository {
   }
 
   /// Cambia el estado de un proveedor
-  Future<void> cambiarEstado(int id, String nuevoEstado) async {
+  Future<void> cambiarEstado(String codigo, String nuevoEstado) async {
     try {
-      final Database db = await _dbHelper.database;
-
-      await db.update(
-        _tableName,
-        {
-          'estado': nuevoEstado,
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [id],
-      );
+      await _firestore.collection(_tableName).doc(codigo).update({
+        'estado': nuevoEstado,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
 
       print('✅ Estado de proveedor actualizado a: $nuevoEstado');
     } catch (e) {
@@ -202,16 +180,8 @@ class ProveedorRepository {
   /// Verifica si existe un código
   Future<bool> existeCodigo(String codigo) async {
     try {
-      final Database db = await _dbHelper.database;
-
-      final count = Sqflite.firstIntValue(
-        await db.rawQuery(
-          'SELECT COUNT(*) FROM $_tableName WHERE codigo = ?',
-          [codigo],
-        ),
-      );
-
-      return count != null && count > 0;
+      final doc = await _firestore.collection(_tableName).doc(codigo).get();
+      return doc.exists;
     } catch (e) {
       print('❌ Error al verificar código: $e');
       return false;
@@ -221,18 +191,24 @@ class ProveedorRepository {
   /// Genera el siguiente código disponible
   Future<String> generarSiguienteCodigo() async {
     try {
-      final Database db = await _dbHelper.database;
+      final snapshot = await _firestore
+          .collection(_tableName)
+          .where('codigo', isGreaterThanOrEqualTo: 'PROV-')
+          .where('codigo', isLessThan: 'PROV-Z')
+          .orderBy('codigo', descending: true)
+          .limit(1)
+          .get();
 
-      final result = await db.rawQuery(
-        'SELECT MAX(CAST(SUBSTR(codigo, 6) AS INTEGER)) as max_num FROM $_tableName WHERE codigo LIKE "PROV-%"',
-      );
-
-      int nextNum = 1;
-      if (result.isNotEmpty && result.first['max_num'] != null) {
-        nextNum = (result.first['max_num'] as int) + 1;
+      if (snapshot.docs.isEmpty) {
+        return 'PROV-001';
       }
 
-      return 'PROV-${nextNum.toString().padLeft(3, '0')}';
+      String ultimoCodigo = snapshot.docs.first.id;
+      String numeroStr = ultimoCodigo.split('-').last;
+      int numero = int.parse(numeroStr);
+
+      numero++;
+      return 'PROV-${numero.toString().padLeft(3, '0')}';
     } catch (e) {
       print('❌ Error al generar código: $e');
       return 'PROV-001';

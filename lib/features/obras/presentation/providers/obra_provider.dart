@@ -1,10 +1,10 @@
+// [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Importar Firebase
 import '../../data/models/obra_model.dart';
 import '../../data/repositories/obra_repository.dart';
 
-/// Provider de Obras
-///
-/// Gestiona el estado de las obras en la aplicación.
+/// Provider de Obras (Versión Firebase)
 class ObraProvider extends ChangeNotifier {
   final ObraRepository _repository = ObraRepository();
 
@@ -13,19 +13,19 @@ class ObraProvider extends ChangeNotifier {
 
   // Estado de carga
   bool _isLoading = false;
-
-  // Estado de carga de más datos
   bool _isLoadingMore = false;
 
   // Obra seleccionada actualmente
   ObraModel? _obraSeleccionada;
 
-  // ========== NUEVAS VARIABLES PARA PAGINACIÓN ==========
+  // ========== NUEVAS VARIABLES PARA PAGINACIÓN FIREBASE ==========
 
   int _paginaActual = 0;
   static const int _registrosPorPagina = 20;
   bool _hayMasPaginas = true;
   int _totalObras = 0;
+  DocumentSnapshot? _ultimoDocumento; // Referencia al último documento cargado
+
 
   // ========== GETTERS ==========
 
@@ -45,8 +45,8 @@ class ObraProvider extends ChangeNotifier {
   /// Carga la primera página de obras
   Future<void> cargarObras({bool soloActivas = true}) async {
     _isLoading = true;
-    _paginaActual = 0;
     _hayMasPaginas = true;
+    _ultimoDocumento = null; // Reiniciar paginación
     notifyListeners();
 
     try {
@@ -54,11 +54,23 @@ class ObraProvider extends ChangeNotifier {
       _totalObras = await _repository.contarObras(soloActivas: soloActivas);
 
       // Cargar primera página
-      _obras = await _repository.obtenerConPaginacion(
+      final obras = await _repository.obtenerConPaginacion(
         limit: _registrosPorPagina,
-        offset: 0,
         soloActivas: soloActivas,
+        ultimoDocumento: null,
       );
+
+      _obras = obras;
+
+      // Obtener el último documento de esta carga para la próxima iteración
+      if (_obras.length < _totalObras) {
+        _ultimoDocumento = await _repository.obtenerUltimoDocumentoDePagina(
+          limit: _registrosPorPagina,
+          soloActivas: soloActivas,
+        );
+      } else {
+        _ultimoDocumento = null;
+      }
 
       // Verificar si hay más páginas
       _hayMasPaginas = _obras.length < _totalObras;
@@ -75,28 +87,38 @@ class ObraProvider extends ChangeNotifier {
 
   /// Carga la siguiente página de obras
   Future<void> cargarMasObras({bool soloActivas = true}) async {
-    if (_isLoadingMore || !_hayMasPaginas) return;
+    if (_isLoadingMore || !_hayMasPaginas || _ultimoDocumento == null) return;
 
     _isLoadingMore = true;
     notifyListeners();
 
     try {
-      _paginaActual++;
-      final int offset = _paginaActual * _registrosPorPagina;
-
+      // Cargar la siguiente página
       final List<ObraConCliente> nuevasObras = await _repository.obtenerConPaginacion(
         limit: _registrosPorPagina,
-        offset: offset,
         soloActivas: soloActivas,
+        ultimoDocumento: _ultimoDocumento, // Usar el último documento como puntero
       );
 
-      _obras.addAll(nuevasObras);
-      _hayMasPaginas = _obras.length < _totalObras;
+      if (nuevasObras.isEmpty) {
+        _hayMasPaginas = false;
+        _ultimoDocumento = null;
+      } else {
+        // Obtener el último documento de la nueva carga
+        _ultimoDocumento = await _repository.obtenerUltimoDocumentoDePagina(
+          limit: _registrosPorPagina,
+          soloActivas: soloActivas,
+          ultimoDocumento: _ultimoDocumento,
+        );
+
+        _obras.addAll(nuevasObras);
+        _hayMasPaginas = _obras.length < _totalObras;
+      }
 
       print('✅ ${nuevasObras.length} obras más cargadas (total: ${_obras.length}/$_totalObras)');
     } catch (e) {
       print('❌ Error al cargar más obras: $e');
-      _paginaActual--;
+      // No retrocedemos la página
     } finally {
       _isLoadingMore = false;
       notifyListeners();
@@ -104,20 +126,17 @@ class ObraProvider extends ChangeNotifier {
   }
 
   /// Carga obras de un cliente específico
-  Future<void> cargarObrasPorCliente(int clienteId, {bool soloActivas = true}) async {
+  /// CAMBIO: clienteCodigo es String
+  Future<void> cargarObrasPorCliente(String clienteCodigo, {bool soloActivas = true}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final obrasCliente = await _repository.obtenerPorCliente(clienteId, soloActivas: soloActivas);
-      // Convertir a ObraConCliente (simplificado sin JOIN)
-      _obras = obrasCliente.map((obra) {
-        return ObraConCliente(
-          obra: obra,
-          clienteCodigo: '',
-          clienteRazonSocial: '',
-        );
-      }).toList();
+      // El repositorio ya no usa un ID int.
+      final obrasCliente = await _repository.obtenerPorCliente(clienteCodigo, soloActivas: soloActivas);
+
+      // El resultado ya es ObraConCliente
+      _obras = obrasCliente;
     } catch (e) {
       print('❌ Error al cargar obras del cliente: $e');
       _obras = [];
@@ -130,6 +149,7 @@ class ObraProvider extends ChangeNotifier {
   /// Busca obras por término
   Future<void> buscarObras(String termino, {bool soloActivas = true}) async {
     _isLoading = true;
+    _hayMasPaginas = false; // Desactivar paginación en búsqueda
     notifyListeners();
 
     try {
@@ -154,7 +174,8 @@ class ObraProvider extends ChangeNotifier {
   /// Crea una nueva obra
   Future<bool> crearObra(ObraModel obra) async {
     try {
-      final int id = await _repository.crear(obra);
+      // El repositorio ya no devuelve int id
+      await _repository.crear(obra);
 
       // Recargar la lista
       await cargarObras();
@@ -182,9 +203,10 @@ class ObraProvider extends ChangeNotifier {
   }
 
   /// Cambia el estado de una obra
-  Future<bool> cambiarEstado(int id, String nuevoEstado) async {
+  /// CAMBIO: id ahora es el código (String)
+  Future<bool> cambiarEstado(String codigo, String nuevoEstado) async {
     try {
-      await _repository.cambiarEstado(id, nuevoEstado);
+      await _repository.cambiarEstado(codigo, nuevoEstado);
 
       // Recargar la lista
       await cargarObras();
@@ -207,8 +229,9 @@ class ObraProvider extends ChangeNotifier {
   }
 
   /// Genera el siguiente código disponible para un cliente
-  Future<String> generarSiguienteCodigoParaCliente(int clienteId, String codigoCliente) async {
-    return await _repository.generarSiguienteCodigoParaCliente(clienteId, codigoCliente);
+  Future<String> generarSiguienteCodigoParaCliente(String codigoCliente) async {
+    // CAMBIO: clienteId ya no se usa aquí (se usa en el repo, que migré)
+    return await _repository.generarSiguienteCodigoParaCliente(codigoCliente);
   }
 
   /// Verifica si un código ya existe
@@ -217,7 +240,8 @@ class ObraProvider extends ChangeNotifier {
   }
 
   /// Cuenta obras por cliente
-  Future<int> contarObrasPorCliente(int clienteId, {bool soloActivas = true}) async {
-    return await _repository.contarPorCliente(clienteId, soloActivas: soloActivas);
+  Future<int> contarObrasPorCliente(String clienteCodigo, {bool soloActivas = true}) async {
+    // CAMBIO: clienteId ahora es clienteCodigo
+    return await _repository.contarPorCliente(clienteCodigo, soloActivas: soloActivas);
   }
 }
