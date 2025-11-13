@@ -12,7 +12,7 @@ enum TipoProveedor {
 /// - Depósito S&G
 /// - Proveedores externos (Angler, etc.)
 class ProveedorModel extends Equatable {
-  final int? id;
+  final String? id;
   final String codigo;              // DEP-001, PROV-001
   final String nombre;              // Depósito Central, Proveedor Angler
   final TipoProveedor tipo;

@@ -3,7 +3,7 @@
 /// Representa una categoría de productos (Obra General, Hierros, Pintura, etc.)
 /// Este modelo corresponde a la tabla 'categorias' en la base de datos.
 class CategoriaModel {
-  final int? id; // Puede ser null cuando creamos una nueva categoría
+  final String? id; // Puede ser null cuando creamos una nueva categoría
   final String codigo; // A, E, G, H, M, OG, P, S
   final String nombre; // Agua, Eléctrico, Gas, etc.
   final String? descripcion; // Descripción opcional

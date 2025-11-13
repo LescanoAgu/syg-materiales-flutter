@@ -3,7 +3,7 @@
 /// Representa un cliente de la empresa.
 /// Corresponde a la tabla 'clientes' en la base de datos.
 class ClienteModel {
-  final int? id;
+  final String? id;
   final String codigo; // CL-001, CL-002, etc.
   final String razonSocial;
   final String? cuit;

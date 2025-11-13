@@ -9,10 +9,10 @@ import 'package:equatable/equatable.dart';
 /// - Cliente Pérez tiene 50 bolsas de Pegamento P9 en Proveedor Angler
 /// - S&G tiene 100 bolsas de Cemento en Proveedor Corralón X
 class AcopioModel extends Equatable {
-  final int? id;
-  final int productoId;
-  final int clienteId;             // Puede ser S&G (SYG-001)
-  final int proveedorId;
+  final String? id;
+  final String productoId;
+  final String clienteId;             // Puede ser S&G (SYG-001)
+  final String proveedorId;
   final double cantidadDisponible;
   final String estado;             // activo, agotado
   final DateTime createdAt;

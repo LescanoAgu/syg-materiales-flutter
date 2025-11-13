@@ -21,16 +21,16 @@ enum TipoMovimientoAcopio {
 ///
 /// NUEVO: Vinculación opcional con facturas
 class MovimientoAcopioModel extends Equatable {
-  final int? id;
-  final int productoId;
+  final String? id;
+  final String productoId;
   final TipoMovimientoAcopio tipo;
   final double cantidad;
 
   // Origen y destino flexibles
   final String? origenTipo;        // acopio, stock
-  final int? origenId;
+  final String? origenId;
   final String? destinoTipo;       // acopio, stock
-  final int? destinoId;
+  final String? destinoId;
 
   final String? motivo;
   final String? referencia;

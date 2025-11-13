@@ -1,235 +1,288 @@
 // [COPIAR Y PEGAR ESTE ARCHIVO COMPLETO]
+// Reemplaza tu: lib/features/stock/presentation/providers/movimiento_stock_provider.dart
+
 import 'package:flutter/foundation.dart';
-import 'package:collection/collection.dart'; // Importar para usar groupBy, aunque lo haré manualmente
-import '../../data/models/producto_model.dart';
-import '../../data/models/stock_model.dart';
-import '../../data/repositories/producto_repository.dart';
+import '../../data/models/movimiento_stock_model.dart';
+import '../../data/repositories/movimiento_stock_repository.dart';
+// Importamos el repo de stock para validar
 import '../../data/repositories/stock_repository.dart';
 
-/// Provider de Productos con Stock (Versión Firebase)
-class ProductoProvider extends ChangeNotifier {
+/// Estados posibles del provider
+enum MovimientoStockState {
+  initial,
+  loading,
+  loaded,
+  error,
+  registering,  // Cuando está registrando un movimiento
+}
+
+class MovimientoStockProvider extends ChangeNotifier {
   // ========================================
-  // REPOSITORIOS
+  // REPOSITORIO
   // ========================================
 
-  final ProductoRepository _repository = ProductoRepository();
-  final StockRepository _stockRepository = StockRepository();
+  final MovimientoStockRepository _repository = MovimientoStockRepository();
+  // Agregamos el repo de Stock para validaciones previas
+  final StockRepository _stockRepo = StockRepository();
 
   // ========================================
   // ESTADO
   // ========================================
 
-  /// Lista de productos CON stock
-  List<ProductoConStock> _productos = [];
-
-  /// Producto seleccionado actualmente
-  ProductoConStock? _productoSeleccionado;
-
-  /// Estado de carga
-  bool _isLoading = false;
-
-  /// Mensaje de error (si hay)
+  MovimientoStockState _state = MovimientoStockState.initial;
+  List<MovimientoStock> _movimientos = [];
   String? _errorMessage;
 
-  /// Término de búsqueda actual
-  String _searchTerm = '';
-
-  /// Filtro de categoría actual (null = todas)
-  String? _categoriaFiltroCodigo; // CAMBIO: Ahora es el código (String)
+  // Filtros actuales
+  DateTime? _fechaDesde;
+  DateTime? _fechaHasta;
+  TipoMovimiento? _tipoFiltro;
+  String? _productoFiltroCodigo; // CAMBIO: de int? a String?
 
   // ========================================
   // GETTERS
   // ========================================
 
-  List<ProductoConStock> get productos => _productos;
-  ProductoConStock? get productoSeleccionado => _productoSeleccionado;
-  bool get isLoading => _isLoading;
+  MovimientoStockState get state => _state;
+  List<MovimientoStock> get movimientos => _movimientos;
   String? get errorMessage => _errorMessage;
-  String get searchTerm => _searchTerm;
-  String? get categoriaFiltroCodigo => _categoriaFiltroCodigo;
+  bool get isLoading => _state == MovimientoStockState.loading;
+  bool get isRegistering => _state == MovimientoStockState.registering;
+  bool get hasError => _state == MovimientoStockState.error;
+  bool get hasData => _movimientos.isNotEmpty;
+  DateTime? get fechaDesde => _fechaDesde;
+  DateTime? get fechaHasta => _fechaHasta;
+  TipoMovimiento? get tipoFiltro => _tipoFiltro;
+  String? get productoFiltroCodigo => _productoFiltroCodigo;
 
-  bool get hayProductos => _productos.isNotEmpty;
-  int get totalProductos => _productos.length;
-  // Estos helpers están bien, se basan en _productos
-  int get productosStockBajo => _productos.where((p) => p.stockBajo).length;
-  int get productosSinStock => _productos.where((p) => p.sinStock).length;
-
+  // Estadísticas
+  int get totalMovimientos => _movimientos.length;
+  int get totalEntradas =>
+      _movimientos
+          .where((m) => m.tipo == TipoMovimiento.entrada)
+          .length;
+  int get totalSalidas =>
+      _movimientos
+          .where((m) => m.tipo == TipoMovimiento.salida)
+          .length;
+  int get totalAjustes =>
+      _movimientos
+          .where((m) => m.tipo == TipoMovimiento.ajuste)
+          .length;
 
   // ========================================
-  // OPERACIONES DE CARGA (MERGE LOGIC)
+  // OPERACIONES PRINCIPALES
   // ========================================
 
-  /// Carga todos los productos con su stock (Fusiona datos en Dart)
-  Future<void> cargarProductos() async {
+  /// Registra un nuevo movimiento de stock
+  Future<bool> registrarMovimiento({
+    required String productoId, // CAMBIO: int a String
+    required TipoMovimiento tipo,
+    required double cantidad,
+    String? motivo,
+    String? referencia,
+    int? usuarioId,
+  }) async {
     try {
-      _isLoading = true;
+      _state = MovimientoStockState.registering;
       _errorMessage = null;
       notifyListeners();
 
-      // 1. Obtener todos los productos (con su categoría desnormalizada)
-      final productosBase = await _repository.obtenerTodosConCategoria(soloActivos: true);
+      // Validación de Salida (opcional pero recomendada)
+      if (tipo == TipoMovimiento.salida) {
+        final stockActual = await _stockRepo.obtenerPorProductoCodigo(productoId);
+        if (stockActual == null || stockActual.cantidadDisponible < cantidad) {
+          throw Exception('Stock insuficiente. Disponible: ${stockActual?.cantidadDisponible ?? 0}');
+        }
+      }
 
-      // 2. Obtener todos los registros de stock
-      final stockList = await _stockRepository.obtenerTodos();
+      final movimiento = await _repository.registrarMovimiento(
+        productoId: productoId,
+        tipo: tipo,
+        cantidad: cantidad,
+        motivo: motivo,
+        referencia: referencia,
+        usuarioId: usuarioId,
+      );
 
-      // 3. Crear un mapa para un acceso rápido al stock (codigo: StockModel)
-      final stockMap = { for (var s in stockList) s.productoId: s };
-
-      // 4. Fusionar los datos en la lista final (ProductoConStock)
-      _productos = productosBase.map((p) {
-        final stock = stockMap[p.producto.codigo];
-        final cantidadDisponible = stock?.cantidadDisponible ?? 0.0;
-
-        return ProductoConStock(
-          productoId: p.producto.id!, // El ID/Código (String)
-          productoCodigo: p.producto.codigo,
-          productoNombre: p.producto.nombre,
-          unidadBase: p.producto.unidadBase,
-          equivalencia: p.producto.equivalencia,
-          precioSinIva: p.producto.precioSinIva,
-          categoriaId: p.producto.categoriaId, // Mantenemos el int para compatibilidad
-          categoriaNombre: p.categoriaNombre,
-          categoriaCodigo: p.categoriaCodigo,
-          cantidadDisponible: cantidadDisponible,
-        );
-      }).toList();
-
-      // 5. Aplicar filtros si existen (para refrescar manteniendo el filtro)
-      _aplicarFiltrosLocales();
-
-
-      _isLoading = false;
+      _movimientos.insert(0, movimiento);
+      _state = MovimientoStockState.loaded;
       notifyListeners();
 
-      print('✅ ${_productos.length} productos cargados y fusionados con stock');
-
+      print('✅ Movimiento registrado: ${tipo.name} de $cantidad unidades');
+      return true;
     } catch (e) {
-      _isLoading = false;
-      _errorMessage = 'Error al cargar productos: $e';
+      _state = MovimientoStockState.error;
+      _errorMessage = e.toString();
       notifyListeners();
 
-      print('❌ Error al cargar productos: $e');
+      print('❌ Error al registrar movimiento: $e');
+      return false;
     }
   }
 
-  /// Lógica de filtrado local después de cargar/refrescar
-  void _aplicarFiltrosLocales() {
-    if (_searchTerm.isNotEmpty) {
-      _productos = _productos.where((p) =>
-      p.productoNombre.toLowerCase().contains(_searchTerm) ||
-          p.productoCodigo.toLowerCase().contains(_searchTerm) ||
-          p.categoriaNombre.toLowerCase().contains(_searchTerm)
-      ).toList();
-    }
+  /// Carga los movimientos de un producto específico
+  Future<void> cargarMovimientosDeProducto(String productoCodigo) async { // CAMBIO: int a String
+    try {
+      _state = MovimientoStockState.loading;
+      _errorMessage = null;
+      _productoFiltroCodigo = productoCodigo;
+      notifyListeners();
 
-    if (_categoriaFiltroCodigo != null) {
-      _productos = _productos
-          .where((p) => p.categoriaCodigo == _categoriaFiltroCodigo)
-          .toList();
+      _movimientos = await _repository.getMovimientosPorProducto(productoCodigo);
+
+      _state = MovimientoStockState.loaded;
+      notifyListeners();
+
+      print('✅ ${_movimientos.length} movimientos cargados del producto $productoCodigo');
+    } catch (e) {
+      _state = MovimientoStockState.error;
+      _errorMessage = 'Error al cargar movimientos: $e';
+      notifyListeners();
+
+      print('❌ $_errorMessage');
     }
   }
 
-  Future<void> recargarProductos() async {
-    await cargarProductos();
+  /// Carga movimientos con filtros opcionales
+  Future<void> cargarMovimientos({
+    DateTime? desde,
+    DateTime? hasta,
+    TipoMovimiento? tipo,
+    int? limit,
+  }) async {
+    try {
+      _state = MovimientoStockState.loading;
+      _errorMessage = null;
+      _fechaDesde = desde;
+      _fechaHasta = hasta;
+      _tipoFiltro = tipo;
+      notifyListeners();
+
+      _movimientos = await _repository.getMovimientos(
+        desde: desde,
+        hasta: hasta,
+        tipo: tipo,
+        limit: limit,
+      );
+
+      _state = MovimientoStockState.loaded;
+      notifyListeners();
+
+      print('✅ ${_movimientos.length} movimientos cargados con filtros');
+    } catch (e) {
+      _state = MovimientoStockState.error;
+      _errorMessage = 'Error al cargar movimientos: $e';
+      notifyListeners();
+
+      print('❌ $_errorMessage');
+    }
+  }
+
+  /// Cancela un movimiento (crea un movimiento inverso)
+  Future<bool> cancelarMovimiento(String movimientoId) async { // CAMBIO: int a String
+    try {
+      _state = MovimientoStockState.registering;
+      _errorMessage = null;
+      notifyListeners();
+
+      final movimientoCancelacion = await _repository.cancelarMovimiento(movimientoId);
+      _movimientos.insert(0, movimientoCancelacion);
+      _state = MovimientoStockState.loaded;
+      notifyListeners();
+
+      print('✅ Movimiento cancelado');
+      return true;
+    } catch (e) {
+      _state = MovimientoStockState.error;
+      _errorMessage = 'Error al cancelar movimiento: $e';
+      notifyListeners();
+
+      print('❌ $_errorMessage');
+      return false;
+    }
   }
 
   // ========================================
-  // BÚSQUEDA Y FILTROS
+  // FILTROS
   // ========================================
 
-  /// Busca productos por término
-  Future<void> buscarProductos(String termino) async {
-    _isLoading = true;
-    _searchTerm = termino.trim().toLowerCase();
-    _errorMessage = null;
-    notifyListeners();
+  /// Limpia todos los filtros
+  Future<void> limpiarFiltros() async {
+    _fechaDesde = null;
+    _fechaHasta = null;
+    _tipoFiltro = null;
+    _productoFiltroCodigo = null;
+    await cargarMovimientos();
+  }
 
-    // La búsqueda se delega al repositorio de Productos (que usa startsWith)
-    // Pero solo si se busca por nombre/código
-    if (termino.trim().isEmpty) {
-      await cargarProductos();
+  /// Refresca la vista actual
+  Future<void> refrescar() async {
+    if (_productoFiltroCodigo != null) {
+      await cargarMovimientosDeProducto(_productoFiltroCodigo!);
     } else {
-      // Recargar y filtrar localmente (incluye nombre, código y categoría)
-      await cargarProductos(); // Recarga la lista completa
+      await cargarMovimientos(
+        desde: _fechaDesde,
+        hasta: _fechaHasta,
+        tipo: _tipoFiltro,
+      );
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 
-  /// Filtra productos por categoría
-  Future<void> filtrarPorCategoria(String? categoriaCodigo) async { // CAMBIO: String
-    _isLoading = true;
-    _categoriaFiltroCodigo = categoriaCodigo;
-    _errorMessage = null;
-    notifyListeners();
-
-    await cargarProductos(); // Recarga y aplica el filtro localmente
-
-    _isLoading = false;
-    notifyListeners();
-  }
-
-
-  // ========================================
-  // OPERACIONES CRUD
-  // ========================================
-
-  /// Crea un nuevo producto
-  Future<bool> crearProducto(ProductoModel producto) async {
+  /// Registra movimiento en lote (múltiples productos)
+  Future<bool> registrarMovimientoEnLote({
+    required List<Map<String, dynamic>> items, // items debe ser { 'productoId': String, 'cantidad': double }
+    required TipoMovimiento tipo,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+    String? motivo,
+    String? referencia,
+    String? remitoNumero,
+    bool valorizado = false,
+    int? usuarioId,
+  }) async {
     try {
-      _isLoading = true;
+      _state = MovimientoStockState.registering;
       _errorMessage = null;
       notifyListeners();
 
-      // El repo ya no devuelve un ID, solo crea el doc con el código
-      await _repository.crear(producto);
+      // Validación previa de stock (solo para salidas)
+      if (tipo == TipoMovimiento.salida) {
+        for (var item in items) {
+          final productoId = item['productoId'] as String;
+          final cantidad = item['cantidad'] as double;
+          final stockActual = await _stockRepo.obtenerPorProductoCodigo(productoId);
+          if (stockActual == null || stockActual.cantidadDisponible < cantidad) {
+            throw Exception('Stock insuficiente para $productoId. Disponible: ${stockActual?.cantidadDisponible ?? 0}');
+          }
+        }
+      }
 
-      await cargarProductos();
+      final exito = await _repository.registrarMovimientoEnLote(
+        items: items,
+        tipo: tipo,
+        facturaNumero: facturaNumero,
+        facturaFecha: facturaFecha,
+        motivo: motivo,
+        referencia: referencia,
+        remitoNumero: remitoNumero,
+        valorizado: valorizado,
+        usuarioId: usuarioId,
+      );
 
-      _isLoading = false;
+      _state = MovimientoStockState.loaded;
       notifyListeners();
 
-      print('✅ Producto creado con código: ${producto.codigo}');
-      return true;
+      print('✅ Movimiento en lote registrado');
+      return exito;
 
     } catch (e) {
-      _isLoading = false;
-      _errorMessage = 'Error al crear producto: $e';
+      _state = MovimientoStockState.error;
+      _errorMessage = 'Error al registrar lote: $e';
       notifyListeners();
 
-      print('❌ Error al crear producto: $e');
+      print('❌ Error: $e');
       return false;
     }
   }
-
-  /// Desactiva un producto (soft delete)
-  /// CAMBIO: Ahora recibe el código (String)
-  Future<bool> desactivarProducto(String codigo) async {
-    try {
-      _isLoading = true;
-      _errorMessage = null;
-      notifyListeners();
-
-      await _repository.desactivar(codigo); // Llamada con código
-
-      await cargarProductos();
-
-      _isLoading = false;
-      notifyListeners();
-
-      print('✅ Producto desactivado');
-      return true;
-
-    } catch (e) {
-      _isLoading = false;
-      _errorMessage = 'Error al desactivar: $e';
-      notifyListeners();
-
-      print('❌ Error al desactivar producto: $e');
-      return false;
-    }
-  }
-
-// (ActualizarProducto sigue la misma lógica que crearProducto)
 }

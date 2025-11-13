@@ -13,8 +13,8 @@ enum TipoMovimiento {
 
 // Extendemos de Equatable para poder comparar movimientos fácilmente
 class MovimientoStock extends Equatable {
-  final int? id;                    // ? significa que puede ser null (para nuevos registros)
-  final int productoId;              // ID del producto que se está moviendo
+  final String? id;                    // ? significa que puede ser null (para nuevos registros)
+  final String productoId;              // ID del producto que se está moviendo
   final TipoMovimiento tipo;         // Tipo de movimiento
   final double cantidad;             // Cantidad del movimiento
   final double cantidadAnterior;    // Stock ANTES del movimiento

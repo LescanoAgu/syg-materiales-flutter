@@ -7,8 +7,8 @@ import 'categoria_model.dart';
 ///
 /// Relación: 1 Producto → 1 Stock (1:1)
 class StockModel {
-  final int? id;
-  final int productoId; // FK a productos
+  final String? id;
+  final String productoId; // FK a productos
   final double cantidadDisponible;
   final String? ultimaActualizacion;
 

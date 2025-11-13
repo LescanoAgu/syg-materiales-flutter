@@ -3,9 +3,9 @@
 /// Representa una obra/proyecto de un cliente.
 /// Corresponde a la tabla 'obras' en la base de datos.
 class ObraModel {
-  final int? id;
+  final String? id;
   final String codigo; // OB-001-CL-001, OB-002-CL-001, etc.
-  final int clienteId; // FK a clientes
+  final String clienteId; // FK a clientes
   final String nombre;
   final String direccion;
   final String? horariosDescarga;
@@ -17,6 +17,9 @@ class ObraModel {
   final String estado; // activa, pausada, finalizada, cancelada
   final String? createdAt;
   final String? updatedAt;
+  final String? clienteCodigo;
+  final String? clienteRazonSocial;
+
 
   ObraModel({
     this.id,

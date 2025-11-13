@@ -10,9 +10,9 @@
 /// - Unidad: Bolsa
 /// - Precio: 12500.00
 class ProductoModel {
-  final int? id;
+  final String? id;
   final String codigo; // OG-001, H-015, P-003
-  final int categoriaId; // FK a categorias
+  final String categoriaId; // FK a categorias
   final String nombre;
   final String? descripcion;
   final String unidadBase; // Bolsa, Litro, Caño, m², Unidad
@@ -21,6 +21,8 @@ class ProductoModel {
   final String estado; // activo/inactivo
   final String? createdAt;
   final String? updatedAt;
+  final String? categoriaNombre;
+  final String? categoriaCodigo;
 
   /// Constructor principal
   ProductoModel({
