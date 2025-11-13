@@ -533,7 +533,7 @@ class DatabaseHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         numero TEXT NOT NULL UNIQUE,
         cliente_id INTEGER NOT NULL,
-        obra_id INTEGER,
+        obra_id INTEGER NOT NULL,
         solicitante_nombre TEXT NOT NULL,
         solicitante_email TEXT,
         solicitante_telefono TEXT,

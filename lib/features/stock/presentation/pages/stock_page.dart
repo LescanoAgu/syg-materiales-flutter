@@ -210,8 +210,27 @@ class _StockPageState extends State<StockPage> {
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // Botón movimiento en lote
+          // 🔹 Botón movimiento INDIVIDUAL (secundario, más pequeño)
           FloatingActionButton(
+            heroTag: 'individual',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MovimientoRegistroPage(),
+                ),
+              ).then((_) {
+                _cargarProductos();
+              });
+            },
+            backgroundColor: AppColors.secondary,
+            tooltip: 'Movimiento Individual',
+            child: const Icon(Icons.add, size: 20),
+          ),
+          const SizedBox(height: 16),
+
+          // ⭐ Botón movimiento EN LOTE (principal, más grande)
+          FloatingActionButton.extended(
             heroTag: 'lote',
             onPressed: () {
               Navigator.push(
@@ -225,25 +244,10 @@ class _StockPageState extends State<StockPage> {
                 }
               });
             },
-            backgroundColor: AppColors.secondary,
-            child: const Icon(Icons.playlist_add),
-          ),
-          const SizedBox(height: 16),
-          // Botón movimiento individual
-          FloatingActionButton.extended(
-            heroTag: 'individual',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const MovimientoRegistroPage(),
-                ),
-              ).then((_) {
-                _cargarProductos();
-              });
-            },            icon: const Icon(Icons.add),
-            label: const Text('MOVIMIENTO'),
+            icon: const Icon(Icons.playlist_add_check),
+            label: const Text('LOTE'),
             backgroundColor: AppColors.primary,
+            tooltip: 'Movimiento en Lote (múltiples productos)',
           ),
         ],
       ),

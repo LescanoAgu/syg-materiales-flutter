@@ -84,15 +84,15 @@ class OrdenInternaProvider extends ChangeNotifier {
 
       // Insertar orden
       final ordenId = await db.insert('ordenes_internas', {
-        'codigo': codigo,
+        'numero': codigo,  // ← Cambio: "codigo" → "numero"
         'cliente_id': clienteId,
         'obra_id': obraId,
         'solicitante_nombre': solicitanteNombre,
-        'fecha_solicitud': (fechaSolicitud ?? DateTime.now()).toIso8601String(),
-        'prioridad': prioridad ?? 'normal',
+        'fecha_pedido': (fechaSolicitud ?? DateTime.now()).toIso8601String(),  // ← Cambio: "fecha_solicitud" → "fecha_pedido"
         'estado': 'solicitado',
-        'observaciones': observaciones,
-        'usuario_id': usuarioId,
+        'observaciones_cliente': observaciones,  // ← Cambio: "observaciones" → "observaciones_cliente"
+        'usuario_creador_id': usuarioId,  // ← Cambio: "usuario_id" → "usuario_creador_id"
+        'total': 0,  // ← AGREGAR este campo
         'created_at': DateTime.now().toIso8601String(),
       });
 
@@ -101,11 +101,15 @@ class OrdenInternaProvider extends ChangeNotifier {
       // Insertar items
       if (items != null && items.isNotEmpty) {
         for (var item in items) {
+          final cantidad = item['cantidad'] as double;
+          final precio = item['precioUnitario'] as double;
+
           await db.insert('orden_items', {
             'orden_id': ordenId,
             'producto_id': item['productoId'],
-            'cantidad': item['cantidad'],
-            'precio_unitario': item['precioUnitario'],
+            'cantidad_solicitada': cantidad,  // ← Cambio
+            'precio_unitario': precio,
+            'subtotal': cantidad * precio,  // ← AGREGAR
             'created_at': DateTime.now().toIso8601String(),
           });
         }

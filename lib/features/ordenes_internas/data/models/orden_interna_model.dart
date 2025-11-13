@@ -7,7 +7,7 @@ class OrdenInterna {
   final int? id;
   final String numero; // OI-0001, OI-0002...
   final int clienteId;
-  final int? obraId;
+  final int obraId;
 
   // Solicitante
   final String solicitanteNombre;
@@ -38,7 +38,7 @@ class OrdenInterna {
     this.id,
     required this.numero,
     required this.clienteId,
-    this.obraId,
+    required this.obraId,
     required this.solicitanteNombre,
     this.solicitanteEmail,
     this.solicitanteTelefono,
@@ -87,7 +87,7 @@ class OrdenInterna {
       id: map['id'] as int?,
       numero: map['numero'] as String,
       clienteId: map['cliente_id'] as int,
-      obraId: map['obra_id'] as int?,
+      obraId: map['obra_id'] as int,
       solicitanteNombre: map['solicitante_nombre'] as String,
       solicitanteEmail: map['solicitante_email'] as String?,
       solicitanteTelefono: map['solicitante_telefono'] as String?,

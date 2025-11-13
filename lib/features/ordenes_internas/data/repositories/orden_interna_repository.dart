@@ -32,7 +32,7 @@ class OrdenInternaRepository {
   /// ```
   Future<int> crearOrden({
     required int clienteId,
-    int? obraId,
+    required int obraId,
     required String solicitanteNombre,
     String? solicitanteEmail,
     String? solicitanteTelefono,

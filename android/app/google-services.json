@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "703649607267",
+    "project_id": "syg-materiales",
+    "storage_bucket": "syg-materiales.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:703649607267:android:c0c969e9388e74fe6b1256",
+        "android_client_info": {
+          "package_name": "com.syg.syg_materiales_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhupb8dgJ4k_h9HOXOisy6nALuC7Hz37I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
