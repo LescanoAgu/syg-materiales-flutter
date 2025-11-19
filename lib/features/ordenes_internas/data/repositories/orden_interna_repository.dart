@@ -1,465 +1,222 @@
-import 'package:sqflite/sqflite.dart';
-import '../../../../core/database/database_helper.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/orden_interna_model.dart';
 import '../models/orden_item_model.dart';
+// Importamos repositorios para obtener datos al desnormalizar
+import '../../../../features/clientes/data/repositories/cliente_repository.dart';
+import '../../../../features/obras/data/repositories/obra_repository.dart';
+import '../../../../features/stock/data/repositories/producto_repository.dart';
 
-/// Repositorio de Órdenes Internas
-///
-/// Maneja toda la lógica de base de datos para:
-/// - Crear órdenes (pedidos del cliente)
-/// - Aprobar/Rechazar órdenes (admin)
-/// - Cambiar estados
-/// - Consultar órdenes con filtros
 class OrdenInternaRepository {
-  final DatabaseHelper _dbHelper = DatabaseHelper();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static const String _collection = 'ordenes_internas';
+
+  // Repos para buscar datos
+  final ClienteRepository _clienteRepo = ClienteRepository();
+  final ObraRepository _obraRepo = ObraRepository();
+  final ProductoRepository _productoRepo = ProductoRepository();
 
   // ========================================
   // CREAR ORDEN
   // ========================================
-
-  /// Crea una nueva orden interna con sus items
-  ///
-  /// Ejemplo:
-  /// ```dart
-  /// final ordenId = await repo.crearOrden(
-  ///   clienteId: 1,
-  ///   solicitanteNombre: 'Juan Pérez',
-  ///   items: [
-  ///     {'productoId': 5, 'cantidad': 100, 'precio': 1500},
-  ///     {'productoId': 8, 'cantidad': 50, 'precio': 2300},
-  ///   ],
-  /// );
-  /// ```
-  Future<int> crearOrden({
-    required int clienteId,
-    required int obraId,
+  Future<String> crearOrden({
+    required String clienteId,
+    required String obraId,
     required String solicitanteNombre,
-    String? solicitanteEmail,
-    String? solicitanteTelefono,
-    DateTime? fechaEntregaEstimada,
     String? observacionesCliente,
-    required List<Map<String, dynamic>> items, // {productoId, cantidad, precio}
-    int? usuarioCreadorId,
+    required List<Map<String, dynamic>> items, // {productoId, cantidad, precio, ...}
+    String? usuarioCreadorId,
   }) async {
-    final db = await _dbHelper.database;
 
-    return await db.transaction((txn) async {
-      try {
-        // 1. Generar número de orden
-        final numero = await _generarNumeroOrden(txn);
+    return _firestore.runTransaction((transaction) async {
+      // 1. Generar correlativo usando un documento contador
+      final contadorRef = _firestore.collection('sistema').doc('contadores');
+      final contadorDoc = await transaction.get(contadorRef);
 
-        // 2. Calcular total
-        double total = 0;
-        for (var item in items) {
-          final cantidad = item['cantidad'] as double;
-          final precio = item['precio'] as double;
-          total += cantidad * precio;
-        }
+      int nuevoNumero = 1;
+      if (contadorDoc.exists) {
+        nuevoNumero = (contadorDoc.data()?['ordenes_count'] ?? 0) + 1;
+      }
 
-        // 3. Crear orden
-        final orden = OrdenInterna(
-          numero: numero,
-          clienteId: clienteId,
-          obraId: obraId,
-          solicitanteNombre: solicitanteNombre,
-          solicitanteEmail: solicitanteEmail,
-          solicitanteTelefono: solicitanteTelefono,
-          fechaPedido: DateTime.now(),
-          fechaEntregaEstimada: fechaEntregaEstimada,
-          estado: 'solicitado',
-          observacionesCliente: observacionesCliente,
-          total: total,
-          usuarioCreadorId: usuarioCreadorId,
+      String codigoOrden = 'OI-${nuevoNumero.toString().padLeft(4, '0')}';
+
+      // Actualizar contador
+      transaction.set(contadorRef, {'ordenes_count': nuevoNumero}, SetOptions(merge: true));
+
+      // 2. Obtener datos para desnormalizar (Cliente y Obra)
+      // NOTA: En transacciones estrictas se debe leer dentro, pero para simplificar
+      // asumimos lectura previa o consistencia eventual de nombres.
+      final cliente = await _clienteRepo.obtenerPorId(clienteId);
+      // Asumimos que el obraId es el ID del documento o el código
+      // Si usas código como ID en obras, esto funciona directo.
+      // Si no, tendrías que buscar la obra. Asumiremos que obraId es el ID del doc.
+      final obraDoc = await _firestore.collection('obras').doc(obraId).get();
+
+      // 3. Preparar Orden
+      final nuevaOrdenRef = _firestore.collection(_collection).doc();
+      double total = 0;
+
+      // 4. Procesar Items
+      for (var itemData in items) {
+        final prodId = itemData['productoId'] as String;
+        final cantidad = (itemData['cantidad'] as num).toDouble();
+        final precio = (itemData['precio'] as num).toDouble();
+        final subtotal = cantidad * precio;
+
+        total += subtotal;
+
+        // Obtener datos del producto para snapshot (guardar nombre histórico)
+        final prodDoc = await _firestore.collection('productos').doc(prodId).get();
+        final prodData = prodDoc.data() ?? {};
+
+        // Referencia para el item en SUBCOLECCIÓN
+        final itemRef = nuevaOrdenRef.collection('items').doc();
+
+        final itemModel = OrdenItem(
+          id: itemRef.id,
+          ordenId: nuevaOrdenRef.id,
+          productoId: prodId,
+          cantidadSolicitada: cantidad,
+          precioUnitario: precio,
+          subtotal: subtotal,
+          observaciones: itemData['observaciones'],
           createdAt: DateTime.now(),
         );
 
-        final ordenId = await txn.insert('ordenes_internas', orden.toMap());
+        // Guardamos el item con datos desnormalizados del producto para evitar lecturas extra
+        final itemMap = itemModel.toMap();
+        itemMap['productoNombre'] = prodData['nombre'] ?? 'Producto eliminado';
+        itemMap['productoCodigo'] = prodData['codigo'] ?? '';
+        itemMap['unidadBase'] = prodData['unidadBase'] ?? '';
 
-        // 4. Crear items
-        for (var itemData in items) {
-          final item = OrdenItem(
-            ordenId: ordenId,
-            productoId: itemData['productoId'] as int,
-            cantidadSolicitada: itemData['cantidad'] as double,
-            precioUnitario: itemData['precio'] as double,
-            subtotal: (itemData['cantidad'] as double) * (itemData['precio'] as double),
-            observaciones: itemData['observaciones'] as String?,
-            createdAt: DateTime.now(),
-          );
-
-          await txn.insert('orden_items', item.toMap());
-        }
-
-        print('✅ Orden $numero creada con $ordenId items');
-        return ordenId;
-
-      } catch (e) {
-        print('❌ Error al crear orden: $e');
-        rethrow;
+        transaction.set(itemRef, itemMap);
       }
+
+      // 5. Guardar Orden
+      final ordenModel = OrdenInterna(
+        id: nuevaOrdenRef.id,
+        numero: codigoOrden,
+        clienteId: clienteId,
+        obraId: obraId,
+        solicitanteNombre: solicitanteNombre,
+        fechaPedido: DateTime.now(),
+        estado: 'solicitado',
+        observacionesCliente: observacionesCliente,
+        total: total,
+        usuarioCreadorId: usuarioCreadorId,
+        createdAt: DateTime.now(),
+      );
+
+      final ordenMap = ordenModel.toMap();
+      // Desnormalizar nombres en la orden
+      if (cliente != null) ordenMap['clienteRazonSocial'] = cliente.razonSocial;
+      if (obraDoc.exists) ordenMap['obraNombre'] = obraDoc.data()?['nombre'] ?? '';
+
+      transaction.set(nuevaOrdenRef, ordenMap);
+
+      return nuevaOrdenRef.id;
     });
   }
 
-  /// Genera el número correlativo de orden (OI-0001, OI-0002...)
-  Future<String> _generarNumeroOrden(Transaction txn) async {
-    final result = await txn.rawQuery(
-      'SELECT COUNT(*) as total FROM ordenes_internas',
-    );
-
-    final total = result.first['total'] as int;
-    final numero = total + 1;
-
-    return 'OI-${numero.toString().padLeft(4, '0')}';
-  }
-
   // ========================================
-  // APROBAR / RECHAZAR
+  // LECTURA
   // ========================================
+  Future<List<OrdenInternaDetalle>> getOrdenes({String? estado}) async {
+    try {
+      Query query = _firestore.collection(_collection);
 
-  /// Aprueba una orden (con posibles ajustes en cantidades)
-  ///
-  /// itemsAjustados: Lista opcional con ajustes
-  /// Ejemplo: [{'itemId': 1, 'cantidadAprobada': 80}]
-  Future<bool> aprobarOrden({
-    required int ordenId,
-    required int aprobadoPorUsuarioId,
-    List<Map<String, dynamic>>? itemsAjustados,
-    String? observacionesInternas,
-  }) async {
-    final db = await _dbHelper.database;
-
-    return await db.transaction((txn) async {
-      try {
-        // 1. Actualizar orden
-        await txn.update(
-          'ordenes_internas',
-          {
-            'estado': 'aprobado',
-            'aprobado_por_usuario_id': aprobadoPorUsuarioId,
-            'aprobado_fecha': DateTime.now().toIso8601String(),
-            'observaciones_internas': observacionesInternas,
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-          where: 'id = ?',
-          whereArgs: [ordenId],
-        );
-
-        // 2. Si hay ajustes, aplicarlos
-        if (itemsAjustados != null && itemsAjustados.isNotEmpty) {
-          for (var ajuste in itemsAjustados) {
-            final itemId = ajuste['itemId'] as int;
-            final cantidadAprobada = ajuste['cantidadAprobada'] as double;
-
-            await txn.update(
-              'orden_items',
-              {'cantidad_aprobada': cantidadAprobada},
-              where: 'id = ?',
-              whereArgs: [itemId],
-            );
-          }
-
-          // Recalcular total
-          await _recalcularTotal(txn, ordenId);
-        }
-
-        // 3. Cambiar automáticamente a "en_preparacion"
-        await txn.update(
-          'ordenes_internas',
-          {'estado': 'en_preparacion'},
-          where: 'id = ?',
-          whereArgs: [ordenId],
-        );
-
-        print('✅ Orden $ordenId aprobada y en preparación');
-        return true;
-
-      } catch (e) {
-        print('❌ Error al aprobar orden: $e');
-        return false;
+      if (estado != null) {
+        query = query.where('estado', isEqualTo: estado);
       }
-    });
-  }
 
-  /// Rechaza una orden
-  Future<bool> rechazarOrden({
-    required int ordenId,
-    required int rechazadoPorUsuarioId,
-    required String motivoRechazo,
-  }) async {
-    final db = await _dbHelper.database;
+      query = query.orderBy('createdAt', descending: true);
 
-    try {
-      await db.update(
-        'ordenes_internas',
-        {
-          'estado': 'rechazado',
-          'motivo_rechazo': motivoRechazo,
-          'aprobado_por_usuario_id': rechazadoPorUsuarioId,
-          'aprobado_fecha': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [ordenId],
-      );
+      final snapshot = await query.get();
 
-      print('✅ Orden $ordenId rechazada');
-      return true;
+      // Mapeamos documentos a objetos
+      List<OrdenInternaDetalle> listaDetalle = [];
 
-    } catch (e) {
-      print('❌ Error al rechazar orden: $e');
-      return false;
-    }
-  }
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
 
-  /// Recalcula el total de una orden basado en cantidades aprobadas
-  Future<void> _recalcularTotal(Transaction txn, int ordenId) async {
-    final items = await txn.query(
-      'orden_items',
-      where: 'orden_id = ?',
-      whereArgs: [ordenId],
-    );
+        final orden = OrdenInterna.fromMap(data);
 
-    double nuevoTotal = 0;
-    for (var itemMap in items) {
-      final item = OrdenItem.fromMap(itemMap);
-      final cantidadFinal = item.cantidadAprobada ?? item.cantidadSolicitada;
-      nuevoTotal += cantidadFinal * item.precioUnitario;
-    }
+        // IMPORTANTE: Para la lista principal, quizás NO quieras cargar los items de todas las órdenes
+        // por un tema de costos de lectura (N+1).
+        // Aquí cargaremos una lista VACÍA de items por defecto para la vista general.
+        // El detalle completo se cargará en `getOrdenPorId`.
 
-    await txn.update(
-      'ordenes_internas',
-      {'total': nuevoTotal},
-      where: 'id = ?',
-      whereArgs: [ordenId],
-    );
-  }
-
-  // ========================================
-  // CAMBIAR ESTADOS
-  // ========================================
-
-  /// Cambia el estado de una orden
-  Future<bool> cambiarEstado({
-    required int ordenId,
-    required String nuevoEstado,
-    int? usuarioId,
-  }) async {
-    final db = await _dbHelper.database;
-
-    try {
-      await db.update(
-        'ordenes_internas',
-        {
-          'estado': nuevoEstado,
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [ordenId],
-      );
-
-      print('✅ Orden $ordenId cambió a estado: $nuevoEstado');
-      return true;
+        listaDetalle.add(OrdenInternaDetalle(
+          orden: orden,
+          clienteRazonSocial: data['clienteRazonSocial'] ?? 'Desconocido',
+          obraNombre: data['obraNombre'],
+          items: [], // Lista vacía para optimizar
+        ));
+      }
+      return listaDetalle;
 
     } catch (e) {
-      print('❌ Error al cambiar estado: $e');
-      return false;
+      print('❌ Error getOrdenes: $e');
+      return [];
     }
   }
 
-  /// Marca como "listo para envío"
-  Future<bool> marcarListoEnvio(int ordenId) async {
-    return await cambiarEstado(ordenId: ordenId, nuevoEstado: 'listo_envio');
-  }
+  /// Obtiene el detalle completo de UNA orden (incluyendo subcolección items)
+  Future<OrdenInternaDetalle?> getOrdenPorId(String ordenId) async {
+    try {
+      final doc = await _firestore.collection(_collection).doc(ordenId).get();
+      if (!doc.exists) return null;
 
-  /// Marca como "despachado"
-  Future<bool> marcarDespachado(int ordenId) async {
-    return await cambiarEstado(ordenId: ordenId, nuevoEstado: 'despachado');
-  }
+      final data = doc.data()!;
+      data['id'] = doc.id;
+      final orden = OrdenInterna.fromMap(data);
 
-  /// Cancela una orden
-  Future<bool> cancelarOrden({
-    required int ordenId,
-    int? usuarioId,
-  }) async {
-    return await cambiarEstado(ordenId: ordenId, nuevoEstado: 'cancelado');
-  }
+      // Ahora sí leemos la subcolección de items
+      final itemsSnap = await doc.reference.collection('items').get();
 
-  // ========================================
-  // CONSULTAS
-  // ========================================
+      final itemsDetalle = itemsSnap.docs.map((itemDoc) {
+        final iData = itemDoc.data();
+        iData['id'] = itemDoc.id;
 
-  /// Obtiene todas las órdenes con filtros opcionales
-  Future<List<OrdenInternaDetalle>> getOrdenes({
-    String? estado,
-    int? clienteId,
-    DateTime? desde,
-    DateTime? hasta,
-    int? limit,
-  }) async {
-    final db = await _dbHelper.database;
+        // Aquí recuperamos los datos desnormalizados que guardamos al crear
+        return OrdenItemDetalle(
+          item: OrdenItem.fromMap(iData),
+          productoNombre: iData['productoNombre'] ?? '?',
+          productoCodigo: iData['productoCodigo'] ?? '?',
+          unidadBase: iData['unidadBase'] ?? 'u',
+          categoriaNombre: '', // Si es crítico, guardarlo también al crear
+        );
+      }).toList();
 
-    String query = '''
-      SELECT 
-        o.*,
-        c.razon_social as cliente_razon_social,
-        ob.nombre as obra_nombre,
-        u.nombre_completo as aprobado_por_nombre
-      FROM ordenes_internas o
-      INNER JOIN clientes c ON o.cliente_id = c.id
-      LEFT JOIN obras ob ON o.obra_id = ob.id
-      LEFT JOIN usuarios u ON o.aprobado_por_usuario_id = u.id
-      WHERE 1=1
-    ''';
-
-    List<dynamic> args = [];
-
-    if (estado != null) {
-      query += ' AND o.estado = ?';
-      args.add(estado);
-    }
-
-    if (clienteId != null) {
-      query += ' AND o.cliente_id = ?';
-      args.add(clienteId);
-    }
-
-    if (desde != null) {
-      query += ' AND o.fecha_pedido >= ?';
-      args.add(desde.toIso8601String());
-    }
-
-    if (hasta != null) {
-      query += ' AND o.fecha_pedido <= ?';
-      args.add(hasta.toIso8601String());
-    }
-
-    query += ' ORDER BY o.created_at DESC';
-
-    if (limit != null) {
-      query += ' LIMIT ?';
-      args.add(limit);
-    }
-
-    final result = await db.rawQuery(query, args);
-
-    List<OrdenInternaDetalle> ordenes = [];
-
-    for (var row in result) {
-      final orden = OrdenInterna.fromMap(row);
-      final items = await _getItemsConDetalle(db, orden.id!);
-
-      ordenes.add(OrdenInternaDetalle(
+      return OrdenInternaDetalle(
         orden: orden,
-        clienteRazonSocial: row['cliente_razon_social'] as String,
-        obraNombre: row['obra_nombre'] as String?,
-        items: items,
-        aprobadoPorNombre: row['aprobado_por_nombre'] as String?,
-      ));
-    }
-
-    return ordenes;
-  }
-
-  /// Obtiene una orden específica por ID
-  Future<OrdenInternaDetalle?> getOrdenPorId(int ordenId) async {
-    final db = await _dbHelper.database;
-
-    final result = await db.rawQuery('''
-      SELECT 
-        o.*,
-        c.razon_social as cliente_razon_social,
-        ob.nombre as obra_nombre,
-        u.nombre_completo as aprobado_por_nombre
-      FROM ordenes_internas o
-      INNER JOIN clientes c ON o.cliente_id = c.id
-      LEFT JOIN obras ob ON o.obra_id = ob.id
-      LEFT JOIN usuarios u ON o.aprobado_por_usuario_id = u.id
-      WHERE o.id = ?
-    ''', [ordenId]);
-
-    if (result.isEmpty) return null;
-
-    final row = result.first;
-    final orden = OrdenInterna.fromMap(row);
-    final items = await _getItemsConDetalle(db, ordenId);
-
-    return OrdenInternaDetalle(
-      orden: orden,
-      clienteRazonSocial: row['cliente_razon_social'] as String,
-      obraNombre: row['obra_nombre'] as String?,
-      items: items,
-      aprobadoPorNombre: row['aprobado_por_nombre'] as String?,
-    );
-  }
-
-  /// Obtiene órdenes por cliente
-  Future<List<OrdenInternaDetalle>> getOrdenesPorCliente(int clienteId) async {
-    return await getOrdenes(clienteId: clienteId);
-  }
-
-  /// Obtiene órdenes pendientes de aprobación
-  Future<List<OrdenInternaDetalle>> getOrdenesPendientes() async {
-    return await getOrdenes(estado: 'solicitado');
-  }
-
-  /// Obtiene items de una orden con detalles del producto
-  Future<List<OrdenItemDetalle>> _getItemsConDetalle(
-      Database db,
-      int ordenId,
-      ) async {
-    final result = await db.rawQuery('''
-      SELECT 
-        oi.*,
-        p.nombre as producto_nombre,
-        p.codigo as producto_codigo,
-        p.unidad_base,
-        c.nombre as categoria_nombre
-      FROM orden_items oi
-      INNER JOIN productos p ON oi.producto_id = p.id
-      INNER JOIN categorias c ON p.categoria_id = c.id
-      WHERE oi.orden_id = ?
-      ORDER BY oi.id
-    ''', [ordenId]);
-
-    return result.map((row) {
-      return OrdenItemDetalle(
-        item: OrdenItem.fromMap(row),
-        productoNombre: row['producto_nombre'] as String,
-        productoCodigo: row['producto_codigo'] as String,
-        unidadBase: row['unidad_base'] as String,
-        categoriaNombre: row['categoria_nombre'] as String,
+        clienteRazonSocial: data['clienteRazonSocial'] ?? '',
+        obraNombre: data['obraNombre'],
+        items: itemsDetalle,
       );
-    }).toList();
-  }
 
-  // ========================================
-  // ESTADÍSTICAS
-  // ========================================
-
-  /// Obtiene conteo de órdenes por estado
-  Future<Map<String, int>> getEstadisticasPorEstado() async {
-    final db = await _dbHelper.database;
-
-    final result = await db.rawQuery('''
-      SELECT estado, COUNT(*) as cantidad
-      FROM ordenes_internas
-      GROUP BY estado
-    ''');
-
-    Map<String, int> stats = {};
-    for (var row in result) {
-      stats[row['estado'] as String] = row['cantidad'] as int;
+    } catch (e) {
+      print('❌ Error getOrdenPorId: $e');
+      return null;
     }
-
-    return stats;
   }
 
-  /// Obtiene total de órdenes
-  Future<int> getTotalOrdenes() async {
-    final db = await _dbHelper.database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) as total FROM ordenes_internas',
-    );
-    return result.first['total'] as int;
+  // ========================================
+  // ACCIONES
+  // ========================================
+  Future<void> cambiarEstado({
+    required String ordenId,
+    required String nuevoEstado,
+    String? motivoRechazo,
+    String? observaciones,
+  }) async {
+    final updates = <String, dynamic>{
+      'estado': nuevoEstado,
+      'updatedAt': DateTime.now().toIso8601String(),
+    };
+    if (motivoRechazo != null) updates['motivoRechazo'] = motivoRechazo;
+    if (observaciones != null) updates['observacionesInternas'] = observaciones;
+
+    await _firestore.collection(_collection).doc(ordenId).update(updates);
   }
 }

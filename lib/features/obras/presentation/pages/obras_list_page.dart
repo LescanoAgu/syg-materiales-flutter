@@ -3,10 +3,9 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/app_drawer.dart';
-import '../../data/models/obra_model.dart';
+import '../../data/models/obra_model.dart'; // Aquí está el typedef ObraConCliente = ObraModel
 import '../providers/obra_provider.dart';
 
-/// Pantalla de Lista de Obras
 class ObrasListPage extends StatefulWidget {
   const ObrasListPage({super.key});
 
@@ -16,22 +15,18 @@ class ObrasListPage extends StatefulWidget {
 
 class _ObrasListPageState extends State<ObrasListPage> {
   final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();  // ← NUEVO
+  final ScrollController _scrollController = ScrollController();
   String _filtroEstado = 'Activas';
 
   @override
   void initState() {
     super.initState();
-
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ObraProvider>().cargarObras();
     });
-
-    // ← NUEVO: Escuchar el scroll para cargar más datos
     _scrollController.addListener(_onScroll);
   }
 
-// ← NUEVO MÉTODO
   void _onScroll() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
       context.read<ObraProvider>().cargarMasObras();
@@ -41,7 +36,7 @@ class _ObrasListPageState extends State<ObrasListPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _scrollController.dispose();  // ← NUEVO
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -49,20 +44,16 @@ class _ObrasListPageState extends State<ObrasListPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(),
-
       appBar: AppBar(
         title: const Text('Obras'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              context.read<ObraProvider>().cargarObras();
-            },
+            onPressed: () => context.read<ObraProvider>().cargarObras(),
             tooltip: 'Actualizar',
           ),
         ],
       ),
-
       body: Container(
         decoration: const BoxDecoration(
           gradient: AppColors.backgroundGradient,
@@ -78,11 +69,9 @@ class _ObrasListPageState extends State<ObrasListPage> {
                   if (provider.isLoading) {
                     return const Center(child: CircularProgressIndicator());
                   }
-
                   if (provider.obras.isEmpty) {
                     return _buildEmptyState();
                   }
-
                   return _buildObrasList(provider.obras);
                 },
               ),
@@ -90,7 +79,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
           ],
         ),
       ),
-
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _mostrarFormularioObra(context),
         icon: const Icon(Icons.add),
@@ -99,9 +87,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
     );
   }
 
-  // ========================================
-  // BARRA DE BÚSQUEDA
-  // ========================================
   Widget _buildSearchBar() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -133,9 +118,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
     );
   }
 
-  // ========================================
-  // FILTRO POR ESTADO
-  // ========================================
   Widget _buildFiltroEstado() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -154,7 +136,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
 
   Widget _buildEstadoChip(String estado) {
     final isSelected = _filtroEstado == estado;
-
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
@@ -164,7 +145,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
           setState(() {
             _filtroEstado = estado;
           });
-          // TODO: Aplicar filtro
         },
         backgroundColor: Colors.white,
         selectedColor: AppColors.primary,
@@ -176,14 +156,10 @@ class _ObrasListPageState extends State<ObrasListPage> {
     );
   }
 
-  // ========================================
-  // ESTADÍSTICAS
-  // ========================================
   Widget _buildEstadisticas() {
     return Consumer<ObraProvider>(
       builder: (context, provider, child) {
         final total = provider.totalObras;
-
         return Container(
           margin: const EdgeInsets.all(16),
           padding: const EdgeInsets.all(16),
@@ -207,7 +183,7 @@ class _ObrasListPageState extends State<ObrasListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${provider.obras.length}/$total',  // ← Muestra "20/150"
+                    '${provider.obras.length}/$total',
                     style: AppTextStyles.h2.copyWith(color: AppColors.primary),
                   ),
                   Text(
@@ -223,61 +199,35 @@ class _ObrasListPageState extends State<ObrasListPage> {
     );
   }
 
-  // ========================================
-  // LISTA DE OBRAS
-  // ========================================
   Widget _buildObrasList(List<ObraConCliente> obras) {
     return Consumer<ObraProvider>(
       builder: (context, provider, child) {
-        // Calcular cantidad de items (agregar 1 si hay más páginas)
-        final itemCount = provider.hayMasPaginas
-            ? obras.length + 1
-            : obras.length;
-
+        final itemCount = provider.hayMasPaginas ? obras.length + 1 : obras.length;
         return ListView.builder(
-          controller: _scrollController,  // ← IMPORTANTE: Conectar el controller
+          controller: _scrollController,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           itemCount: itemCount,
           itemBuilder: (context, index) {
-            // Si es el último item Y hay más páginas, mostrar spinner
             if (index >= obras.length) {
               return _buildLoadingIndicator();
             }
-
-            // Mostrar la obra normal
-            final obraConCliente = obras[index];
-            return _buildObraCard(obraConCliente);
+            // CORRECCIÓN AQUÍ: No usamos .obra porque ObraConCliente ES ObraModel
+            final obra = obras[index];
+            return _buildObraCard(obra);
           },
         );
       },
     );
   }
 
-  /// Indicador de carga para lazy loading
   Widget _buildLoadingIndicator() {
     return const Padding(
       padding: EdgeInsets.all(16.0),
-      child: Center(
-        child: Column(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 8),
-            Text(
-              'Cargando más obras...',
-              style: TextStyle(
-                color: AppColors.textLight,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
+      child: Center(child: CircularProgressIndicator()),
     );
   }
 
-  Widget _buildObraCard(ObraConCliente obraConCliente) {
-    final obra = obraConCliente.obra;
-
+  Widget _buildObraCard(ObraModel obra) {
     Color estadoColor;
     IconData estadoIcon;
 
@@ -305,9 +255,7 @@ class _ObrasListPageState extends State<ObrasListPage> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => _verDetalleObra(context, obra),
@@ -316,7 +264,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header con código y estado
               Row(
                 children: [
                   Container(
@@ -345,38 +292,26 @@ class _ObrasListPageState extends State<ObrasListPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              // Nombre de la obra
               Text(
                 obra.nombre,
-                style: AppTextStyles.body1.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppTextStyles.body1.copyWith(fontWeight: FontWeight.bold),
               ),
-
               const SizedBox(height: 8),
-
-              // Cliente
               Row(
                 children: [
                   const Icon(Icons.person, size: 16, color: AppColors.textMedium),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      obraConCliente.clienteRazonSocial,
-                      style: AppTextStyles.body2.copyWith(
-                        color: AppColors.textMedium,
-                      ),
+                      // CORRECCIÓN: Acceso directo a la propiedad desnormalizada
+                      obra.clienteRazonSocial ?? 'Sin Cliente',
+                      style: AppTextStyles.body2.copyWith(color: AppColors.textMedium),
                     ),
                   ),
                 ],
               ),
-
               const SizedBox(height: 4),
-
-              // Dirección
               Row(
                 children: [
                   const Icon(Icons.location_on, size: 16, color: AppColors.textMedium),
@@ -398,48 +333,19 @@ class _ObrasListPageState extends State<ObrasListPage> {
     );
   }
 
-  // ========================================
-  // ESTADO VACÍO
-  // ========================================
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.business_outlined,
-            size: 80,
-            color: AppColors.textLight,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No hay obras',
-            style: AppTextStyles.h3.copyWith(color: AppColors.textMedium),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Agrega tu primera obra',
-            style: AppTextStyles.body2,
-          ),
-        ],
-      ),
-    );
+    return const Center(child: Text('No hay obras'));
   }
 
-  // ========================================
-  // NAVEGACIÓN
-  // ========================================
   void _verDetalleObra(BuildContext context, ObraModel obra) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Ver detalle de: ${obra.nombre}')),
     );
-    // TODO: Navegar a pantalla de detalle
   }
 
   void _mostrarFormularioObra(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Próximamente: Formulario de obra')),
     );
-    // TODO: Navegar a pantalla de formulario
   }
 }

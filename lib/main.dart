@@ -1,148 +1,113 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-// Importa las opciones generadas por FlutterFire
-import 'firebase_options.dart';
-
-// Si usás Provider:
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart'; // Asegúrate de que este archivo exista (generado por flutterfire)
 
-// IMPORTA AQUÍ TUS PROVIDERS REALES
-// import 'features/stock/presentation/providers/stock_provider.dart';
-// import 'features/stock/presentation/providers/movimiento_stock_provider.dart';
-// import 'features/clientes/presentation/providers/cliente_provider.dart';
-// import 'features/obras/presentation/providers/obra_provider.dart';
-// etc...
+// Importamos las pantallas principales
+import 'features/stock/presentation/pages/stock_page.dart';
+import 'core/widgets/app_drawer.dart';
+import 'core/constants/app_colors.dart';
+
+// Importamos los Providers
+import 'features/stock/presentation/providers/producto_provider.dart';
+import 'features/stock/presentation/providers/movimiento_stock_provider.dart';
+import 'features/clientes/presentation/providers/cliente_provider.dart';
+import 'features/acopios/presentation/providers/acopio_provider.dart';
+import 'features/obras/presentation/providers/obra_provider.dart';
+import 'features/ordenes_internas/presentation/providers/orden_interna_provider.dart';
 
 void main() async {
+  // 1. Inicializar Binding de Flutter
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 2. Inicializar Firebase
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-
-    runApp(const MyApp());
-  } catch (e, st) {
-    // Si Firebase falla al iniciar, te lo muestra en consola
-    debugPrint('❌ Error al inicializar Firebase: $e');
-    debugPrintStack(stackTrace: st);
-    runApp(const FirebaseErrorApp());
+    print("✅ Firebase inicializado correctamente");
+  } catch (e) {
+    print("❌ Error al inicializar Firebase: $e");
   }
+
+  // 3. Correr la App
+  runApp(const SyGMaterialesApp());
 }
 
-/// App principal cuando Firebase se inicializa correctamente
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class SyGMaterialesApp extends StatelessWidget {
+  const SyGMaterialesApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Si usás Provider, envolvemos acá
+    // MultiProvider inyecta la lógica en toda la app
     return MultiProvider(
       providers: [
-        // Ejemplos, descomenta y adapta:
-        // ChangeNotifierProvider(create: (_) => StockProvider()),
-        // ChangeNotifierProvider(create: (_) => MovimientoStockProvider()),
-        // ChangeNotifierProvider(create: (_) => ClienteProvider()),
-        // ChangeNotifierProvider(create: (_) => ObraProvider()),
+        // Stock y Productos
+        ChangeNotifierProvider(create: (_) => ProductoProvider()),
+        ChangeNotifierProvider(create: (_) => MovimientoStockProvider()),
+
+        // Clientes y Obras
+        ChangeNotifierProvider(create: (_) => ClienteProvider()),
+        ChangeNotifierProvider(create: (_) => ObraProvider()),
+
+        // Acopios
+        ChangeNotifierProvider(create: (_) => AcopioProvider()),
+
+        // Órdenes
+        ChangeNotifierProvider(create: (_) => OrdenInternaProvider()),
       ],
       child: MaterialApp(
+        title: 'S&G Materiales',
         debugShowCheckedModeBanner: false,
-        title: 'SYG Materiales',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF005E9C)),
+          primaryColor: AppColors.primary,
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: AppColors.primary,
+            primary: AppColors.primary,
+            secondary: AppColors.secondary,
+          ),
           useMaterial3: true,
+          appBarTheme: const AppBarTheme(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            centerTitle: true,
+          ),
         ),
+        // Definimos la página de inicio (puedes cambiarla si tienes un Login)
         home: const HomePage(),
       ),
     );
   }
 }
 
-/// App alternativa si Firebase no se pudo inicializar
-class FirebaseErrorApp extends StatelessWidget {
-  const FirebaseErrorApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        body: Center(
-          child: Text(
-            'Error al inicializar Firebase.\nRevisá la consola.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Pantalla inicial simple para probar conexión a Firestore
-class HomePage extends StatefulWidget {
+// Página \"Home\" temporal para tener un punto de entrada con el Drawer
+class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  String _status = 'Sin probar';
-
-  Future<void> _testFirestorePing() async {
-    setState(() {
-      _status = 'Probando conexión a Firestore...';
-    });
-
-    try {
-      final firestore = FirebaseFirestore.instance;
-
-      // Escribimos un documentito de prueba
-      await firestore.collection('debug').add({
-        'mensaje': 'Ping desde la app',
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-
-      setState(() {
-        _status = '✅ Firestore OK: se pudo escribir en /debug';
-      });
-    } catch (e, st) {
-      debugPrint('❌ Error conectando a Firestore: $e');
-      debugPrintStack(stackTrace: st);
-      setState(() {
-        _status = '❌ Error conectando a Firestore: $e';
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    // Acá después podés poner tus botones:
-    // "Ir a Stock", "Ir a Acopios", etc.
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SYG Materiales - Dev'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      appBar: AppBar(title: const Text('S&G Materiales - Panel')),
+      drawer: const AppDrawer(), // Aquí está el menú lateral que arreglamos
+      body: Center(
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            const Icon(Icons.check_circle_outline, size: 100, color: AppColors.success),
+            const SizedBox(height: 20),
             const Text(
-              'Prueba de conexión a Firebase / Firestore',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              '¡Sistema Conectado a Firebase!',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _testFirestorePing,
-              child: const Text('Probar Firestore (escribir en /debug)'),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              _status,
-              style: const TextStyle(fontSize: 16),
+            const SizedBox(height: 10),
+            const Text('Usa el menú lateral para navegar'),
+            const SizedBox(height: 30),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.inventory),
+              label: const Text('Ir al Stock'),
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const StockPage()));
+              },
             ),
           ],
         ),

@@ -42,16 +42,8 @@ class ArgFormats {
   /// ArgFormats.moneda(0);         // "$0,00"
   /// ArgFormats.moneda(null);      // "-"
   /// ```
-  static String moneda(double? valor) {
-    if (valor == null) return '-';
-
-    final formatter = NumberFormat.currency(
-      locale: locale,
-      symbol: '\$',           // Símbolo del peso argentino
-      decimalDigits: 2,       // Siempre 2 decimales
-    );
-
-    return formatter.format(valor);
+  static String moneda(double value) {
+    return NumberFormat.currency(locale: 'es_AR', symbol: '\$').format(value);
   }
 
   /// Formatea un número como moneda SIN el símbolo $
@@ -133,7 +125,9 @@ class ArgFormats {
     if (fecha == null) return '-';
     return DateFormat('dd/MM/yyyy', locale).format(fecha);
   }
-
+  static String fechaCorta(DateTime date) {
+    return DateFormat('dd/MM/yyyy').format(date);
+  }
   /// Formatea una fecha con hora
   ///
   /// Formato: dd/MM/yyyy HH:mm
@@ -142,9 +136,8 @@ class ArgFormats {
   /// ```dart
   /// ArgFormats.fechaHora(DateTime.now());  // "15/10/2025 14:30"
   /// ```
-  static String fechaHora(DateTime? fecha) {
-    if (fecha == null) return '-';
-    return DateFormat('dd/MM/yyyy HH:mm', locale).format(fecha);
+  static String fechaHora(DateTime date) {
+    return DateFormat('dd/MM/yyyy HH:mm').format(date);
   }
 
   /// Formatea una fecha en formato largo argentino

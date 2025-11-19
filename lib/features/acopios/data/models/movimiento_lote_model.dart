@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../../stock/data/models/stock_model.dart';
-
+import '../../../stock/data/models/producto_model.dart';
 /// Tipo de destino del movimiento en lote
 enum TipoDestinoLote {
   stock,    // Stock S&G (depósito propio)

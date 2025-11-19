@@ -64,9 +64,9 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
 
     // Obtenemos el historial usando los datos del acopio
     final movimientos = await provider.obtenerHistorialAcopio(
-      productoId: widget.acopio.acopio.productoId,
-      clienteId: widget.acopio.acopio.clienteId,
-      proveedorId: widget.acopio.acopio.proveedorId,
+      productoCodigo: widget.acopio.acopio.productoId, // CORREGIDO: 'productoCodigo'
+      clienteCodigo: widget.acopio.acopio.clienteId,   // CORREGIDO: 'clienteCodigo'
+      proveedorCodigo: widget.acopio.acopio.proveedorId, // CORREGIDO: 'proveedorCodigo'
     );
 
     setState(() {

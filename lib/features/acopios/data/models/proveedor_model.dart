@@ -78,7 +78,7 @@ class ProveedorModel extends Equatable {
 
   /// CopyWith
   ProveedorModel copyWith({
-    int? id,
+    String? id,
     String? codigo,
     String? nombre,
     TipoProveedor? tipo,

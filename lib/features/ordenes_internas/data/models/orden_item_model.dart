@@ -1,8 +1,8 @@
-/// Modelo de Item de Orden (Producto dentro de una orden)
+/// Modelo de Item (Subcolección en Firestore)
 class OrdenItem {
-  final int? id;
-  final int ordenId;
-  final int productoId;
+  final String? id;
+  final String ordenId;
+  final String productoId;
   final double cantidadSolicitada;
   final double? cantidadAprobada;
   final double precioUnitario;
@@ -22,65 +22,40 @@ class OrdenItem {
     required this.createdAt,
   });
 
-  /// Conversión a Map para SQLite
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'orden_id': ordenId,
-      'producto_id': productoId,
-      'cantidad_solicitada': cantidadSolicitada,
-      'cantidad_aprobada': cantidadAprobada,
-      'precio_unitario': precioUnitario,
-      'subtotal': subtotal,
-      'observaciones': observaciones,
-      'created_at': createdAt.toIso8601String(),
-    };
-  }
-
-  /// Crear desde Map de SQLite
   factory OrdenItem.fromMap(Map<String, dynamic> map) {
     return OrdenItem(
-      id: map['id'] as int?,
-      ordenId: map['orden_id'] as int,
-      productoId: map['producto_id'] as int,
-      cantidadSolicitada: map['cantidad_solicitada'] as double,
-      cantidadAprobada: map['cantidad_aprobada'] as double?,
-      precioUnitario: map['precio_unitario'] as double,
-      subtotal: map['subtotal'] as double,
+      id: map['id'] as String?,
+      ordenId: map['ordenId'] as String? ?? '',
+      productoId: map['productoId'] as String? ?? '',
+      cantidadSolicitada: (map['cantidadSolicitada'] as num).toDouble(),
+      cantidadAprobada: (map['cantidadAprobada'] as num?)?.toDouble(),
+      precioUnitario: (map['precioUnitario'] as num).toDouble(),
+      subtotal: (map['subtotal'] as num).toDouble(),
       observaciones: map['observaciones'] as String?,
-      createdAt: DateTime.parse(map['created_at'] as String),
+      createdAt: map['createdAt'] != null
+          ? DateTime.parse(map['createdAt'])
+          : DateTime.now(),
     );
   }
 
-  /// CopyWith
-  OrdenItem copyWith({
-    int? id,
-    int? ordenId,
-    int? productoId,
-    double? cantidadSolicitada,
-    double? cantidadAprobada,
-    double? precioUnitario,
-    double? subtotal,
-    String? observaciones,
-    DateTime? createdAt,
-  }) {
-    return OrdenItem(
-      id: id ?? this.id,
-      ordenId: ordenId ?? this.ordenId,
-      productoId: productoId ?? this.productoId,
-      cantidadSolicitada: cantidadSolicitada ?? this.cantidadSolicitada,
-      cantidadAprobada: cantidadAprobada ?? this.cantidadAprobada,
-      precioUnitario: precioUnitario ?? this.precioUnitario,
-      subtotal: subtotal ?? this.subtotal,
-      observaciones: observaciones ?? this.observaciones,
-      createdAt: createdAt ?? this.createdAt,
-    );
+  Map<String, dynamic> toMap() {
+    return {
+      'ordenId': ordenId,
+      'productoId': productoId,
+      'cantidadSolicitada': cantidadSolicitada,
+      'cantidadAprobada': cantidadAprobada,
+      'precioUnitario': precioUnitario,
+      'subtotal': subtotal,
+      'observaciones': observaciones,
+      'createdAt': createdAt.toIso8601String(),
+    };
   }
 }
 
-/// Modelo extendido con datos del producto (para mostrar en UI)
+/// Modelo Extendido para UI
 class OrdenItemDetalle {
   final OrdenItem item;
+  // Datos desnormalizados del producto
   final String productoNombre;
   final String productoCodigo;
   final String unidadBase;
@@ -94,11 +69,6 @@ class OrdenItemDetalle {
     required this.categoriaNombre,
   });
 
-  /// Cantidad final (aprobada o solicitada)
   double get cantidadFinal => item.cantidadAprobada ?? item.cantidadSolicitada;
-
-  /// Indica si fue modificada
-  bool get fueModificada =>
-      item.cantidadAprobada != null &&
-          item.cantidadAprobada != item.cantidadSolicitada;
+  bool get fueModificada => item.cantidadAprobada != null && item.cantidadAprobada != item.cantidadSolicitada;
 }

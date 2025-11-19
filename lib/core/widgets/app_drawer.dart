@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../../features/stock/presentation/pages/catalogo_page.dart';
-import '../../features/stock/presentation/pages/stock_page.dart';
 import '../../features/clientes/presentation/pages/clientes_list_page.dart';
 import '../../features/obras/presentation/pages/obras_list_page.dart';
 import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
@@ -10,8 +9,7 @@ import '../../features/acopios/presentation/pages/acopios_list_page.dart';
 import '../../features/stock/presentation/pages/consultar_disponibilidad_page.dart';
 import '../../features/reportes/presentation/pages/reportes_menu_page.dart';
 import '../../features/ordenes_internas/presentation/pages/ordenes_page.dart';
-
-
+import '../../features/stock/presentation/pages/stock_page.dart';
 
 /// Drawer (menú lateral) de la aplicación S&G
 ///
