@@ -18,6 +18,24 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    // INICIO CONFIGURACIÓN FLAVORS
+    flavorDimensions += listOf("env")
+
+    productFlavors {
+        create("prod") {
+            dimension = "env"
+            // Hereda el ID original. Busca credenciales en src/prod/
+            resValue("string", "app_name", "S&G Materiales")
+        }
+        create("dev") {
+            dimension = "env"
+            // Agrega .dev al ID. Busca credenciales en src/dev/
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "S&G Dev")
+        }
+    }
+// FIN CONFIGURACIÓN FLAVORS
+
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }

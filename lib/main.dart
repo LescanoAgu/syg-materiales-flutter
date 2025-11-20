@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // Asegúrate de que este archivo exista (generado por flutterfire)
-
 // Importamos las pantallas principales
 import 'features/stock/presentation/pages/stock_page.dart';
 import 'core/widgets/app_drawer.dart';
@@ -22,9 +20,7 @@ void main() async {
 
   // 2. Inicializar Firebase
   try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+    await Firebase.initializeApp();
     print("✅ Firebase inicializado correctamente");
   } catch (e) {
     print("❌ Error al inicializar Firebase: $e");
