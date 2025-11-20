@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../data/models/movimiento_stock_model.dart';
 import '../../data/models/producto_model.dart';
-import '../providers/producto_provider.dart';
 import '../providers/movimiento_stock_provider.dart';
 
 class MovimientoRegistroPage extends StatefulWidget {

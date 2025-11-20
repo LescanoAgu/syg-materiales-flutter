@@ -35,7 +35,9 @@ class SeedData {
       CategoriaModel(codigo: 'OG', nombre: 'Obra General', orden: 1),
       CategoriaModel(codigo: 'H', nombre: 'Hierros', orden: 2),
     ];
-    for (var c in categorias) await _categoriaRepo.crear(c);
+    for (var c in categorias) {
+      await _categoriaRepo.crear(c);
+    }
   }
 
   Future<void> _cargarProductos() async {

@@ -7,7 +7,7 @@ class ObraProvider extends ChangeNotifier {
 
   List<ObraModel> _obras = [];
   bool _isLoading = false;
-  bool _hayMasPaginas = false;
+  final bool _hayMasPaginas = false;
   int _totalObras = 0;
 
   List<ObraModel> get obras => _obras; // La UI espera ObraConCliente, pero ObraModel ya tiene los datos

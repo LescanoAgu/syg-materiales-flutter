@@ -298,7 +298,7 @@ class PdfService {
               _buildCelda(mov.motivo ?? '-'),
             ],
           );
-        }).toList(),
+        }),
       ],
     );
   }

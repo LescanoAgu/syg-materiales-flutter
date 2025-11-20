@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../stock/data/models/movimiento_stock_model.dart';
 import '../../../stock/data/repositories/movimiento_stock_repository.dart';
 import '../../data/services/pdf_service.dart';
-import '../../data/services/excel_service.dart';
 
 class ReporteStockPage extends StatefulWidget {
   const ReporteStockPage({super.key});

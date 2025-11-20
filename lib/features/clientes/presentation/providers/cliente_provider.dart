@@ -8,7 +8,7 @@ class ClienteProvider extends ChangeNotifier {
   List<ClienteModel> _clientes = [];
   bool _isLoading = false;
   // Variables de paginación simplificadas
-  bool _hayMasPaginas = false;
+  final bool _hayMasPaginas = false;
   int _totalClientes = 0;
 
   List<ClienteModel> get clientes => _clientes;
