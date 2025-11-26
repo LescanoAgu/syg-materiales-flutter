@@ -11,17 +11,18 @@ class MovimientoStockProvider extends ChangeNotifier {
   List<MovimientoStock> _movimientos = [];
   String? _errorMessage;
 
-  // Filtros
+  // Filtros actuales
   DateTime? _fechaDesde;
   DateTime? _fechaHasta;
   TipoMovimiento? _tipoFiltro;
-  String? _productoFiltroCodigo; // CAMBIO: String
+  String? _productoFiltroCodigo;
 
   MovimientoStockState get state => _state;
   List<MovimientoStock> get movimientos => _movimientos;
   String? get errorMessage => _errorMessage;
   bool get isLoading => _state == MovimientoStockState.loading;
 
+  // Carga general (Reporte)
   Future<void> cargarMovimientos({DateTime? desde, DateTime? hasta, TipoMovimiento? tipo}) async {
     _state = MovimientoStockState.loading;
     _fechaDesde = desde;
@@ -44,21 +45,28 @@ class MovimientoStockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> cargarMovimientosDeProducto(String productoId) async {
+  // ✅ MEJORADO: Ahora acepta filtro de TIPO
+  Future<void> cargarMovimientosDeProducto(String productoId, {TipoMovimiento? tipo}) async {
     _state = MovimientoStockState.loading;
     _productoFiltroCodigo = productoId;
+    _tipoFiltro = tipo;
     notifyListeners();
     try {
-      _movimientos = await _repository.obtenerMovimientos(productoId: productoId);
+      // El repositorio ya soportaba filtrar por producto Y tipo a la vez
+      _movimientos = await _repository.obtenerMovimientos(
+        productoId: productoId,
+        tipo: tipo,
+      );
       _state = MovimientoStockState.loaded;
     } catch (e) {
       _state = MovimientoStockState.error;
+      print("Error cargando historial producto: $e");
     }
     notifyListeners();
   }
 
   Future<bool> registrarMovimiento({
-    required String productoId, // CAMBIO: String
+    required String productoId,
     required TipoMovimiento tipo,
     required double cantidad,
     String? motivo,
@@ -78,8 +86,13 @@ class MovimientoStockProvider extends ChangeNotifier {
         usuarioId: usuarioId,
       );
 
-      _state = MovimientoStockState.loaded;
-      notifyListeners();
+      // Recargar según el contexto donde estábamos
+      if (_productoFiltroCodigo != null) {
+        await cargarMovimientosDeProducto(_productoFiltroCodigo!, tipo: _tipoFiltro);
+      } else {
+        await cargarMovimientos(tipo: _tipoFiltro);
+      }
+
       return true;
     } catch (e) {
       _state = MovimientoStockState.error;

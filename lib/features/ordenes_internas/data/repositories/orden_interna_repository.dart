@@ -1,222 +1,187 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/orden_interna_model.dart';
 import '../models/orden_item_model.dart';
-// Importamos repositorios para obtener datos al desnormalizar
 import '../../../../features/clientes/data/repositories/cliente_repository.dart';
 import '../../../../features/obras/data/repositories/obra_repository.dart';
-import '../../../../features/stock/data/repositories/producto_repository.dart';
 
 class OrdenInternaRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'ordenes_internas';
-
-  // Repos para buscar datos
   final ClienteRepository _clienteRepo = ClienteRepository();
-  final ObraRepository _obraRepo = ObraRepository();
-  final ProductoRepository _productoRepo = ProductoRepository();
 
-  // ========================================
-  // CREAR ORDEN
-  // ========================================
   Future<String> crearOrden({
     required String clienteId,
     required String obraId,
     required String solicitanteNombre,
     String? observacionesCliente,
-    required List<Map<String, dynamic>> items, // {productoId, cantidad, precio, ...}
+    required List<Map<String, dynamic>> items,
     String? usuarioCreadorId,
   }) async {
-
     return _firestore.runTransaction((transaction) async {
-      // 1. Generar correlativo usando un documento contador
+      // 1. CONTADOR (Lógica desglosada y segura)
       final contadorRef = _firestore.collection('sistema').doc('contadores');
       final contadorDoc = await transaction.get(contadorRef);
 
-      int nuevoNumero = 1;
+      int nuevoNum = 1;
       if (contadorDoc.exists) {
-        nuevoNumero = (contadorDoc.data()?['ordenes_count'] ?? 0) + 1;
+        final data = contadorDoc.data();
+        // Verificamos explícitamente que el dato exista y sea numérico
+        if (data != null && data.containsKey('ordenes_count')) {
+          nuevoNum = (data['ordenes_count'] as num).toInt() + 1;
+        }
       }
 
-      String codigoOrden = 'OI-${nuevoNumero.toString().padLeft(4, '0')}';
-
       // Actualizar contador
-      transaction.set(contadorRef, {'ordenes_count': nuevoNumero}, SetOptions(merge: true));
+      transaction.set(contadorRef, {'ordenes_count': nuevoNum}, SetOptions(merge: true));
 
-      // 2. Obtener datos para desnormalizar (Cliente y Obra)
-      // NOTA: En transacciones estrictas se debe leer dentro, pero para simplificar
-      // asumimos lectura previa o consistencia eventual de nombres.
+      // Generar Código (Ej: OI-0005)
+      String codigo = 'OI-${nuevoNum.toString().padLeft(4, '0')}';
+
+      // 2. OBTENER DATOS RELACIONADOS
       final cliente = await _clienteRepo.obtenerPorId(clienteId);
-      // Asumimos que el obraId es el ID del documento o el código
-      // Si usas código como ID en obras, esto funciona directo.
-      // Si no, tendrías que buscar la obra. Asumiremos que obraId es el ID del doc.
       final obraDoc = await _firestore.collection('obras').doc(obraId).get();
 
-      // 3. Preparar Orden
-      final nuevaOrdenRef = _firestore.collection(_collection).doc();
-      double total = 0;
+      // 3. PREPARAR REFERENCIA DE ORDEN
+      final ordenRef = _firestore.collection(_collection).doc();
+      double total = 0.0;
 
-      // 4. Procesar Items
-      for (var itemData in items) {
-        final prodId = itemData['productoId'] as String;
-        final cantidad = (itemData['cantidad'] as num).toDouble();
-        final precio = (itemData['precio'] as num).toDouble();
-        final subtotal = cantidad * precio;
+      // 4. PROCESAR ITEMS
+      for (var i in items) {
+        // Casting explícito y conversión a double para evitar errores de 'num'
+        final cantidad = (i['cantidad'] as num).toDouble();
+        final precio = (i['precio'] as num).toDouble();
+        final st = cantidad * precio; // Ahora st es double seguro
 
-        total += subtotal;
+        total += st;
 
-        // Obtener datos del producto para snapshot (guardar nombre histórico)
-        final prodDoc = await _firestore.collection('productos').doc(prodId).get();
-        final prodData = prodDoc.data() ?? {};
+        final itemRef = ordenRef.collection('items').doc();
 
-        // Referencia para el item en SUBCOLECCIÓN
-        final itemRef = nuevaOrdenRef.collection('items').doc();
-
-        final itemModel = OrdenItem(
+        // Crear objeto item
+        final item = OrdenItem(
           id: itemRef.id,
-          ordenId: nuevaOrdenRef.id,
-          productoId: prodId,
+          ordenId: ordenRef.id,
+          productoId: i['productoId'],
           cantidadSolicitada: cantidad,
           precioUnitario: precio,
-          subtotal: subtotal,
-          observaciones: itemData['observaciones'],
+          subtotal: st,
           createdAt: DateTime.now(),
+          observaciones: i['observaciones'],
         );
 
-        // Guardamos el item con datos desnormalizados del producto para evitar lecturas extra
-        final itemMap = itemModel.toMap();
-        itemMap['productoNombre'] = prodData['nombre'] ?? 'Producto eliminado';
-        itemMap['productoCodigo'] = prodData['codigo'] ?? '';
-        itemMap['unidadBase'] = prodData['unidadBase'] ?? '';
+        // Mapa base del item
+        final itemMap = item.toMap();
+
+        // Desnormalización (Guardar nombre del producto en el item para historial)
+        final prod = i['producto'];
+        if (prod != null) {
+          try {
+            // Accedemos a las propiedades del objeto ProductoModel
+            itemMap['productoNombre'] = prod.nombre;
+            itemMap['productoCodigo'] = prod.codigo;
+            itemMap['unidadBase'] = prod.unidadBase;
+          } catch (e) {
+            print("⚠️ Error menor desnormalizando producto en orden: $e");
+          }
+        }
 
         transaction.set(itemRef, itemMap);
       }
 
-      // 5. Guardar Orden
-      final ordenModel = OrdenInterna(
-        id: nuevaOrdenRef.id,
-        numero: codigoOrden,
-        clienteId: clienteId,
-        obraId: obraId,
-        solicitanteNombre: solicitanteNombre,
-        fechaPedido: DateTime.now(),
-        estado: 'solicitado',
-        observacionesCliente: observacionesCliente,
-        total: total,
-        usuarioCreadorId: usuarioCreadorId,
-        createdAt: DateTime.now(),
+      // 5. GUARDAR LA ORDEN PRINCIPAL
+      final orden = OrdenInterna(
+          id: ordenRef.id,
+          numero: codigo,
+          clienteId: clienteId,
+          obraId: obraId,
+          solicitanteNombre: solicitanteNombre,
+          fechaPedido: DateTime.now(),
+          total: total,
+          createdAt: DateTime.now(),
+          observacionesCliente: observacionesCliente,
+          // Datos desnormalizados para lectura rápida
+          clienteRazonSocial: cliente?.razonSocial,
+          obraNombre: obraDoc.exists ? (obraDoc.data()?['nombre'] as String?) : null
       );
 
-      final ordenMap = ordenModel.toMap();
-      // Desnormalizar nombres en la orden
-      if (cliente != null) ordenMap['clienteRazonSocial'] = cliente.razonSocial;
-      if (obraDoc.exists) ordenMap['obraNombre'] = obraDoc.data()?['nombre'] ?? '';
+      transaction.set(ordenRef, orden.toMap());
 
-      transaction.set(nuevaOrdenRef, ordenMap);
-
-      return nuevaOrdenRef.id;
+      return ordenRef.id;
     });
   }
 
   // ========================================
-  // LECTURA
+  // MÉTODOS DE LECTURA Y GESTIÓN
   // ========================================
+
   Future<List<OrdenInternaDetalle>> getOrdenes({String? estado}) async {
-    try {
-      Query query = _firestore.collection(_collection);
+    Query query = _firestore.collection(_collection).orderBy('createdAt', descending: true);
 
-      if (estado != null) {
-        query = query.where('estado', isEqualTo: estado);
-      }
-
-      query = query.orderBy('createdAt', descending: true);
-
-      final snapshot = await query.get();
-
-      // Mapeamos documentos a objetos
-      List<OrdenInternaDetalle> listaDetalle = [];
-
-      for (var doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-
-        final orden = OrdenInterna.fromMap(data);
-
-        // IMPORTANTE: Para la lista principal, quizás NO quieras cargar los items de todas las órdenes
-        // por un tema de costos de lectura (N+1).
-        // Aquí cargaremos una lista VACÍA de items por defecto para la vista general.
-        // El detalle completo se cargará en `getOrdenPorId`.
-
-        listaDetalle.add(OrdenInternaDetalle(
-          orden: orden,
-          clienteRazonSocial: data['clienteRazonSocial'] ?? 'Desconocido',
-          obraNombre: data['obraNombre'],
-          items: [], // Lista vacía para optimizar
-        ));
-      }
-      return listaDetalle;
-
-    } catch (e) {
-      print('❌ Error getOrdenes: $e');
-      return [];
+    if (estado != null) {
+      query = query.where('estado', isEqualTo: estado);
     }
-  }
 
-  /// Obtiene el detalle completo de UNA orden (incluyendo subcolección items)
-  Future<OrdenInternaDetalle?> getOrdenPorId(String ordenId) async {
-    try {
-      final doc = await _firestore.collection(_collection).doc(ordenId).get();
-      if (!doc.exists) return null;
+    final snap = await query.get();
 
-      final data = doc.data()!;
-      data['id'] = doc.id;
-      final orden = OrdenInterna.fromMap(data);
-
-      // Ahora sí leemos la subcolección de items
-      final itemsSnap = await doc.reference.collection('items').get();
-
-      final itemsDetalle = itemsSnap.docs.map((itemDoc) {
-        final iData = itemDoc.data();
-        iData['id'] = itemDoc.id;
-
-        // Aquí recuperamos los datos desnormalizados que guardamos al crear
-        return OrdenItemDetalle(
-          item: OrdenItem.fromMap(iData),
-          productoNombre: iData['productoNombre'] ?? '?',
-          productoCodigo: iData['productoCodigo'] ?? '?',
-          unidadBase: iData['unidadBase'] ?? 'u',
-          categoriaNombre: '', // Si es crítico, guardarlo también al crear
-        );
-      }).toList();
+    return snap.docs.map((d) {
+      final data = d.data() as Map<String, dynamic>;
+      data['id'] = d.id;
 
       return OrdenInternaDetalle(
-        orden: orden,
-        clienteRazonSocial: data['clienteRazonSocial'] ?? '',
+        orden: OrdenInterna.fromMap(data),
+        clienteRazonSocial: data['clienteRazonSocial'] ?? '?',
         obraNombre: data['obraNombre'],
-        items: itemsDetalle,
+        items: [], // Lista vacía en vista general para optimizar
       );
-
-    } catch (e) {
-      print('❌ Error getOrdenPorId: $e');
-      return null;
-    }
+    }).toList();
   }
 
-  // ========================================
-  // ACCIONES
-  // ========================================
-  Future<void> cambiarEstado({
-    required String ordenId,
-    required String nuevoEstado,
-    String? motivoRechazo,
-    String? observaciones,
-  }) async {
-    final updates = <String, dynamic>{
+  Future<OrdenInternaDetalle?> getOrdenPorId(String id) async {
+    final doc = await _firestore.collection(_collection).doc(id).get();
+    if (!doc.exists) return null;
+
+    final data = doc.data()!;
+    data['id'] = doc.id;
+
+    // Cargar subcolección items
+    final itemsSnap = await doc.reference.collection('items').get();
+    final items = itemsSnap.docs.map((d) {
+      final idata = d.data();
+      idata['id'] = d.id;
+
+      return OrdenItemDetalle(
+        item: OrdenItem.fromMap(idata),
+        productoNombre: idata['productoNombre'] ?? '?',
+        productoCodigo: idata['productoCodigo'] ?? '?',
+        unidadBase: idata['unidadBase'] ?? 'u',
+        categoriaNombre: '', // Dato opcional
+      );
+    }).toList();
+
+    return OrdenInternaDetalle(
+      orden: OrdenInterna.fromMap(data),
+      clienteRazonSocial: data['clienteRazonSocial'] ?? '?',
+      obraNombre: data['obraNombre'],
+      items: items,
+    );
+  }
+
+  Future<void> cambiarEstado({required String ordenId, required String nuevoEstado}) async {
+    await _firestore.collection(_collection).doc(ordenId).update({
       'estado': nuevoEstado,
       'updatedAt': DateTime.now().toIso8601String(),
-    };
-    if (motivoRechazo != null) updates['motivoRechazo'] = motivoRechazo;
-    if (observaciones != null) updates['observacionesInternas'] = observaciones;
+    });
+  }
 
-    await _firestore.collection(_collection).doc(ordenId).update(updates);
+  Future<void> eliminar(String id) async {
+    final ref = _firestore.collection(_collection).doc(id);
+
+    // 1. Borrar items (Subcolección)
+    final items = await ref.collection('items').get();
+    for (var doc in items.docs) {
+      await doc.reference.delete();
+    }
+
+    // 2. Borrar orden
+    await ref.delete();
   }
 }
