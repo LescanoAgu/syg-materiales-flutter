@@ -65,10 +65,14 @@ class _OrdenesPageState extends State<OrdenesPage> {
       child: ListTile(
         title: Text("${orden.numero} - ${ordenDetalle.clienteRazonSocial}"),
         subtitle: Text("Estado: ${orden.estado.toUpperCase()}"),
-        trailing: Text(ArgFormats.moneda(orden.total)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (context) => OrdenDetallePage(ordenDetalle: ordenDetalle)));
-        },
+          // ✅ FIX 2 & 3: Corregido el nombre del parámetro a 'ordenResumen'
+          Navigator.push(
+              context,
+              MaterialPageRoute(
+                  builder: (context) => OrdenDetallePage(ordenResumen: ordenDetalle)
+              ));},
       ),
     );
   }

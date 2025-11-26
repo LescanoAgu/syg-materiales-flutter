@@ -3,8 +3,9 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/app_drawer.dart';
-import '../../data/models/obra_model.dart'; // Aquí está el typedef ObraConCliente = ObraModel
+import '../../data/models/obra_model.dart';
 import '../providers/obra_provider.dart';
+import 'obra_form_page.dart'; // Import necesario para la navegación
 
 class ObrasListPage extends StatefulWidget {
   const ObrasListPage({super.key});
@@ -24,20 +25,6 @@ class _ObrasListPageState extends State<ObrasListPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ObraProvider>().cargarObras();
     });
-    _scrollController.addListener(_onScroll);
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
-      context.read<ObraProvider>().cargarMasObras();
-    }
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -50,39 +37,36 @@ class _ObrasListPageState extends State<ObrasListPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => context.read<ObraProvider>().cargarObras(),
-            tooltip: 'Actualizar',
           ),
         ],
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: AppColors.backgroundGradient,
-        ),
-        child: Column(
-          children: [
-            _buildSearchBar(),
-            _buildFiltroEstado(),
-            _buildEstadisticas(),
-            Expanded(
-              child: Consumer<ObraProvider>(
-                builder: (context, provider, child) {
-                  if (provider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (provider.obras.isEmpty) {
-                    return _buildEmptyState();
-                  }
-                  return _buildObrasList(provider.obras);
-                },
-              ),
+      body: Column(
+        children: [
+          _buildSearchBar(),
+          Expanded(
+            child: Consumer<ObraProvider>(
+              builder: (context, provider, child) {
+                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+                if (provider.obras.isEmpty) return const Center(child: Text('No hay obras cargadas'));
+
+                return ListView.builder(
+                  itemCount: provider.obras.length,
+                  padding: const EdgeInsets.all(16),
+                  itemBuilder: (context, index) {
+                    final obra = provider.obras[index];
+                    return _buildObraCard(obra);
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _mostrarFormularioObra(context),
+        onPressed: () => _navegarAFormulario(context),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Obra'),
+        backgroundColor: AppColors.primary,
       ),
     );
   }
@@ -92,260 +76,42 @@ class _ObrasListPageState extends State<ObrasListPage> {
       padding: const EdgeInsets.all(16),
       child: TextField(
         controller: _searchController,
-        decoration: InputDecoration(
-          hintText: 'Buscar por nombre, dirección o cliente...',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _searchController.text.isNotEmpty
-              ? IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: () {
-              _searchController.clear();
-              context.read<ObraProvider>().cargarObras();
-            },
-          )
-              : null,
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide.none,
-          ),
+        decoration: const InputDecoration(
+          hintText: 'Buscar obra...',
+          prefixIcon: Icon(Icons.search),
+          border: OutlineInputBorder(),
         ),
-        onChanged: (value) {
-          context.read<ObraProvider>().buscarObras(value);
-        },
+        onChanged: (v) => context.read<ObraProvider>().buscarObras(v),
       ),
-    );
-  }
-
-  Widget _buildFiltroEstado() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _buildEstadoChip('Activas'),
-          _buildEstadoChip('Pausadas'),
-          _buildEstadoChip('Finalizadas'),
-          _buildEstadoChip('Todas'),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEstadoChip(String estado) {
-    final isSelected = _filtroEstado == estado;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(estado),
-        selected: isSelected,
-        onSelected: (selected) {
-          setState(() {
-            _filtroEstado = estado;
-          });
-        },
-        backgroundColor: Colors.white,
-        selectedColor: AppColors.primary,
-        labelStyle: TextStyle(
-          color: isSelected ? Colors.white : AppColors.textDark,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEstadisticas() {
-    return Consumer<ObraProvider>(
-      builder: (context, provider, child) {
-        final total = provider.totalObras;
-        return Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.business, color: AppColors.primary, size: 32),
-              const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${provider.obras.length}/$total',
-                    style: AppTextStyles.h2.copyWith(color: AppColors.primary),
-                  ),
-                  Text(
-                    'Obras activas',
-                    style: AppTextStyles.caption,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildObrasList(List<ObraConCliente> obras) {
-    return Consumer<ObraProvider>(
-      builder: (context, provider, child) {
-        final itemCount = provider.hayMasPaginas ? obras.length + 1 : obras.length;
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: itemCount,
-          itemBuilder: (context, index) {
-            if (index >= obras.length) {
-              return _buildLoadingIndicator();
-            }
-            // CORRECCIÓN AQUÍ: No usamos .obra porque ObraConCliente ES ObraModel
-            final obra = obras[index];
-            return _buildObraCard(obra);
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return const Padding(
-      padding: EdgeInsets.all(16.0),
-      child: Center(child: CircularProgressIndicator()),
     );
   }
 
   Widget _buildObraCard(ObraModel obra) {
-    Color estadoColor;
-    IconData estadoIcon;
-
-    switch (obra.estado) {
-      case 'activa':
-        estadoColor = AppColors.success;
-        estadoIcon = Icons.check_circle;
-        break;
-      case 'pausada':
-        estadoColor = AppColors.warning;
-        estadoIcon = Icons.pause_circle;
-        break;
-      case 'finalizada':
-        estadoColor = AppColors.info;
-        estadoIcon = Icons.check_circle_outline;
-        break;
-      case 'cancelada':
-        estadoColor = AppColors.error;
-        estadoIcon = Icons.cancel;
-        break;
-      default:
-        estadoColor = AppColors.textMedium;
-        estadoIcon = Icons.help_outline;
-    }
-
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _verDetalleObra(context, obra),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      obra.codigo,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(estadoIcon, color: estadoColor, size: 20),
-                  const SizedBox(width: 4),
-                  Text(
-                    obra.estado.toUpperCase(),
-                    style: AppTextStyles.caption.copyWith(
-                      color: estadoColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                obra.nombre,
-                style: AppTextStyles.body1.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.person, size: 16, color: AppColors.textMedium),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      // CORRECCIÓN: Acceso directo a la propiedad desnormalizada
-                      obra.clienteRazonSocial ?? 'Sin Cliente',
-                      style: AppTextStyles.body2.copyWith(color: AppColors.textMedium),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 16, color: AppColors.textMedium),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      obra.direccion,
-                      style: AppTextStyles.caption,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: obra.estado == 'activa' ? Colors.green : Colors.grey,
+          child: const Icon(Icons.business, color: Colors.white),
         ),
+        title: Text(obra.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Cód: ${obra.codigo}'),
+            Text('Cliente: ${obra.clienteRazonSocial ?? "Sin asignar"}'),
+          ],
+        ),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () => _navegarAFormulario(context, obra: obra),
       ),
     );
   }
 
-  Widget _buildEmptyState() {
-    return const Center(child: Text('No hay obras'));
-  }
-
-  void _verDetalleObra(BuildContext context, ObraModel obra) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Ver detalle de: ${obra.nombre}')),
-    );
-  }
-
-  void _mostrarFormularioObra(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Próximamente: Formulario de obra')),
-    );
+  void _navegarAFormulario(BuildContext context, {ObraModel? obra}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ObraFormPage(obra: obra)),
+    ).then((_) => context.read<ObraProvider>().cargarObras());
   }
 }

@@ -1,4 +1,3 @@
-// lib/main_dev.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -15,26 +14,24 @@ void main() async {
         ? DefaultFirebaseOptionsDev.web
         : DefaultFirebaseOptionsDev.currentPlatform;
 
-    // 2. 🛑 FIX: Verificar si ya existe una instancia antes de inicializar
+    // 2. 🛑 FIX CRÍTICO: Verificar si ya existe una instancia antes de inicializar
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
-        name: 'materiales-syg-dev', // Opcional: Darle nombre específico en dev ayuda a evitar conflictos
+        name: 'materiales-syg-dev', // Nombre específico para evitar conflictos
         options: options,
       );
-      print("✅ [DEV] Firebase inicializado correctamente: ${options.projectId}");
+      print("✅ [DEV] Firebase inicializado correctamente.");
     } else {
-      // Si ya existe, usamos la instancia [DEFAULT] o la que esté activa
       print("ℹ️ [DEV] Firebase ya estaba inicializado, reutilizando instancia.");
     }
 
   } catch (e) {
     print("❌ [DEV] Error inicializando Firebase: $e");
 
-    // Si el error es "duplicate-app" (por si acaso falla el check), lo ignoramos y seguimos
-    if (e.toString().contains("duplicate-app")) {
-      print("⚠️ Ignorando error de duplicado, la app puede continuar.");
+    // Si es error de duplicado, lo ignoramos para que la app no se detenga
+    if (e.toString().contains("duplicate-app") || e.toString().contains("already exists")) {
+      print("⚠️ Ignorando error de duplicado, continuamos.");
     } else {
-      // Solo mostramos pantalla de error si es algo grave (ej: sin internet, json corrupto)
       initialScreen = ErrorScreen(error: e.toString());
     }
   }

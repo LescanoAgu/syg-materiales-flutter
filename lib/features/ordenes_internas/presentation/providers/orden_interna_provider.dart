@@ -12,16 +12,14 @@ class OrdenInternaProvider extends ChangeNotifier {
   List<OrdenInternaDetalle> get ordenes => _ordenesDetalle;
   bool get isLoading => _isLoading;
   bool get hasData => _ordenesDetalle.isNotEmpty;
-  bool get hasError => _errorMessage != null;
   String? get errorMessage => _errorMessage;
 
-  // Estadísticas
+  // Estadísticas simples
   int get ordenesSolicitadas => _ordenesDetalle.where((o) => o.orden.estado == 'solicitado').length;
-  int get ordenesEnPreparacion => _ordenesDetalle.where((o) => o.orden.estado == 'en_preparacion').length;
-  int get ordenesDespachadas => _ordenesDetalle.where((o) => o.orden.estado == 'despachado').length;
 
   Future<void> cargarOrdenes({String? estado}) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
     try {
       _ordenesDetalle = await _repository.getOrdenes(estado: estado);
@@ -34,34 +32,40 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> refrescar() => cargarOrdenes();
+  // ✅ FIX 1: MÉTODO FALTANTE (Para cargar los items 'on-demand')
+  /// Obtiene el detalle completo de una orden (incluyendo sus items)
+  Future<OrdenInternaDetalle?> cargarDetalleOrden(String ordenId) async {
+    try {
+      return await _repository.getOrdenPorId(ordenId);
+    } catch (e) {
+      print("Error cargando detalle: $e");
+      return null;
+    }
+  }
 
-  Future<void> filtrarPorEstado(String? estado) async => cargarOrdenes(estado: estado);
-
-  // Corrección: Aceptar parámetros extra y opcionales
   Future<bool> crearOrden({
-    required String clienteCodigo, // Usamos código como ID
-    required String obraCodigo,
+    required String clienteId,
+    required String obraId,
     required String solicitanteNombre,
-    List<Map<String, dynamic>>? items,
+    required List<Map<String, dynamic>> items, // Lista de productos
     String? observaciones,
-    // Parámetros extra que pide la UI
     DateTime? fechaSolicitud,
     String? prioridad,
-    int? usuarioId, // Legacy, ignorar o usar
   }) async {
     try {
       _isLoading = true;
       notifyListeners();
 
       String obsFinal = observaciones ?? '';
-      if (prioridad != null) obsFinal += '\nPrioridad: $prioridad';
+      if (prioridad != null && prioridad.isNotEmpty) {
+        obsFinal = "[${prioridad.toUpperCase()}] $obsFinal".trim();
+      }
 
       await _repository.crearOrden(
-        clienteId: clienteCodigo,
-        obraId: obraCodigo,
+        clienteId: clienteId,
+        obraId: obraId,
         solicitanteNombre: solicitanteNombre,
-        items: items ?? [],
+        items: items,
         observacionesCliente: obsFinal,
       );
 
@@ -76,10 +80,7 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> cambiarEstado({
-    required String ordenId,
-    required String nuevoEstado
-  }) async {
+  Future<bool> cambiarEstado({required String ordenId, required String nuevoEstado}) async {
     try {
       await _repository.cambiarEstado(ordenId: ordenId, nuevoEstado: nuevoEstado);
       await cargarOrdenes();
@@ -87,16 +88,13 @@ class OrdenInternaProvider extends ChangeNotifier {
     } catch (e) { return false; }
   }
 
-  // Métodos faltantes para evitar errores de compilación
-  Future<bool> aprobarOrden(String ordenId, {int? aprobadoPorUsuarioId, String? observacionesInternas}) async {
-    return cambiarEstado(ordenId: ordenId, nuevoEstado: 'aprobado');
-  }
+  // Métodos para aprobar/rechazar/cancelar
+  Future<bool> aprobarOrden(String id, {int? aprobadoPorUsuarioId, String? observacionesInternas}) async =>
+      cambiarEstado(ordenId: id, nuevoEstado: 'aprobado');
 
-  Future<bool> rechazarOrden(String ordenId, {int? rechazadoPorUsuarioId, required String motivoRechazo}) async {
-    return cambiarEstado(ordenId: ordenId, nuevoEstado: 'rechazado');
-  }
+  Future<bool> rechazarOrden(String id, {int? rechazadoPorUsuarioId, required String motivoRechazo}) async =>
+      cambiarEstado(ordenId: id, nuevoEstado: 'rechazado');
 
-  Future<bool> cancelarOrden(String ordenId) async {
-    return cambiarEstado(ordenId: ordenId, nuevoEstado: 'cancelado');
-  }
+  Future<bool> cancelarOrden(String id) async =>
+      cambiarEstado(ordenId: id, nuevoEstado: 'cancelado');
 }
