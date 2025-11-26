@@ -4,8 +4,10 @@ import '../../../../core/constants/app_colors.dart';
 import '../../data/models/movimiento_stock_model.dart';
 import '../../data/models/producto_model.dart';
 import '../providers/movimiento_stock_provider.dart';
+// CORRECCIÓN: Faltaba este import
+import '../providers/producto_provider.dart';
 
-class MovimientoRegistroPage extends StatefulWidget { // CLASE CORRECTA
+class MovimientoRegistroPage extends StatefulWidget {
   final ProductoConStock? productoInicial;
   const MovimientoRegistroPage({super.key, this.productoInicial});
 

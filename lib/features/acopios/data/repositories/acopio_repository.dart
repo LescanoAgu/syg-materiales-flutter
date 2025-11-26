@@ -25,7 +25,8 @@ class AcopioRepository {
       final snapshot = await query.get();
 
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        // CORRECCIÓN: Casting explícito a Map<String, dynamic>
+        final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return AcopioDetalle.fromMap(data);
       }).toList();
@@ -49,7 +50,8 @@ class AcopioRepository {
       final snapshot = await query.limit(50).get();
 
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        // CORRECCIÓN: Casting explícito a Map<String, dynamic>
+        final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return MovimientoAcopioModel.fromMap(data);
       }).toList();
