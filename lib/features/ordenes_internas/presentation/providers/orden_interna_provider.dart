@@ -32,6 +32,17 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ FIX 1: MÉTODO FALTANTE (Para cargar los items 'on-demand')
+  /// Obtiene el detalle completo de una orden (incluyendo sus items)
+  Future<OrdenInternaDetalle?> cargarDetalleOrden(String ordenId) async {
+    try {
+      return await _repository.getOrdenPorId(ordenId);
+    } catch (e) {
+      print("Error cargando detalle: $e");
+      return null;
+    }
+  }
+
   Future<bool> crearOrden({
     required String clienteId,
     required String obraId,
@@ -45,10 +56,9 @@ class OrdenInternaProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      // Formatear observaciones para incluir prioridad si existe
       String obsFinal = observaciones ?? '';
       if (prioridad != null && prioridad.isNotEmpty) {
-        obsFinal = "[$prioridad.toUpperCase()] $obsFinal".trim();
+        obsFinal = "[${prioridad.toUpperCase()}] $obsFinal".trim();
       }
 
       await _repository.crearOrden(
@@ -59,7 +69,7 @@ class OrdenInternaProvider extends ChangeNotifier {
         observacionesCliente: obsFinal,
       );
 
-      await cargarOrdenes(); // Recargar lista
+      await cargarOrdenes();
       return true;
     } catch (e) {
       _errorMessage = e.toString();
