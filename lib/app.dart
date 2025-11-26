@@ -1,4 +1,3 @@
-// lib/app.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/constants/app_colors.dart';
@@ -12,6 +11,9 @@ import 'features/clientes/presentation/providers/cliente_provider.dart';
 import 'features/acopios/presentation/providers/acopio_provider.dart';
 import 'features/obras/presentation/providers/obra_provider.dart';
 import 'features/ordenes_internas/presentation/providers/orden_interna_provider.dart';
+
+// IMPORTANTE: Este es el import que faltaba para que funcione el botón de carga
+import 'services/firestore_service.dart';
 
 class SyGMaterialesApp extends StatelessWidget {
   final Widget home;
@@ -84,8 +86,17 @@ class ErrorScreen extends StatelessWidget {
   }
 }
 
-class HomePage extends StatelessWidget {
+// HomePage convertida a StatefulWidget para manejar la carga del Seed Data
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  bool _cargando = false;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,18 +106,83 @@ class HomePage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle_outline, size: 100, color: AppColors.success),
+            const Icon(Icons.business_center, size: 100, color: AppColors.primary),
             const SizedBox(height: 20),
-            const Text('¡Sistema Conectado!', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 30),
+            const Text('¡Sistema Conectado!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            // Muestra en qué entorno estamos (según el título de la app o configuración visual)
+            const Chip(label: Text("Entorno Activo")),
+
+            const SizedBox(height: 40),
+
+            // Botón Principal: Ir al Stock
             ElevatedButton.icon(
               icon: const Icon(Icons.inventory),
               label: const Text('Ir al Stock'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
               onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StockPage())),
+            ),
+
+            const SizedBox(height: 40),
+            const Divider(indent: 50, endIndent: 50),
+            const SizedBox(height: 20),
+            const Text("HERRAMIENTAS DE DESARROLLO", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)),
+            const SizedBox(height: 10),
+
+            // 🔴 BOTÓN DE SEED DATA (Carga Inicial)
+            _cargando
+                ? const Column(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 10),
+                Text("Inicializando base de datos..."),
+              ],
+            )
+                : FilledButton.icon(
+              onPressed: _ejecutarSeedData,
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.cloud_upload),
+              label: const Text('INICIALIZAR BASE DE DATOS (SEED)'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _ejecutarSeedData() async {
+    setState(() => _cargando = true);
+    try {
+      // Llamamos al servicio que importamos arriba
+      await FirestoreService().inicializarBaseDatos();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Datos cargados correctamente en Firebase'),
+              backgroundColor: AppColors.success,
+              duration: Duration(seconds: 3),
+            )
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al cargar datos: $e'),
+              backgroundColor: AppColors.error,
+              duration: const Duration(seconds: 5),
+            )
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _cargando = false);
+    }
   }
 }

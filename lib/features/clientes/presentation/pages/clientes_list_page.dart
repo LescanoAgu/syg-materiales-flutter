@@ -5,6 +5,7 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/cliente_model.dart';
 import '../providers/cliente_provider.dart';
+import 'cliente_form_page.dart'; // Importamos el formulario
 
 /// Pantalla de Lista de Clientes
 class ClientesListPage extends StatefulWidget {
@@ -27,15 +28,11 @@ class _ClientesListPageState extends State<ClientesListPage> {
       context.read<ClienteProvider>().cargarClientes();
     });
 
-    // ← NUEVO: Escuchar el scroll para cargar más datos
     _scrollController.addListener(_onScroll);
   }
 
-// ← NUEVO MÉTODO: Se llama cada vez que el usuario hace scroll
   void _onScroll() {
-    // Verificar si llegó al 80% del scroll (casi al final)
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.8) {
-      // Cargar más clientes
       context.read<ClienteProvider>().cargarMasClientes();
     }
   }
@@ -43,7 +40,7 @@ class _ClientesListPageState extends State<ClientesListPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _scrollController.dispose();  // ← NUEVO: Liberar recursos
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -170,11 +167,11 @@ class _ClientesListPageState extends State<ClientesListPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${provider.clientes.length}/$total',  // ← Muestra "20/150"
+                    '$total',
                     style: AppTextStyles.h2.copyWith(color: AppColors.primary),
                   ),
                   Text(
-                    'Clientes activos',
+                    'Clientes registrados',
                     style: AppTextStyles.caption,
                   ),
                 ],
@@ -192,22 +189,19 @@ class _ClientesListPageState extends State<ClientesListPage> {
   Widget _buildClientesList(List<ClienteModel> clientes) {
     return Consumer<ClienteProvider>(
       builder: (context, provider, child) {
-        // Calcular cuántos items mostrar
-        // Si hay más páginas, agregamos un item extra para el spinner
         final itemCount = provider.hayMasPaginas
-            ? clientes.length + 1  // ← +1 para el spinner de carga
+            ? clientes.length + 1
             : clientes.length;
 
         return ListView.builder(
-          controller: _scrollController,  // ← IMPORTANTE: Conectar el controller
+          controller: _scrollController,
           itemCount: itemCount,
+          padding: const EdgeInsets.only(bottom: 80), // Espacio para FAB
           itemBuilder: (context, index) {
-            // Si es el último item Y hay más páginas, mostrar spinner
             if (index >= clientes.length) {
               return _buildLoadingIndicator();
             }
 
-            // Mostrar el cliente normal
             final cliente = clientes[index];
             return _buildClienteCard(cliente);
           },
@@ -220,26 +214,14 @@ class _ClientesListPageState extends State<ClientesListPage> {
     return const Padding(
       padding: EdgeInsets.all(16.0),
       child: Center(
-        child: Column(
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 8),
-            Text(
-              'Cargando más clientes...',
-              style: TextStyle(
-                color: AppColors.textLight,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
+        child: CircularProgressIndicator(),
       ),
     );
   }
 
   Widget _buildClienteCard(ClienteModel cliente) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),
@@ -249,7 +231,7 @@ class _ClientesListPageState extends State<ClientesListPage> {
         leading: CircleAvatar(
           backgroundColor: AppColors.primaryLight.withOpacity(0.2),
           child: Text(
-            cliente.razonSocial[0].toUpperCase(),
+            cliente.razonSocial.isNotEmpty ? cliente.razonSocial[0].toUpperCase() : '?',
             style: const TextStyle(
               color: AppColors.primary,
               fontWeight: FontWeight.bold,
@@ -282,29 +264,35 @@ class _ClientesListPageState extends State<ClientesListPage> {
                     ),
                   ),
                 ),
-                if (cliente.cuit != null) ...[
+                if (cliente.cuit != null && cliente.cuit!.isNotEmpty) ...[
                   const SizedBox(width: 8),
                   Text(
-                    'CUIT: ${cliente.cuitFormateado}',
+                    cliente.cuitFormateado,
                     style: AppTextStyles.caption,
                   ),
                 ],
               ],
             ),
             const SizedBox(height: 4),
-            if (cliente.condicionIva != null)
+            if (cliente.direccionCompleta != '-')
               Text(
-                cliente.condicionIva!,
+                cliente.direccionCompleta,
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.textMedium,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
           ],
         ),
 
-        trailing: const Icon(Icons.chevron_right, color: AppColors.textLight),
+        // Botón de editar
+        trailing: IconButton(
+          icon: const Icon(Icons.edit, color: AppColors.textLight),
+          onPressed: () => _mostrarFormularioCliente(context, cliente: cliente),
+        ),
 
-        onTap: () => _verDetalleCliente(context, cliente),
+        onTap: () => _mostrarFormularioCliente(context, cliente: cliente),
       ),
     );
   }
@@ -317,7 +305,7 @@ class _ClientesListPageState extends State<ClientesListPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.people_outline,
             size: 80,
             color: AppColors.textLight,
@@ -340,17 +328,15 @@ class _ClientesListPageState extends State<ClientesListPage> {
   // ========================================
   // NAVEGACIÓN
   // ========================================
-  void _verDetalleCliente(BuildContext context, ClienteModel cliente) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Ver detalle de: ${cliente.razonSocial}')),
-    );
-    // TODO: Navegar a pantalla de detalle
-  }
-
-  void _mostrarFormularioCliente(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Próximamente: Formulario de cliente')),
-    );
-    // TODO: Navegar a pantalla de formulario
+  void _mostrarFormularioCliente(BuildContext context, {ClienteModel? cliente}) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClienteFormPage(cliente: cliente),
+      ),
+    ).then((_) {
+      // Recargar al volver por si hubo cambios
+      context.read<ClienteProvider>().cargarClientes();
+    });
   }
 }

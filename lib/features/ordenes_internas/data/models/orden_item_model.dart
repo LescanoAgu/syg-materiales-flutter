@@ -1,4 +1,3 @@
-/// Modelo de Item (Subcolección en Firestore)
 class OrdenItem {
   final String? id;
   final String ordenId;
@@ -24,16 +23,16 @@ class OrdenItem {
 
   factory OrdenItem.fromMap(Map<String, dynamic> map) {
     return OrdenItem(
-      id: map['id'] as String?,
-      ordenId: map['ordenId'] as String? ?? '',
-      productoId: map['productoId'] as String? ?? '',
-      cantidadSolicitada: (map['cantidadSolicitada'] as num).toDouble(),
+      id: map['id']?.toString(),
+      ordenId: map['ordenId']?.toString() ?? '',
+      productoId: map['productoId']?.toString() ?? '',
+      cantidadSolicitada: (map['cantidadSolicitada'] as num?)?.toDouble() ?? 0.0,
       cantidadAprobada: (map['cantidadAprobada'] as num?)?.toDouble(),
-      precioUnitario: (map['precioUnitario'] as num).toDouble(),
-      subtotal: (map['subtotal'] as num).toDouble(),
-      observaciones: map['observaciones'] as String?,
+      precioUnitario: (map['precioUnitario'] as num?)?.toDouble() ?? 0.0,
+      subtotal: (map['subtotal'] as num?)?.toDouble() ?? 0.0,
+      observaciones: map['observaciones']?.toString(),
       createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'])
+          ? DateTime.parse(map['createdAt'].toString())
           : DateTime.now(),
     );
   }
@@ -52,10 +51,9 @@ class OrdenItem {
   }
 }
 
-/// Modelo Extendido para UI
+/// Modelo para la UI (incluye nombres para mostrar en la lista)
 class OrdenItemDetalle {
   final OrdenItem item;
-  // Datos desnormalizados del producto
   final String productoNombre;
   final String productoCodigo;
   final String unidadBase;
