@@ -36,6 +36,7 @@ class ProductoSearchDelegate extends SearchDelegate<ProductoModel?> {
 
   Widget _buildList(BuildContext context) {
     // Lógica de filtrado potente: Nombre, Código o Categoría
+    final resultados = query.isEmpty
         ? productos
         : productos.where((p) {
       final q = query.toLowerCase();
