@@ -2,73 +2,206 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import '../../../../core/constants/app_colors.dart'; // Para usar colores si hace falta (aunque PDF usa PdfColors)
+// 1. IMPORTANTE: Importar esto para arreglar el error de Locale
+import 'package:intl/date_symbol_data_local.dart';
+import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../stock/data/models/movimiento_stock_model.dart';
-// Importamos los modelos de Orden
 import '../../../ordenes_internas/data/models/orden_interna_model.dart';
 import '../../../ordenes_internas/data/models/orden_item_model.dart';
 
 class PdfService {
 
-  // --- REPORTE DE STOCK (Ya lo tenías) ---
+  // --- REPORTE DE STOCK ---
   Future<void> generarReporteMovimientosStock({
     required List<MovimientoStock> movimientos,
     DateTime? fechaDesde,
     DateTime? fechaHasta,
   }) async {
+    // 2. ARREGLO LOCALE: Inicializar datos de formato para español
+    await initializeDateFormatting('es_AR', null);
+
     final pdf = pw.Document();
 
-    // ... (Tu lógica anterior de stock, resumida aquí para no ocupar espacio innecesario) ...
-    // Si quieres mantener el reporte de stock, asegúrate de no borrar su lógica interna.
-    // Para este ejemplo, me enfoco en el nuevo método.
-  }
+    // Agrupamos movimientos por Producto ID para que el reporte sea ordenado
+    final Map<String, List<MovimientoStock>> movimientosPorProducto = {};
+    for (var m in movimientos) {
+      if (!movimientosPorProducto.containsKey(m.productoId)) {
+        movimientosPorProducto[m.productoId] = [];
+      }
+      movimientosPorProducto[m.productoId]!.add(m);
+    }
 
-  // --- NUEVO: REMITO DE ORDEN ---
-  Future<void> generarRemitoOrden(OrdenInternaDetalle ordenDetalle) async {
-    final pdf = pw.Document();
-    final orden = ordenDetalle.orden;
-
-    // Agregamos página
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
         build: (pw.Context context) {
           return [
-            // 1. CABECERA
+            _buildHeaderGeneral('REPORTE DE MOVIMIENTOS DE STOCK', fechaDesde, fechaHasta),
+            pw.SizedBox(height: 20),
+
+            // Generamos una sección por cada producto
+            ...movimientosPorProducto.entries.map((entry) {
+              final productoId = entry.key;
+              final listaMovimientos = entry.value;
+
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    width: double.infinity,
+                    child: pw.Text(
+                      'PRODUCTO: $productoId', // Si tuvieras el nombre, iría aquí
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                  ),
+                  pw.SizedBox(height: 5),
+                  _buildTablaMovimientos(listaMovimientos),
+                  pw.SizedBox(height: 15),
+                ],
+              );
+            }).toList(),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+      name: 'Reporte_Stock.pdf',
+    );
+  }
+
+  // --- REMITO DE ORDEN ---
+  Future<void> generarRemitoOrden(OrdenInternaDetalle ordenDetalle) async {
+    // También inicializamos aquí por si acaso
+    await initializeDateFormatting('es_AR', null);
+
+    final pdf = pw.Document();
+    final orden = ordenDetalle.orden;
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(40),
+        build: (pw.Context context) {
+          return [
             _buildHeaderOrden(orden),
             pw.SizedBox(height: 20),
-
-            // 2. DATOS CLIENTE Y OBRA
             _buildInfoCliente(ordenDetalle),
             pw.SizedBox(height: 20),
-
-            // 3. TABLA DE PRODUCTOS
             _buildTablaProductos(ordenDetalle.items),
             pw.SizedBox(height: 20),
-
-            // 4. TOTALES Y FIRMA
             _buildFooterOrden(orden),
           ];
         },
       ),
     );
 
-    // Abrir vista previa
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
       name: 'Orden_${orden.numero}.pdf',
     );
   }
 
-  // --- WIDGETS PDF ---
+  // ========================================
+  // WIDGETS AUXILIARES
+  // ========================================
+
+  pw.Widget _buildHeaderGeneral(String titulo, DateTime? desde, DateTime? hasta) {
+    String periodo = 'Histórico Completo';
+    if (desde != null || hasta != null) {
+      periodo = '${desde != null ? ArgFormats.fecha(desde) : "Inicio"} - ${hasta != null ? ArgFormats.fecha(hasta) : "Hoy"}';
+    }
+
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('S&G MATERIALES', style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+        pw.SizedBox(height: 5),
+        pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text(titulo, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.teal)),
+            pw.Text(periodo, style: const pw.TextStyle(fontSize: 10)),
+          ],
+        ),
+        pw.Divider(color: PdfColors.teal),
+      ],
+    );
+  }
+
+  pw.Widget _buildTablaMovimientos(List<MovimientoStock> movimientos) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: PdfColors.grey300),
+      columnWidths: {
+        0: const pw.FlexColumnWidth(2), // Fecha
+        1: const pw.FlexColumnWidth(2), // Tipo
+        2: const pw.FlexColumnWidth(1.5), // Cantidad
+        3: const pw.FlexColumnWidth(3), // Motivo
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.teal50),
+          children: [
+            _th('FECHA'),
+            _th('TIPO'),
+            _th('CANTIDAD', align: pw.TextAlign.center),
+            _th('MOTIVO / REF'),
+          ],
+        ),
+        ...movimientos.map((m) {
+          final colorTipo = m.tipo == TipoMovimiento.entrada ? PdfColors.green700 :
+          (m.tipo == TipoMovimiento.salida ? PdfColors.red700 : PdfColors.orange700);
+
+          return pw.TableRow(
+            children: [
+              _td(ArgFormats.fechaHora(m.createdAt)),
+              _td(m.tipo.name.toUpperCase(), color: colorTipo, isBold: true),
+              _td(m.cantidad.toStringAsFixed(2), align: pw.TextAlign.center, isBold: true),
+              _td('${m.motivo ?? "-"} ${m.referencia != null ? "(${m.referencia})" : ""}'),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  // ... (Mantén los métodos _buildHeaderOrden, _buildInfoCliente, _buildTablaProductos, _buildFooterOrden, _th y _td iguales que antes)
+  // Solo agrego una pequeña mejora al helper _td para soportar color y negrita:
+
+  pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: align),
+    );
+  }
+
+  pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, PdfColor? color, bool isBold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(
+          text,
+          style: pw.TextStyle(
+              fontSize: 9,
+              color: color ?? PdfColors.black,
+              fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal
+          ),
+          textAlign: align
+      ),
+    );
+  }
+
+  // --- COPIA AQUÍ TUS MÉTODOS RESTANTES (_buildHeaderOrden, etc) DEL ARCHIVO ANTERIOR ---
+  // ... (Si necesitas que te los pase de nuevo completos, avísame, pero con esto cubrimos el error y la nueva funcionalidad)
 
   pw.Widget _buildHeaderOrden(OrdenInterna orden) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        // Logo / Empresa
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -76,7 +209,6 @@ class PdfService {
             pw.Text('Ingeniería y Construcción', style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700)),
           ],
         ),
-        // Datos Orden
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
@@ -131,14 +263,13 @@ class PdfService {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: {
-        0: const pw.FlexColumnWidth(3), // Producto
-        1: const pw.FlexColumnWidth(1), // Cant
-        2: const pw.FlexColumnWidth(1), // Unidad
-        3: const pw.FlexColumnWidth(1.5), // Precio
-        4: const pw.FlexColumnWidth(1.5), // Subtotal
+        0: const pw.FlexColumnWidth(3),
+        1: const pw.FlexColumnWidth(1),
+        2: const pw.FlexColumnWidth(1),
+        3: const pw.FlexColumnWidth(1.5),
+        4: const pw.FlexColumnWidth(1.5),
       },
       children: [
-        // Header Tabla
         pw.TableRow(
           decoration: const pw.BoxDecoration(color: PdfColors.teal50),
           children: [
@@ -149,7 +280,6 @@ class PdfService {
             _th('SUBTOTAL', align: pw.TextAlign.right),
           ],
         ),
-        // Items
         ...items.map((e) => pw.TableRow(
           children: [
             _td(e.productoNombre),
@@ -168,7 +298,6 @@ class PdfService {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
-        // Observaciones
         pw.Expanded(
           child: orden.observacionesCliente != null && orden.observacionesCliente!.isNotEmpty
               ? pw.Container(
@@ -188,7 +317,6 @@ class PdfService {
               : pw.Container(),
         ),
         pw.SizedBox(width: 20),
-        // Total
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: pw.BoxDecoration(
@@ -203,21 +331,6 @@ class PdfService {
           ),
         ),
       ],
-    );
-  }
-
-  // Helpers de celda
-  pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
-      child: pw.Text(text, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: align),
-    );
-  }
-
-  pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
-      child: pw.Text(text, style: const pw.TextStyle(fontSize: 9), textAlign: align),
     );
   }
 }

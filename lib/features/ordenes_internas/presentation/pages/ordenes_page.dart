@@ -29,6 +29,17 @@ class _OrdenesPageState extends State<OrdenesPage> {
       appBar: AppBar(
         title: const Text('📋 Órdenes Internas'),
         flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppColors.primaryGradient)),
+        // AGREGAMOS ESTO:
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            // Volvemos a la pantalla principal (StockPage o HomePage)
+            // Usamos pushReplacement para no dejar basura en el stack
+            Navigator.pushReplacementNamed(context, '/');
+            // O si no usas rutas nombradas:
+            // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const StockPage()));
+          },
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.filter_list), onPressed: () {}),
         ],

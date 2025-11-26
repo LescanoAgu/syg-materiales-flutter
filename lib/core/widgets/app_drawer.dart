@@ -161,14 +161,15 @@ class AppDrawer extends StatelessWidget {
                     );
                   },
                 ),
-                _buildMenuItem(  // ← NUEVO
+                _buildMenuItem(
                   context,
                   icon: Icons.swap_horiz,
                   title: 'Movimientos de Stock',
                   subtitle: 'Historial y Kardex',
                   onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
+                    Navigator.pop(context); // Cierra el drawer
+                    // CAMBIO: Usamos push en vez de pushReplacement para que tenga botón atrás
+                    Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => const MovimientoHistorialPage(),
