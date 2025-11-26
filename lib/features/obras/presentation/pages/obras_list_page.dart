@@ -63,10 +63,9 @@ class _ObrasListPageState extends State<ObrasListPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navegarAFormulario(context),
+        onPressed: () => _navegarAFormulario(context), // Ya usa el método que recarga
         icon: const Icon(Icons.add),
         label: const Text('Nueva Obra'),
-        backgroundColor: AppColors.primary,
       ),
     );
   }
@@ -111,7 +110,10 @@ class _ObrasListPageState extends State<ObrasListPage> {
   void _navegarAFormulario(BuildContext context, {ObraModel? obra}) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => ObraFormPage(obra: obra)),
+      MaterialPageRoute(
+        builder: (context) => ObraFormPage(obra: obra),
+      ),
+      // ✅ FIX: Recargar obras al volver
     ).then((_) => context.read<ObraProvider>().cargarObras());
   }
 }

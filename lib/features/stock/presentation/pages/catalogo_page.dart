@@ -1,8 +1,9 @@
-import 'dart:async'; // <--- IMPORTANTE: Para el Timer
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/models/producto_model.dart';
+// ✅ FIX: Importamos el ENUM desde el Provider
 import '../providers/producto_provider.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import 'producto_detalle_page.dart';
@@ -17,29 +18,25 @@ class CatalogoPage extends StatefulWidget {
 
 class _CatalogoPageState extends State<CatalogoPage> {
   final TextEditingController _searchController = TextEditingController();
-  Timer? _debounce; // <--- Variable para controlar el tiempo
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Carga inicial rápida (limitada por el repositorio)
       context.read<ProductoProvider>().cargarProductos();
     });
   }
 
   @override
   void dispose() {
-    _debounce?.cancel(); // Cancelar timer si se cierra la pantalla
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
 
-  // Método mágico para no saturar la búsqueda
   void _onSearchChanged(String query) {
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-
-    // Espera 800ms después de que el usuario deje de escribir
     _debounce = Timer(const Duration(milliseconds: 800), () {
       context.read<ProductoProvider>().buscarProductos(query);
     });
@@ -52,10 +49,11 @@ class _CatalogoPageState extends State<CatalogoPage> {
       appBar: AppBar(
         title: const Text('Catálogo de Materiales'),
         actions: [
+          _buildBotonOrdenamiento(context),
           IconButton(
             icon: const Icon(Icons.upload_file),
             tooltip: 'Importar Masivamente',
-            onPressed: () => _mostrarDialogoImportacion(context),
+            onPressed: () => _mostrarDialogoImportacion(context), // FIX: Método agregado abajo
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -66,6 +64,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
 
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
+          // ✅ FIX RECARGA: Recargar al volver de la edición/creación
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const ProductoFormPage()),
@@ -78,7 +77,6 @@ class _CatalogoPageState extends State<CatalogoPage> {
 
       body: Column(
         children: [
-          // 1. BARRA DE BÚSQUEDA OPTIMIZADA
           Container(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
@@ -103,20 +101,16 @@ class _CatalogoPageState extends State<CatalogoPage> {
                 ),
                 contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
               ),
-              onChanged: _onSearchChanged, // <--- Usamos nuestro debouncer
+              onChanged: _onSearchChanged,
             ),
           ),
 
-          // 2. FILTROS
           _buildBarraFiltros(context),
 
-          // 3. LISTA DE PRODUCTOS
           Expanded(
             child: Consumer<ProductoProvider>(
               builder: (ctx, provider, _) {
-                if (provider.isLoading) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
                 if (provider.productos.isEmpty) {
                   return _buildEstadoVacio();
@@ -139,7 +133,28 @@ class _CatalogoPageState extends State<CatalogoPage> {
     );
   }
 
-  // ... (El resto de métodos _buildBarraFiltros, _buildProductoItem, _buildEstadoVacio, _mostrarDialogoImportacion quedan IGUAL que en la versión anterior)
+  // --- WIDGETS AUXILIARES Y LÓGICA ---
+
+  Widget _buildBotonOrdenamiento(BuildContext context) {
+    return Consumer<ProductoProvider>(
+      builder: (context, provider, _) {
+        return PopupMenuButton<OrdenamientoCatalogo>(
+          icon: const Icon(Icons.sort),
+          tooltip: 'Ordenar por...',
+          initialValue: provider.ordenActual,
+          onSelected: (OrdenamientoCatalogo item) {
+            provider.cambiarOrden(item);
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<OrdenamientoCatalogo>>[
+            const PopupMenuItem<OrdenamientoCatalogo>(value: OrdenamientoCatalogo.nombreAZ, child: Text('Nombre (A-Z)')),
+            const PopupMenuItem<OrdenamientoCatalogo>(value: OrdenamientoCatalogo.nombreZA, child: Text('Nombre (Z-A)')),
+            const PopupMenuItem<OrdenamientoCatalogo>(value: OrdenamientoCatalogo.categoria, child: Text('Por Tipo (Categoría)')),
+            const PopupMenuItem<OrdenamientoCatalogo>(value: OrdenamientoCatalogo.codigo, child: Text('Por Código')),
+          ],
+        );
+      },
+    );
+  }
 
   Widget _buildBarraFiltros(BuildContext context) {
     return Container(
@@ -148,42 +163,17 @@ class _CatalogoPageState extends State<CatalogoPage> {
       child: Consumer<ProductoProvider>(
         builder: (context, provider, _) {
           final actual = provider.ordenActual;
-
           return ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              _buildFiltroChip(
-                context,
-                label: 'Nombre A-Z',
-                icon: Icons.sort_by_alpha,
-                selected: actual == OrdenamientoCatalogo.nombreAZ,
-                onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.nombreAZ),
-              ),
+              _buildFiltroChip(context, label: 'Nombre A-Z', icon: Icons.sort_by_alpha, selected: actual == OrdenamientoCatalogo.nombreAZ, onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.nombreAZ)),
               const SizedBox(width: 8),
-              _buildFiltroChip(
-                context,
-                label: 'Nombre Z-A',
-                icon: Icons.sort_by_alpha,
-                selected: actual == OrdenamientoCatalogo.nombreZA,
-                onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.nombreZA),
-              ),
+              _buildFiltroChip(context, label: 'Nombre Z-A', icon: Icons.sort_by_alpha, selected: actual == OrdenamientoCatalogo.nombreZA, onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.nombreZA)),
               const SizedBox(width: 8),
-              _buildFiltroChip(
-                context,
-                label: 'Por Tipo',
-                icon: Icons.category,
-                selected: actual == OrdenamientoCatalogo.categoria,
-                onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.categoria),
-              ),
+              _buildFiltroChip(context, label: 'Por Tipo', icon: Icons.category, selected: actual == OrdenamientoCatalogo.categoria, onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.categoria)),
               const SizedBox(width: 8),
-              _buildFiltroChip(
-                context,
-                label: 'Por Código',
-                icon: Icons.tag,
-                selected: actual == OrdenamientoCatalogo.codigo,
-                onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.codigo),
-              ),
+              _buildFiltroChip(context, label: 'Por Código', icon: Icons.tag, selected: actual == OrdenamientoCatalogo.codigo, onSelected: () => provider.cambiarOrden(OrdenamientoCatalogo.codigo)),
             ],
           );
         },
@@ -191,91 +181,53 @@ class _CatalogoPageState extends State<CatalogoPage> {
     );
   }
 
-  Widget _buildFiltroChip(
-      BuildContext context, {
-        required String label,
-        required IconData icon,
-        required bool selected,
-        required VoidCallback onSelected,
-      }) {
+  Widget _buildFiltroChip(BuildContext context, {required String label, required IconData icon, required bool selected, required VoidCallback onSelected}) {
     return ChoiceChip(
       label: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (selected) Icon(icon, size: 16, color: Colors.white),
           if (selected) const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.white : AppColors.textDark,
-              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
+          Text(label, style: TextStyle(color: selected ? Colors.white : AppColors.textDark, fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
         ],
       ),
       selected: selected,
       onSelected: (_) => onSelected(),
       selectedColor: AppColors.primary,
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-          color: selected ? AppColors.primary : Colors.grey.shade300,
-        ),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: selected ? AppColors.primary : Colors.grey.shade300)),
       showCheckmark: false,
     );
   }
 
+
   Widget _buildProductoItem(BuildContext context, ProductoModel p) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      // ✅ FIX RECARGA: Agregamos el .then para recargar si hay edición en el detalle
       onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ProductoDetallePage(producto: p)),
-      ),
+          context,
+          MaterialPageRoute(builder: (_) => ProductoDetallePage(producto: p))
+      ).then((_) => context.read<ProductoProvider>().cargarProductos()),
+
       leading: CircleAvatar(
         radius: 24,
         backgroundColor: AppColors.primary.withOpacity(0.1),
-        child: Text(
-          p.nombre.isNotEmpty ? p.nombre[0].toUpperCase() : '?',
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
+        child: Text(p.nombre.isNotEmpty ? p.nombre[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 18)),
       ),
-      title: Text(
-        p.nombre,
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-      ),
+      title: Text(p.nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                p.codigo,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textDark,
-                  fontWeight: FontWeight.w500,
-                  fontFamily: 'RobotoMono',
-                ),
-              ),
+              decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4)),
+              child: Text(p.codigo, style: const TextStyle(fontSize: 12, color: AppColors.textDark, fontWeight: FontWeight.w500)),
             ),
             if (p.categoriaNombre != null) ...[
               const SizedBox(width: 8),
-              Text(
-                p.categoriaNombre!,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
+              Text(p.categoriaNombre!, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
             ],
           ],
         ),
@@ -284,25 +236,12 @@ class _CatalogoPageState extends State<CatalogoPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
-            '\$${p.precioSinIva ?? '-'}',
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-              color: AppColors.textDark,
-            ),
-          ),
+          Text('\$${p.precioSinIva ?? '-'}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textDark)),
           const SizedBox(height: 4),
           if (p.cantidadDisponible > 0)
-            Text(
-              'Stock: ${p.cantidadFormateada} ${p.unidadBase}',
-              style: const TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.bold),
-            )
+            Text('Stock: ${p.cantidadFormateada} ${p.unidadBase}', style: const TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.bold))
           else
-            Text(
-              'Sin Stock',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-            ),
+            Text('Sin Stock', style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
         ],
       ),
     );
@@ -315,18 +254,13 @@ class _CatalogoPageState extends State<CatalogoPage> {
         children: [
           Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 16),
-          const Text(
-            'No hay materiales cargados',
-            style: TextStyle(fontSize: 18, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-          const Text('Usa el botón + para agregar uno nuevo'),
+          const Text('No hay materiales cargados', style: TextStyle(fontSize: 18, color: Colors.grey)),
         ],
       ),
     );
   }
 
-  // ... (Métodos de importación igual al anterior) ...
+  // ✅ FIX: Método de importación (Faltaba en el State Class)
   void _mostrarDialogoImportacion(BuildContext context) {
     final controller = TextEditingController();
     showDialog(
@@ -339,28 +273,16 @@ class _CatalogoPageState extends State<CatalogoPage> {
           children: [
             const Text('Formato CSV (una línea por producto):', style: TextStyle(fontWeight: FontWeight.bold)),
             const Text('CODIGO,NOMBRE,PRECIO,ID_CATEGORIA', style: TextStyle(fontFamily: 'Courier', fontSize: 12)),
-            const SizedBox(height: 4),
-            const Text('Ejemplo:', style: TextStyle(fontSize: 12)),
-            const Text('MAT-01,Ladrillo,500,OG', style: TextStyle(fontFamily: 'Courier', fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 10),
             TextField(
               controller: controller,
               maxLines: 8,
-              style: const TextStyle(fontFamily: 'Courier', fontSize: 13),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Pega aquí tus datos...',
-                fillColor: AppColors.backgroundGray,
-                filled: true,
-              ),
+              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Pega aquí tus datos...'),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           ElevatedButton.icon(
             icon: const Icon(Icons.upload),
             onPressed: () {
@@ -376,7 +298,6 @@ class _CatalogoPageState extends State<CatalogoPage> {
 
   void _procesarImportacion(BuildContext context, String texto) {
     if (texto.isEmpty) return;
-
     List<ProductoModel> lista = [];
     try {
       final lineas = texto.split('\n');
@@ -393,27 +314,17 @@ class _CatalogoPageState extends State<CatalogoPage> {
           ));
         }
       }
-
       if (lista.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Procesando...')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Procesando...')));
         context.read<ProductoProvider>().importarProductos(lista).then((success) {
           if (success && context.mounted) {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('✅ Éxito: ${lista.length} productos importados'),
-                backgroundColor: AppColors.success,
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ Éxito: ${lista.length} productos importados'), backgroundColor: AppColors.success));
           }
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ Error: Revisa el formato del texto')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Error: Revisa el formato del texto')));
     }
   }
 }

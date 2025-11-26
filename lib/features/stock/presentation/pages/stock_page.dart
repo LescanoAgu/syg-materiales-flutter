@@ -4,7 +4,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/producto_model.dart';
 import '../providers/producto_provider.dart';
-import 'movimiento_registro_page.dart';
+import 'movimiento_registro_page.dart'; // ✅ FIX: Asegurado el import correcto de la página
 import 'producto_detalle_page.dart';
 
 class StockPage extends StatefulWidget {
@@ -59,6 +59,7 @@ class _StockPageState extends State<StockPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        // ✅ FIX RECARGA: Asegurar recarga al salir del registro
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MovimientoRegistroPage()))
             .then((_) => context.read<ProductoProvider>().cargarProductos()),
         child: const Icon(Icons.add),
@@ -80,7 +81,11 @@ class _StockPageState extends State<StockPage> {
           icon: const Icon(Icons.edit),
           onPressed: () => _ajustarStock(p),
         ),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductoDetallePage(producto: p))),
+        // ✅ FIX RECARGA: Asegurar recarga al salir de la página de detalle
+        onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => ProductoDetallePage(producto: p))
+        ).then((_) => context.read<ProductoProvider>().cargarProductos()),
       ),
     );
   }

@@ -34,7 +34,9 @@ class _OrdenesPageState extends State<OrdenesPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdenFormPage())),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdenFormPage()))
+        // ✅ FIX: Recargar órdenes al volver del formulario
+            .then((_) => context.read<OrdenInternaProvider>().cargarOrdenes()),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Orden'),
         backgroundColor: AppColors.primary,
