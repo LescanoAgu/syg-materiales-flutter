@@ -13,40 +13,38 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
-    productFlavors {
-        create("dev") {
-            // Define el ApplicationId para el entorno de desarrollo
-            applicationIdSuffix = ".dev"
-            // El ID final será com.syg.syg_materiales_flutter.dev
-            // NOTA: Esto debe coincidir con el que registrarás en Firebase (Paso 1.1)
-        }
-        create("prod")
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
 
-    // INICIO CONFIGURACIÓN FLAVORS
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11.toString()
+    }
+
+    // ==========================================
+    // CONFIGURACIÓN DE FLAVORS (ENTORNOS)
+    // ==========================================
+
+    // 1. Definimos la dimensión primero
     flavorDimensions += listOf("env")
 
+    // 2. Definimos los sabores (flavors) UNA SOLA VEZ
     productFlavors {
         create("prod") {
             dimension = "env"
-            // Hereda el ID original. Busca credenciales en src/prod/
+            // Hereda el ID original (com.syg.syg_materiales_flutter)
+            // Busca credenciales en android/app/src/prod/google-services.json
             resValue("string", "app_name", "S&G Materiales")
         }
+
         create("dev") {
             dimension = "env"
-            // Agrega .dev al ID. Busca credenciales en src/dev/
+            // Agrega .dev al ID (com.syg.syg_materiales_flutter.dev)
+            // Busca credenciales en android/app/src/dev/google-services.json
             applicationIdSuffix = ".dev"
             resValue("string", "app_name", "S&G Dev")
         }
-    }
-// FIN CONFIGURACIÓN FLAVORS
-
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {

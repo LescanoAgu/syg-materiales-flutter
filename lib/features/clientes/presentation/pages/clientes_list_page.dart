@@ -95,7 +95,7 @@ class _ClientesListPageState extends State<ClientesListPage> {
       ),
 
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _mostrarFormularioCliente(context),
+        onPressed: () => _mostrarFormularioCliente(context), // Ya usa el método que recarga
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Cliente'),
       ),
@@ -334,9 +334,8 @@ class _ClientesListPageState extends State<ClientesListPage> {
       MaterialPageRoute(
         builder: (context) => ClienteFormPage(cliente: cliente),
       ),
-    ).then((_) {
-      // Recargar al volver por si hubo cambios
-      context.read<ClienteProvider>().cargarClientes();
-    });
+      // ✅ FIX: Recargar clientes al volver
+    ).then((_) => context.read<ClienteProvider>().cargarClientes());
   }
+
 }

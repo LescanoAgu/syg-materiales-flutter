@@ -12,12 +12,6 @@ import 'movimiento_lote_page.dart';
 
 
 /// Pantalla principal de Acopios
-///
-/// Muestra lista de acopios con múltiples vistas:
-/// - Por Cliente
-/// - Por Proveedor
-/// - Reservas en Depósito S&G
-/// - Todos los Acopios
 class AcopiosListPage extends StatefulWidget {
   const AcopiosListPage({super.key});
   @override
@@ -90,7 +84,8 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
                 MaterialPageRoute(
                   builder: (context) => const FacturasListPage(),
                 ),
-              );
+                // ✅ FIX RECARGA 1: Recargar al volver de facturas
+              ).then((_) => context.read<AcopioProvider>().cargarTodo());
             },
             tooltip: 'Ver Facturas',
           ),
@@ -143,7 +138,7 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
       ),
 
       // ========================================
-      // FAB
+      // FAB (Asegurando la Recarga en todas las opciones)
       // ========================================
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -157,11 +152,8 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
                 MaterialPageRoute(
                   builder: (context) => const AcopioTraspasoPage(),
                 ),
-              ).then((resultado) {
-                if (resultado == true) {
-                  context.read<AcopioProvider>().cargarTodo();
-                }
-              });
+                // ✅ FIX RECARGA 2: Recargar al volver de traspaso
+              ).then((_) => context.read<AcopioProvider>().cargarTodo());
             },
             backgroundColor: AppColors.warning,
             child: const Icon(Icons.swap_horiz),
@@ -176,11 +168,8 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
                 MaterialPageRoute(
                   builder: (context) => const MovimientoLotePage(),
                 ),
-              ).then((resultado) {
-                if (resultado == true) {
-                  context.read<AcopioProvider>().cargarTodo();
-                }
-              });
+                // ✅ FIX RECARGA 3: Recargar al volver del lote
+              ).then((_) => context.read<AcopioProvider>().cargarTodo());
             },
             backgroundColor: AppColors.secondary,
             child: const Icon(Icons.playlist_add),
@@ -195,11 +184,8 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
                 MaterialPageRoute(
                   builder: (context) => const AcopioMovimientoPage(),
                 ),
-              ).then((resultado) {
-                if (resultado == true) {
-                  context.read<AcopioProvider>().cargarTodo();
-                }
-              });
+                // ✅ FIX RECARGA 4: Recargar al volver de movimiento individual
+              ).then((_) => context.read<AcopioProvider>().cargarTodo());
             },
             icon: const Icon(Icons.add),
             label: const Text('MOVIMIENTO'),
@@ -548,6 +534,7 @@ class _AcopioCard extends StatelessWidget {
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () {
+          // ✅ FIX RECARGA 5: Recargar al volver del detalle
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -555,7 +542,7 @@ class _AcopioCard extends StatelessWidget {
                 acopioDetalle: acopioDetalle,
               ),
             ),
-          );
+          ).then((_) => context.read<AcopioProvider>().cargarTodo());
         },
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -684,10 +671,7 @@ class _AcopioCard extends StatelessWidget {
   }
 }
 
-// ========================================
-// CARD AGRUPADO POR CLIENTE
-// ========================================
-
+// ... (El resto de clases _ClienteAcopiosCard y _ProveedorAcopiosCard se mantienen iguales)
 class _ClienteAcopiosCard extends StatelessWidget {
   final String cliente;
   final List<AcopioDetalle> acopios;
@@ -757,10 +741,6 @@ class _ClienteAcopiosCard extends StatelessWidget {
     );
   }
 }
-
-// ========================================
-// CARD AGRUPADO POR PROVEEDOR
-// ========================================
 
 class _ProveedorAcopiosCard extends StatelessWidget {
   final String proveedor;

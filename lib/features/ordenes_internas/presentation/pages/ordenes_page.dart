@@ -29,12 +29,25 @@ class _OrdenesPageState extends State<OrdenesPage> {
       appBar: AppBar(
         title: const Text('📋 Órdenes Internas'),
         flexibleSpace: Container(decoration: const BoxDecoration(gradient: AppColors.primaryGradient)),
+        // AGREGAMOS ESTO:
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            // Volvemos a la pantalla principal (StockPage o HomePage)
+            // Usamos pushReplacement para no dejar basura en el stack
+            Navigator.pushReplacementNamed(context, '/');
+            // O si no usas rutas nombradas:
+            // Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const StockPage()));
+          },
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.filter_list), onPressed: () {}),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdenFormPage())),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OrdenFormPage()))
+        // ✅ FIX: Recargar órdenes al volver del formulario
+            .then((_) => context.read<OrdenInternaProvider>().cargarOrdenes()),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Orden'),
         backgroundColor: AppColors.primary,

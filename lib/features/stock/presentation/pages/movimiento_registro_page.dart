@@ -4,6 +4,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../data/models/movimiento_stock_model.dart';
 import '../../data/models/producto_model.dart';
 import '../providers/movimiento_stock_provider.dart';
+// CORRECCIÓN: Faltaba este import
+import '../providers/producto_provider.dart';
 
 class MovimientoRegistroPage extends StatefulWidget {
   final ProductoConStock? productoInicial;
@@ -14,9 +16,9 @@ class MovimientoRegistroPage extends StatefulWidget {
 }
 
 class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
-  final _formKey = GlobalKey<FormState>(); // Agregamos validación
+  final _formKey = GlobalKey<FormState>();
   final _cantidadCtrl = TextEditingController();
-  final _motivoCtrl = TextEditingController(); // Agregamos controlador para motivo
+  final _motivoCtrl = TextEditingController();
 
   ProductoConStock? _productoSeleccionado;
   TipoMovimiento _tipo = TipoMovimiento.entrada;
@@ -26,8 +28,7 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
     super.initState();
     _productoSeleccionado = widget.productoInicial;
 
-    // Si no venimos con un producto, cargamos la lista
-    if (widget.productoInicial == null) {
+    if (_productoSeleccionado == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.read<ProductoProvider>().cargarProductos();
       });
@@ -35,52 +36,68 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
   }
 
   @override
+  void dispose() {
+    _cantidadCtrl.dispose();
+    _motivoCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Registrar Movimiento')),
-      body: Padding(
+      appBar: AppBar(
+        title: const Text('Registrar Movimiento'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Selector de Producto (Solo si no vino preseleccionado)
               if (widget.productoInicial != null)
                 _buildProductoInfoCard(widget.productoInicial!)
               else
-                _buildProductoDropdown(),
+                _buildSelectorProducto(),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
-              // 2. Selector de Tipo de Movimiento (Mejorado)
-              DropdownButtonFormField<TipoMovimiento>(
-                value: _tipo,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo de Movimiento',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.swap_horiz),
+              Text('Tipo de Movimiento', style: TextStyle(color: Colors.grey[700], fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                items: TipoMovimiento.values.map((t) {
-                  return DropdownMenuItem(
-                    value: t,
-                    child: Row(
-                      children: [
-                        Icon(_getIcono(t), color: _getColor(t), size: 20),
-                        const SizedBox(width: 10),
-                        Text(
-                            _getLabel(t),
-                            style: TextStyle(color: _getColor(t), fontWeight: FontWeight.bold)
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<TipoMovimiento>(
+                    value: _tipo,
+                    isExpanded: true,
+                    icon: const Icon(Icons.arrow_drop_down),
+                    items: TipoMovimiento.values.map((t) {
+                      return DropdownMenuItem(
+                        value: t,
+                        child: Row(
+                          children: [
+                            Icon(_getIconoMovimiento(t), color: _getColorMovimiento(t), size: 20),
+                            const SizedBox(width: 12),
+                            Text(_capitalizar(t.name), style: TextStyle(color: Colors.grey[800], fontWeight: FontWeight.w500)),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                onChanged: (v) => setState(() => _tipo = v!),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _tipo = v!),
+                  ),
+                ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
-              // 3. Cantidad
               TextFormField(
                 controller: _cantidadCtrl,
                 decoration: const InputDecoration(
@@ -92,34 +109,29 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'Ingresa una cantidad';
                   if (double.tryParse(value) == null) return 'Número inválido';
-                  if (double.parse(value) <= 0) return 'La cantidad debe ser mayor a 0';
+                  if (double.parse(value) <= 0) return 'Debe ser mayor a 0';
                   return null;
                 },
               ),
 
               const SizedBox(height: 20),
 
-              // 4. Motivo (Opcional pero recomendado)
               TextFormField(
                 controller: _motivoCtrl,
                 decoration: const InputDecoration(
                   labelText: 'Motivo / Referencia (Opcional)',
                   border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.description),
+                  prefixIcon: Icon(Icons.description_outlined),
                 ),
               ),
 
               const SizedBox(height: 30),
 
-              // Botón de Guardar
               SizedBox(
                 height: 50,
                 child: ElevatedButton.icon(
                   onPressed: _guardar,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
                   icon: const Icon(Icons.save),
                   label: const Text('REGISTRAR MOVIMIENTO', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
@@ -131,65 +143,67 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
     );
   }
 
+  // --- Widgets Auxiliares ---
   Widget _buildProductoInfoCard(ProductoConStock p) {
     return Card(
-      color: AppColors.backgroundGray,
+      elevation: 0,
+      color: Colors.grey[100],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
       child: ListTile(
-        leading: const Icon(Icons.inventory_2, color: AppColors.primary),
+        leading: CircleAvatar(
+          backgroundColor: AppColors.primary.withOpacity(0.1),
+          child: const Icon(Icons.inventory_2, color: AppColors.primary),
+        ),
         title: Text(p.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('${p.codigo} • Stock actual: ${p.cantidadFormateada}'),
+        subtitle: Text('Cód: ${p.codigo} • Stock actual: ${p.cantidadFormateada}'),
       ),
     );
   }
 
-  Widget _buildProductoDropdown() {
+  Widget _buildSelectorProducto() {
     return Consumer<ProductoProvider>(
       builder: (context, provider, _) {
         if (provider.isLoading) return const LinearProgressIndicator();
 
         return DropdownButtonFormField<ProductoConStock>(
-          value: _productoSeleccionado,
           decoration: const InputDecoration(
             labelText: 'Seleccionar Producto',
             border: OutlineInputBorder(),
             prefixIcon: Icon(Icons.search),
           ),
           isExpanded: true,
-          items: provider.productos.map((p) {
-            return DropdownMenuItem(
-              value: p,
-              child: Text('${p.nombre} (${p.cantidadFormateada})', overflow: TextOverflow.ellipsis),
-            );
-          }).toList(),
-          onChanged: (v) => setState(() => _productoSeleccionado = v),
-          validator: (v) => v == null ? 'Debes seleccionar un producto' : null,
+          hint: const Text('Busca un material...'),
+          value: _productoSeleccionado,
+          items: provider.productos.map((p) => DropdownMenuItem(value: p, child: Text(p.nombre, overflow: TextOverflow.ellipsis))).toList(),
+          onChanged: (val) => setState(() => _productoSeleccionado = val),
+          validator: (val) => val == null ? 'Debes seleccionar un producto' : null,
         );
       },
     );
   }
 
-  // Helpers para estética
-  String _getLabel(TipoMovimiento t) {
-    switch (t) {
-      case TipoMovimiento.entrada: return 'Entrada de Stock';
-      case TipoMovimiento.salida: return 'Salida de Stock';
-      case TipoMovimiento.ajuste: return 'Ajuste de Inventario';
-    }
+  // --- Helpers Estéticos ---
+  String _capitalizar(String texto) {
+    if (texto.isEmpty) return texto;
+    return texto[0].toUpperCase() + texto.substring(1);
   }
 
-  Color _getColor(TipoMovimiento t) {
+  IconData _getIconoMovimiento(TipoMovimiento t) {
     switch (t) {
-      case TipoMovimiento.entrada: return AppColors.success;
-      case TipoMovimiento.salida: return AppColors.error;
-      case TipoMovimiento.ajuste: return AppColors.warning;
-    }
-  }
-
-  IconData _getIcono(TipoMovimiento t) {
-    switch (t) {
-      case TipoMovimiento.entrada: return Icons.arrow_downward;
-      case TipoMovimiento.salida: return Icons.arrow_upward;
+      case TipoMovimiento.entrada: return Icons.arrow_circle_down;
+      case TipoMovimiento.salida: return Icons.arrow_circle_up;
       case TipoMovimiento.ajuste: return Icons.tune;
+    }
+  }
+
+  Color _getColorMovimiento(TipoMovimiento t) {
+    switch (t) {
+      case TipoMovimiento.entrada: return Colors.green;
+      case TipoMovimiento.salida: return Colors.red;
+      case TipoMovimiento.ajuste: return Colors.orange;
     }
   }
 
@@ -198,25 +212,30 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
     if (_productoSeleccionado == null) return;
 
     final cant = double.tryParse(_cantidadCtrl.text) ?? 0;
-    final motivo = _motivoCtrl.text.isEmpty ? 'Manual' : _motivoCtrl.text;
+    final motivo = _motivoCtrl.text.isEmpty ? 'Ajuste manual' : _motivoCtrl.text;
 
-    // Feedback de carga (opcional, usando un dialogo simple o estado)
     showDialog(context: context, barrierDismissible: false, builder: (c) => const Center(child: CircularProgressIndicator()));
 
-    await context.read<MovimientoStockProvider>().registrarMovimiento(
+    final success = await context.read<MovimientoStockProvider>().registrarMovimiento(
       productoId: _productoSeleccionado!.productoId,
       tipo: _tipo,
       cantidad: cant,
       motivo: motivo,
-      usuarioId: 'usuario_actual', // Aquí iría el ID del auth
+      usuarioId: 'usuario_app',
     );
 
     if(mounted) {
       Navigator.pop(context); // Cerrar loading
-      Navigator.pop(context); // Cerrar pantalla
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ Movimiento registrado exitosamente'), backgroundColor: AppColors.success),
-      );
+      if (success) {
+        Navigator.pop(context); // Cerrar pantalla
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ Movimiento registrado'), backgroundColor: AppColors.success),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('❌ Error: ${context.read<MovimientoStockProvider>().errorMessage}'), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 }
