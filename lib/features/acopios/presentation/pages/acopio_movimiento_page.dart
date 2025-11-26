@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../data/models/acopio_model.dart';
 import '../../data/models/proveedor_model.dart';
 import '../../data/models/movimiento_acopio_model.dart';
@@ -33,7 +31,7 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
   // Variables de estado
   TipoMovimientoAcopio _tipoMovimiento = TipoMovimientoAcopio.entrada;
   DateTime? _facturaFecha;
-  bool _valorizar = false;
+  final bool _valorizar = false;
 
   ProductoConStock? _productoSeleccionado;
   ClienteModel? _clienteSeleccionado;

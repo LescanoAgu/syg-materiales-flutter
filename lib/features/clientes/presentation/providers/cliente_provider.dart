@@ -10,7 +10,7 @@ class ClienteProvider extends ChangeNotifier {
   String? _errorMessage;
 
   // Variables de paginación simplificadas
-  bool _hayMasPaginas = false;
+  final bool _hayMasPaginas = false;
   int _totalClientes = 0;
 
   List<ClienteModel> get clientes => _clientes;

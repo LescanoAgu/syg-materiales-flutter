@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../data/models/acopio_model.dart';
 import '../../../clientes/data/models/cliente_model.dart';
 import '../../../clientes/presentation/providers/cliente_provider.dart';
@@ -81,7 +79,7 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
     return Consumer<AcopioProvider>(
       builder: (context, provider, _) {
         return DropdownButtonFormField<AcopioDetalle>(
-          value: _acopioOrigenSeleccionado,
+          initialValue: _acopioOrigenSeleccionado,
           hint: const Text('Seleccionar Origen'),
           isExpanded: true,
           items: provider.acopios.map((a) {

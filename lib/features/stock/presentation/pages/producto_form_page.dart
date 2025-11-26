@@ -22,7 +22,7 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
 
   final ProductoRepository _prodRepo = ProductoRepository();
   final StockRepository _stockRepo = StockRepository();
-  String _categoriaId = 'OG'; // Default
+  final String _categoriaId = 'OG'; // Default
 
   @override
   Widget build(BuildContext context) {
