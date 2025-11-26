@@ -5,19 +5,13 @@
 // ========================================
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../data/models/movimiento_acopio_model.dart';
 import '../../data/models/movimiento_lote_model.dart';
 import '../../data/models/proveedor_model.dart';
 import '../../../clientes/data/models/cliente_model.dart';
 import '../../../clientes/presentation/providers/cliente_provider.dart';
-import '../../../stock/data/models/stock_model.dart';
-import '../../../stock/data/models/movimiento_stock_model.dart';
 import '../../../stock/presentation/providers/producto_provider.dart';
-import '../../../stock/presentation/providers/movimiento_stock_provider.dart';
 import '../providers/acopio_provider.dart';
 
 class MovimientoLotePage extends StatefulWidget {
@@ -43,8 +37,8 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
   ClienteModel? _clienteSeleccionado;
   ProveedorModel? _proveedorSeleccionado;
   DateTime? _facturaFecha;
-  bool _valorizar = false;
-  List<MovimientoLoteItem> _items = [];
+  final bool _valorizar = false;
+  final List<MovimientoLoteItem> _items = [];
 
   @override
   void initState() {

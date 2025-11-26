@@ -13,6 +13,15 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    productFlavors {
+        create("dev") {
+            // Define el ApplicationId para el entorno de desarrollo
+            applicationIdSuffix = ".dev"
+            // El ID final será com.syg.syg_materiales_flutter.dev
+            // NOTA: Esto debe coincidir con el que registrarás en Firebase (Paso 1.1)
+        }
+        create("prod")
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

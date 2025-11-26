@@ -1,4 +1,4 @@
-import 'producto_model.dart'; // Importamos el modelo principal
+// Importamos el modelo principal
 
 // Este modelo queda como soporte legacy, pero el sistema usa ProductoModel principalmente
 class StockModel {
