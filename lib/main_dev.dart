@@ -3,10 +3,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'firebase_options_dev.dart';
 import 'app.dart';
-
+import 'features/auth/presentation/pages/auth_gate.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Widget initialScreen = const HomePage();
+  Widget initialScreen = const AuthGate();
 
   try {
     FirebaseOptions options = kIsWeb

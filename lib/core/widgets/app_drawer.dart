@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
+
+// Páginas del sistema
 import '../../features/stock/presentation/pages/catalogo_page.dart';
 import '../../features/clientes/presentation/pages/clientes_list_page.dart';
 import '../../features/obras/presentation/pages/obras_list_page.dart';
@@ -11,30 +14,29 @@ import '../../features/reportes/presentation/pages/reportes_menu_page.dart';
 import '../../features/ordenes_internas/presentation/pages/ordenes_page.dart';
 import '../../features/stock/presentation/pages/stock_page.dart';
 
-/// Drawer (menú lateral) de la aplicación S&G
-///
-/// Muestra las opciones de navegación principales:
-/// - Stock
-/// - Clientes
-/// - Obras
-/// - Pedidos
-/// - Configuración
+// Auth y Usuarios
+import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/usuarios/presentation/pages/usuarios_list_page.dart';
+
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // 1. Obtener usuario actual para verificar permisos
+    final authProvider = context.watch<AuthProvider>();
+    final usuario = authProvider.usuario;
+
+    // Es admin si tiene el rol 'admin' O si tiene el permiso explícito 'aprobar_usuarios'
+    final bool esAdmin = usuario?.rol == 'admin' || (usuario?.tienePermiso('aprobar_usuarios') ?? false);
+
     return Drawer(
       child: Column(
         children: [
-          // ========================================
-          // HEADER DEL DRAWER
-          // ========================================
-          _buildHeader(),
+          // HEADER
+          _buildHeader(usuario?.nombre ?? 'Usuario', usuario?.organizationId ?? 'S&G'),
 
-          // ========================================
-          // OPCIONES DE NAVEGACIÓN
-          // ========================================
+          // LISTA DE OPCIONES
           Expanded(
             child: ListView(
               padding: EdgeInsets.zero,
@@ -44,131 +46,64 @@ class AppDrawer extends StatelessWidget {
                   icon: Icons.book,
                   title: 'Catálogo',
                   subtitle: 'Productos disponibles',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const CatalogoPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const CatalogoPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.inventory_2,
                   title: 'Stock',
                   subtitle: 'Inventario actual',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const StockPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const StockPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.warehouse,
                   title: 'Acopios',
                   subtitle: 'Materiales en proveedores',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const AcopiosListPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const AcopiosListPage()),
                 ),
-
                 _buildMenuItem(
                   context,
                   icon: Icons.search,
                   title: 'Consultar Disponibilidad',
-                  subtitle: '¿Dónde está este material?',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ConsultarDisponibilidadPage(),
-                      ),
-                    );
-                  },
+                  subtitle: 'Buscador rápido',
+                  onTap: () => _navegar(context, const ConsultarDisponibilidadPage()),
                 ),
-
                 _buildMenuItem(
                   context,
                   icon: Icons.people,
                   title: 'Clientes',
                   subtitle: 'Gestión de clientes',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ClientesListPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const ClientesListPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.business,
                   title: 'Obras',
                   subtitle: 'Gestión de obras',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ObrasListPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const ObrasListPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.assessment,
                   title: 'Reportes',
                   subtitle: 'Informes y estadísticas',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ReportesMenuPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const ReportesMenuPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.receipt_long,
                   title: 'Órdenes Internas',
                   subtitle: 'Pedidos y despachos',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const OrdenesPage(),
-                      ),
-                    );
-                  },
+                  onTap: () => _navegar(context, const OrdenesPage()),
                 ),
                 _buildMenuItem(
                   context,
                   icon: Icons.swap_horiz,
-                  title: 'Movimientos de Stock',
-                  subtitle: 'Historial y Kardex',
+                  title: 'Movimientos',
+                  subtitle: 'Historial completo',
                   onTap: () {
-                    Navigator.pop(context); // Cierra el drawer
-                    // CAMBIO: Usamos push en vez de pushReplacement para que tenga botón atrás
+                    Navigator.pop(context);
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -177,23 +112,53 @@ class AppDrawer extends StatelessWidget {
                     );
                   },
                 ),
+
+                // 🔐 SECCIÓN ADMINISTRADOR (Solo visible si esAdmin es true)
+                if (esAdmin) ...[
+                  const Divider(),
+                  _buildMenuItem(
+                    context,
+                    icon: Icons.admin_panel_settings,
+                    title: 'Gestión de Equipo',
+                    subtitle: 'Usuarios y Permisos',
+                    onTap: () => _navegar(context, const UsuariosListPage()),
+                  ),
+                ],
+
+                const Divider(),
+
+                // 🚪 CERRAR SESIÓN
+                _buildMenuItem(
+                  context,
+                  icon: Icons.logout,
+                  title: 'Cerrar Sesión',
+                  subtitle: 'Salir de la cuenta',
+                  onTap: () {
+                    Navigator.pop(context); // Cerrar drawer
+                    context.read<AuthProvider>().logout();
+                  },
+                ),
               ],
             ),
           ),
 
-          // ========================================
-          // FOOTER DEL DRAWER
-          // ========================================
+          // FOOTER
           _buildFooter(),
         ],
       ),
     );
   }
 
-  // ========================================
-  // HEADER CON DEGRADADO
-  // ========================================
-  Widget _buildHeader() {
+  // Helper para navegación limpia
+  void _navegar(BuildContext context, Widget page) {
+    Navigator.pop(context); // Cierra el drawer
+    Navigator.pushReplacement( // Reemplaza la pantalla actual
+      context,
+      MaterialPageRoute(builder: (context) => page),
+    );
+  }
+
+  Widget _buildHeader(String nombre, String org) {
     return Container(
       height: 180,
       decoration: const BoxDecoration(
@@ -206,7 +171,6 @@ class AppDrawer extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              // Logo/Icono circular
               Container(
                 width: 60,
                 height: 60,
@@ -214,39 +178,14 @@ class AppDrawer extends StatelessWidget {
                   color: Colors.white,
                   shape: BoxShape.circle,
                   boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
+                    BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8),
                   ],
                 ),
-                child: const Icon(
-                  Icons.business_center,
-                  color: AppColors.primary,
-                  size: 30,
-                ),
+                child: const Icon(Icons.person, color: AppColors.primary, size: 30),
               ),
-
               const SizedBox(height: 12),
-
-              // Nombre de la empresa
-              Text(
-                'S&G Materiales',
-                style: AppTextStyles.h3.copyWith(
-                  color: Colors.white,
-                ),
-              ),
-
-              const SizedBox(height: 4),
-
-              // Subtítulo
-              Text(
-                'Sistema de Gestión',
-                style: AppTextStyles.body2.copyWith(
-                  color: Colors.white.withOpacity(0.9),
-                ),
-              ),
+              Text(nombre, style: AppTextStyles.h3.copyWith(color: Colors.white, fontSize: 18)),
+              Text(org, style: AppTextStyles.body2.copyWith(color: Colors.white.withOpacity(0.9))),
             ],
           ),
         ),
@@ -254,9 +193,6 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
-  // ========================================
-  // ITEM DEL MENÚ
-  // ========================================
   Widget _buildMenuItem(
       BuildContext context, {
         required IconData icon,
@@ -266,54 +202,26 @@ class AppDrawer extends StatelessWidget {
       }) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primary, size: 28),
-      title: Text(
-        title,
-        style: AppTextStyles.body1.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: AppTextStyles.caption,
-      ),
-      trailing: const Icon(
-        Icons.chevron_right,
-        color: AppColors.textLight,
-      ),
+      title: Text(title, style: AppTextStyles.body1.copyWith(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle, style: AppTextStyles.caption),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textLight),
       onTap: onTap,
     );
   }
 
-  // ========================================
-  // FOOTER CON VERSIÓN
-  // ========================================
   Widget _buildFooter() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.backgroundGray,
-        border: Border(
-          top: BorderSide(
-            color: AppColors.border.withOpacity(0.5),
-            width: 1,
-          ),
-        ),
+        border: Border(top: BorderSide(color: AppColors.border.withOpacity(0.5))),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.info_outline,
-            size: 16,
-            color: AppColors.textMedium,
-          ),
+          const Icon(Icons.info_outline, size: 16, color: AppColors.textMedium),
           const SizedBox(width: 8),
-          Text(
-            'Versión 1.0.0',
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.textMedium,
-            ),
-          ),
+          Text('Versión 1.1.0', style: AppTextStyles.caption.copyWith(color: AppColors.textMedium)),
         ],
       ),
     );
