@@ -5,18 +5,20 @@ enum TipoMovimiento { entrada, salida, ajuste }
 class MovimientoStock extends Equatable {
   final String? id;
   final String productoId;
+  final String productoNombre; // ✅ NUEVO: Guardamos el nombre
   final TipoMovimiento tipo;
   final double cantidad;
   final double cantidadAnterior;
   final double cantidadPosterior;
   final String? motivo;
-  final String? referencia; // Remito, Factura, etc.
-  final String? usuarioId; // CAMBIO: String para Firebase Auth
+  final String? referencia;
+  final String? usuarioId;
   final DateTime createdAt;
 
   const MovimientoStock({
     this.id,
     required this.productoId,
+    this.productoNombre = '', // Default vacío para compatibilidad
     required this.tipo,
     required this.cantidad,
     this.cantidadAnterior = 0,
@@ -31,6 +33,7 @@ class MovimientoStock extends Equatable {
     return MovimientoStock(
       id: map['id']?.toString(),
       productoId: map['productoId']?.toString() ?? '',
+      productoNombre: map['productoNombre']?.toString() ?? 'Producto sin nombre', // Recuperamos nombre
       tipo: TipoMovimiento.values.firstWhere(
             (e) => e.name == (map['tipo'] ?? 'entrada'),
         orElse: () => TipoMovimiento.entrada,
@@ -50,6 +53,7 @@ class MovimientoStock extends Equatable {
   Map<String, dynamic> toMap() {
     return {
       'productoId': productoId,
+      'productoNombre': productoNombre, // Guardamos nombre
       'tipo': tipo.name,
       'cantidad': cantidad,
       'cantidadAnterior': cantidadAnterior,
@@ -63,9 +67,4 @@ class MovimientoStock extends Equatable {
 
   @override
   List<Object?> get props => [id, productoId, tipo, cantidad, createdAt];
-
-  // Helpers visuales
-  bool get esEntrada => tipo == TipoMovimiento.entrada;
-  bool get esSalida => tipo == TipoMovimiento.salida;
-  String get signo => esEntrada ? '+' : (esSalida ? '-' : '=');
 }

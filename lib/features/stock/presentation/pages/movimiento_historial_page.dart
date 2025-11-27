@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart'; // Importamos colores para que quede lindo
-import '../../data/models/movimiento_stock_model.dart'; // Importamos el modelo
+import '../../../../core/constants/app_colors.dart';
+import '../../data/models/movimiento_stock_model.dart';
 import '../providers/movimiento_stock_provider.dart';
-import 'stock_page.dart'; // ✅ FIX: Import directo (están en la misma carpeta)
+import 'stock_page.dart';
 
 class MovimientoHistorialPage extends StatefulWidget {
   final String? productoId;
@@ -14,36 +14,48 @@ class MovimientoHistorialPage extends StatefulWidget {
 }
 
 class _MovimientoHistorialPageState extends State<MovimientoHistorialPage> {
+  TipoMovimiento? _filtroTipo; // Null = Todos
+
   @override
   void initState() {
     super.initState();
-    // Carga inicial de datos
+    _cargarDatos();
+  }
+
+  void _cargarDatos() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.productoId != null) {
-        context.read<MovimientoStockProvider>().cargarMovimientosDeProducto(widget.productoId!);
+        context.read<MovimientoStockProvider>().cargarMovimientosDeProducto(
+            widget.productoId!,
+            tipo: _filtroTipo
+        );
       } else {
-        context.read<MovimientoStockProvider>().cargarMovimientos();
+        context.read<MovimientoStockProvider>().cargarMovimientos(
+            tipo: _filtroTipo
+        );
       }
     });
+  }
+
+  void _cambiarFiltro(TipoMovimiento? nuevoTipo) {
+    setState(() {
+      _filtroTipo = (_filtroTipo == nuevoTipo) ? null : nuevoTipo; // Toggle (si tocas el mismo, se desactiva)
+    });
+    _cargarDatos();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background, // Usamos el color de fondo de la app
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Historial de Movimientos'),
-        // ✅ FIX NAVEGACIÓN: Botón "Atrás" inteligente
+        title: Text(widget.productoId == null ? 'Historial General' : 'Historial: ${widget.productoId}'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () {
-            // 1. Si hay historial (vinimos de otra pantalla con push), volvemos normal
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
-            }
-            // 2. Si NO hay historial (vinimos del Drawer con pushReplacement),
-            // forzamos ir al Stock (Home)
-            else {
+            } else {
               Navigator.of(context).pushReplacement(
                 MaterialPageRoute(builder: (_) => const StockPage()),
               );
@@ -51,70 +63,102 @@ class _MovimientoHistorialPageState extends State<MovimientoHistorialPage> {
           },
         ),
       ),
+      body: Column(
+        children: [
+          // --- BARRA DE FILTROS ---
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            color: Colors.white,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildFilterChip('Todos', null, Colors.grey),
+                _buildFilterChip('Entradas', TipoMovimiento.entrada, Colors.green),
+                _buildFilterChip('Salidas', TipoMovimiento.salida, Colors.red),
+                _buildFilterChip('Ajustes', TipoMovimiento.ajuste, Colors.orange),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
 
-      // ✅ FIX ESTRUCTURA: Restauramos el 'body' que faltaba
-      body: Consumer<MovimientoStockProvider>(
-        builder: (context, provider, _) {
-          // 1. Cargando
-          if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+          // --- LISTA ---
+          Expanded(
+            child: Consumer<MovimientoStockProvider>(
+              builder: (context, provider, _) {
+                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+                if (provider.errorMessage != null) return Center(child: Text('Error: ${provider.errorMessage}'));
+                if (provider.movimientos.isEmpty) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.filter_list_off, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text('No se encontraron movimientos', style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  );
+                }
 
-          // 2. Error
-          if (provider.errorMessage != null) {
-            return Center(child: Text('Error: ${provider.errorMessage}'));
-          }
+                return ListView.separated(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: provider.movimientos.length,
+                  separatorBuilder: (_, __) => const Divider(),
+                  itemBuilder: (ctx, i) {
+                    final m = provider.movimientos[i];
 
-          // 3. Lista vacía
-          if (provider.movimientos.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.history, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No hay movimientos registrados', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            );
-          }
+                    Color color = m.tipo == TipoMovimiento.entrada ? Colors.green :
+                    (m.tipo == TipoMovimiento.salida ? Colors.red : Colors.orange);
+                    IconData icon = m.tipo == TipoMovimiento.entrada ? Icons.arrow_circle_down :
+                    (m.tipo == TipoMovimiento.salida ? Icons.arrow_circle_up : Icons.tune);
 
-          // 4. Lista de movimientos
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: provider.movimientos.length,
-            separatorBuilder: (_, __) => const Divider(),
-            itemBuilder: (ctx, i) {
-              final m = provider.movimientos[i];
-              final esEntrada = m.tipo == TipoMovimiento.entrada;
-              final esSalida = m.tipo == TipoMovimiento.salida;
-
-              // Color e icono según tipo
-              Color color = esEntrada ? Colors.green : (esSalida ? Colors.red : Colors.orange);
-              IconData icon = esEntrada ? Icons.arrow_circle_down : (esSalida ? Icons.arrow_circle_up : Icons.tune);
-
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: color.withOpacity(0.1),
-                  child: Icon(icon, color: color),
-                ),
-                title: Text(
-                  '${m.tipo.name.toUpperCase()} (${m.cantidad})',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Fecha: ${m.createdAt.day}/${m.createdAt.month}/${m.createdAt.year}'),
-                    if (m.motivo != null && m.motivo!.isNotEmpty)
-                      Text('Motivo: ${m.motivo}', style: const TextStyle(fontStyle: FontStyle.italic)),
-                  ],
-                ),
-              );
-            },
-          );
-        },
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: color.withOpacity(0.1),
+                        child: Icon(icon, color: color),
+                      ),
+                      title: Text(
+                        '${m.tipo.name.toUpperCase()} (${m.cantidad})',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if(widget.productoId == null)
+                            Text('Prod: ${m.productoId}', style: const TextStyle(fontWeight: FontWeight.w500)),
+                          Text(m.createdAt.toString().split('.')[0]),
+                          if (m.motivo != null && m.motivo!.isNotEmpty)
+                            Text('"${m.motivo}"', style: const TextStyle(fontStyle: FontStyle.italic)),
+                        ],
+                      ),
+                      trailing: m.referencia != null
+                          ? Chip(label: Text(m.referencia!, style: const TextStyle(fontSize: 10)))
+                          : null,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildFilterChip(String label, TipoMovimiento? valor, Color color) {
+    final bool isSelected = _filtroTipo == valor;
+    return FilterChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => _cambiarFiltro(valor),
+      backgroundColor: Colors.white,
+      selectedColor: color.withOpacity(0.2),
+      labelStyle: TextStyle(
+        color: isSelected ? color : Colors.black,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+      ),
+      side: BorderSide(color: isSelected ? color : Colors.grey.shade300),
+      checkmarkColor: color,
     );
   }
 }

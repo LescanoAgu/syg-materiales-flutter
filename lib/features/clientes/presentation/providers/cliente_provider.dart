@@ -9,27 +9,18 @@ class ClienteProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Variables de paginación simplificadas
-  final bool _hayMasPaginas = false;
-  int _totalClientes = 0;
-
   List<ClienteModel> get clientes => _clientes;
   bool get isLoading => _isLoading;
-  bool get hayMasPaginas => _hayMasPaginas;
-  int get totalClientes => _totalClientes;
   String? get errorMessage => _errorMessage;
+  int get totalClientes => _clientes.length;
+  bool get hayMasPaginas => false; // Simplificado
 
-  // Cargar todos de una vez
   Future<void> cargarClientes({bool soloActivos = true}) async {
     _isLoading = true;
-    _errorMessage = null;
     notifyListeners();
-
     try {
       _clientes = await _repository.obtenerTodos(soloActivos: soloActivos);
-      _totalClientes = _clientes.length;
     } catch (e) {
-      print('Error cargando clientes: $e');
       _errorMessage = e.toString();
       _clientes = [];
     } finally {
@@ -38,33 +29,25 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> cargarMasClientes() async {
-    // Placeholder para paginación futura
-    print("Cargar más clientes no implementado en esta versión simplificada");
-  }
+  Future<void> cargarMasClientes() async {}
 
   Future<void> buscarClientes(String termino) async {
-    if (termino.isEmpty) {
-      await cargarClientes();
-      return;
-    }
-    // Filtro local (idealmente debería ser en backend para grandes volúmenes)
+    if (termino.isEmpty) return cargarClientes();
+    // Filtro local simple
     _clientes = _clientes.where((c) =>
     c.razonSocial.toLowerCase().contains(termino.toLowerCase()) ||
         c.codigo.toLowerCase().contains(termino.toLowerCase()) ||
-        (c.cuit != null && c.cuit!.contains(termino))
+        (c.cuit?.contains(termino) ?? false)
     ).toList();
     notifyListeners();
   }
-
-  // --- MÉTODOS CRUD ---
 
   Future<bool> crearCliente(ClienteModel cliente) async {
     _isLoading = true;
     notifyListeners();
     try {
       await _repository.crear(cliente);
-      await cargarClientes(); // Recargar la lista
+      await cargarClientes();
       return true;
     } catch (e) {
       _errorMessage = e.toString();
@@ -80,10 +63,9 @@ class ClienteProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await _repository.actualizar(cliente);
-      await cargarClientes(); // Recargar la lista para ver los cambios
+      await cargarClientes();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
       return false;
     } finally {
       _isLoading = false;
@@ -91,25 +73,30 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  // Método auxiliar para generar códigos automáticos (simple)
+  // ✅ NUEVO: Eliminar
+  Future<bool> eliminarCliente(String id) async {
+    try {
+      await _repository.eliminar(id);
+      _clientes.removeWhere((c) => c.id == id || c.codigo == id);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    }
+  }
+
   String generarNuevoCodigo() {
     if (_clientes.isEmpty) return 'CL-001';
-    // Lógica simple: buscar el último número y sumar 1.
-    // En producción idealmente esto se hace en el backend o con una lógica más robusta.
     try {
-      // Ordenar por código descendente para tomar el último
-      final ultimos = List<ClienteModel>.from(_clientes)
-        ..sort((a, b) => b.codigo.compareTo(a.codigo));
-
-      final ultimoCodigo = ultimos.first.codigo; // Ej: CL-005
-      final partes = ultimoCodigo.split('-');
+      final ultimos = List<ClienteModel>.from(_clientes)..sort((a, b) => b.codigo.compareTo(a.codigo));
+      final ultimo = ultimos.first.codigo;
+      final partes = ultimo.split('-');
       if (partes.length > 1) {
-        final numero = int.tryParse(partes[1]) ?? 0;
-        return 'CL-${(numero + 1).toString().padLeft(3, '0')}';
+        final num = int.tryParse(partes[1]) ?? 0;
+        return 'CL-${(num + 1).toString().padLeft(3, '0')}';
       }
-    } catch (e) {
-      // Fallback si falla el parseo
-    }
+    } catch (_) {}
     return 'CL-${(_clientes.length + 1).toString().padLeft(3, '0')}';
   }
 }

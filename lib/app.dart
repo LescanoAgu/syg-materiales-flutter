@@ -3,17 +3,15 @@ import 'package:provider/provider.dart';
 import 'core/constants/app_colors.dart';
 import 'core/widgets/app_drawer.dart';
 import 'features/stock/presentation/pages/stock_page.dart';
-
-// Providers
 import 'features/stock/presentation/providers/producto_provider.dart';
 import 'features/stock/presentation/providers/movimiento_stock_provider.dart';
 import 'features/clientes/presentation/providers/cliente_provider.dart';
 import 'features/acopios/presentation/providers/acopio_provider.dart';
 import 'features/obras/presentation/providers/obra_provider.dart';
 import 'features/ordenes_internas/presentation/providers/orden_interna_provider.dart';
-
-// IMPORTANTE: Este es el import que faltaba para que funcione el botón de carga
 import 'services/firestore_service.dart';
+import 'features/auth/presentation/providers/auth_provider.dart';
+import 'features/usuarios/presentation/providers/usuarios_provider.dart';
 
 class SyGMaterialesApp extends StatelessWidget {
   final Widget home;
@@ -23,6 +21,7 @@ class SyGMaterialesApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ProductoProvider()),
         ChangeNotifierProvider(create: (_) => MovimientoStockProvider()),
         ChangeNotifierProvider(create: (_) => ClienteProvider()),

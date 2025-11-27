@@ -1,30 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/obra_model.dart';
 import '../providers/obra_provider.dart';
-import 'obra_form_page.dart'; // Import necesario para la navegación
+import 'obra_form_page.dart';
 
 class ObrasListPage extends StatefulWidget {
   const ObrasListPage({super.key});
-
   @override
   State<ObrasListPage> createState() => _ObrasListPageState();
 }
 
 class _ObrasListPageState extends State<ObrasListPage> {
-  final TextEditingController _searchController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  String _filtroEstado = 'Activas';
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ObraProvider>().cargarObras();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => context.read<ObraProvider>().cargarObras());
   }
 
   @override
@@ -33,87 +24,62 @@ class _ObrasListPageState extends State<ObrasListPage> {
       drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text('Obras'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<ObraProvider>().cargarObras(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildSearchBar(),
-          Expanded(
-            child: Consumer<ObraProvider>(
-              builder: (context, provider, child) {
-                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-                if (provider.obras.isEmpty) return const Center(child: Text('No hay obras cargadas'));
-
-                return ListView.builder(
-                  itemCount: provider.obras.length,
-                  padding: const EdgeInsets.all(16),
-                  itemBuilder: (context, index) {
-                    final obra = provider.obras[index];
-                    return _buildObraCard(obra);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+        actions: [IconButton(icon: const Icon(Icons.refresh), onPressed: () => context.read<ObraProvider>().cargarObras())],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navegarAFormulario(context), // Ya usa el método que recarga
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ObraFormPage())).then((_) => context.read<ObraProvider>().cargarObras()),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Obra'),
       ),
-    );
-  }
+      body: Consumer<ObraProvider>(
+        builder: (ctx, prov, _) {
+          if (prov.isLoading) return const Center(child: CircularProgressIndicator());
+          if (prov.obras.isEmpty) return const Center(child: Text('Sin obras'));
 
-  Widget _buildSearchBar() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: TextField(
-        controller: _searchController,
-        decoration: const InputDecoration(
-          hintText: 'Buscar obra...',
-          prefixIcon: Icon(Icons.search),
-          border: OutlineInputBorder(),
-        ),
-        onChanged: (v) => context.read<ObraProvider>().buscarObras(v),
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: prov.obras.length,
+            itemBuilder: (c, i) => _buildCard(prov.obras[i]),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildObraCard(ObraModel obra) {
+  Widget _buildCard(ObraModel o) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: obra.estado == 'activa' ? Colors.green : Colors.grey,
-          child: const Icon(Icons.business, color: Colors.white),
+        leading: const CircleAvatar(child: Icon(Icons.business)),
+        title: Text(o.nombre),
+        subtitle: Text('${o.codigo} - ${o.clienteRazonSocial ?? "?"}'),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ObraFormPage(obra: o))).then((_) => context.read<ObraProvider>().cargarObras()),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.red),
+          onPressed: () => _borrar(o),
         ),
-        title: Text(obra.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Cód: ${obra.codigo}'),
-            Text('Cliente: ${obra.clienteRazonSocial ?? "Sin asignar"}'),
-          ],
-        ),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: () => _navegarAFormulario(context, obra: obra),
       ),
     );
   }
 
-  void _navegarAFormulario(BuildContext context, {ObraModel? obra}) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ObraFormPage(obra: obra),
+  void _borrar(ObraModel o) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Eliminar Obra'),
+        content: Text('¿Borrar ${o.nombre}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () {
+              context.read<ObraProvider>().eliminarObra(o.id ?? o.codigo);
+              Navigator.pop(ctx);
+            },
+            child: const Text('BORRAR'),
+          )
+        ],
       ),
-      // ✅ FIX: Recargar obras al volver
-    ).then((_) => context.read<ObraProvider>().cargarObras());
+    );
   }
 }

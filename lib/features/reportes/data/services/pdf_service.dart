@@ -2,8 +2,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-// 1. IMPORTANTE: Importar esto para arreglar el error de Locale
-import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/date_symbol_data_local.dart'; // ✅ FIX LOCALE
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../stock/data/models/movimiento_stock_model.dart';
@@ -18,12 +17,12 @@ class PdfService {
     DateTime? fechaDesde,
     DateTime? fechaHasta,
   }) async {
-    // 2. ARREGLO LOCALE: Inicializar datos de formato para español
+    // 1. Inicializar Locale para evitar errores
     await initializeDateFormatting('es_AR', null);
 
     final pdf = pw.Document();
 
-    // Agrupamos movimientos por Producto ID para que el reporte sea ordenado
+    // 2. Agrupar por Producto
     final Map<String, List<MovimientoStock>> movimientosPorProducto = {};
     for (var m in movimientos) {
       if (!movimientosPorProducto.containsKey(m.productoId)) {
@@ -38,28 +37,28 @@ class PdfService {
         margin: const pw.EdgeInsets.all(40),
         build: (pw.Context context) {
           return [
-            _buildHeaderGeneral('REPORTE DE MOVIMIENTOS DE STOCK', fechaDesde, fechaHasta),
+            _buildHeaderGeneral('REPORTE DE MOVIMIENTOS', fechaDesde, fechaHasta),
             pw.SizedBox(height: 20),
 
-            // Generamos una sección por cada producto
+            // Iteramos cada producto
             ...movimientosPorProducto.entries.map((entry) {
               final productoId = entry.key;
-              final listaMovimientos = entry.value;
+              final lista = entry.value;
 
               return pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Container(
                     padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                    decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                    color: PdfColors.grey200,
                     width: double.infinity,
                     child: pw.Text(
-                      'PRODUCTO: $productoId', // Si tuvieras el nombre, iría aquí
+                      'PRODUCTO: $productoId',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                     ),
                   ),
                   pw.SizedBox(height: 5),
-                  _buildTablaMovimientos(listaMovimientos),
+                  _buildTablaMovimientos(lista),
                   pw.SizedBox(height: 15),
                 ],
               );
@@ -77,7 +76,6 @@ class PdfService {
 
   // --- REMITO DE ORDEN ---
   Future<void> generarRemitoOrden(OrdenInternaDetalle ordenDetalle) async {
-    // También inicializamos aquí por si acaso
     await initializeDateFormatting('es_AR', null);
 
     final pdf = pw.Document();
@@ -138,10 +136,10 @@ class PdfService {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: {
-        0: const pw.FlexColumnWidth(2), // Fecha
-        1: const pw.FlexColumnWidth(2), // Tipo
-        2: const pw.FlexColumnWidth(1.5), // Cantidad
-        3: const pw.FlexColumnWidth(3), // Motivo
+        0: const pw.FlexColumnWidth(2),
+        1: const pw.FlexColumnWidth(2),
+        2: const pw.FlexColumnWidth(1.5),
+        3: const pw.FlexColumnWidth(3),
       },
       children: [
         pw.TableRow(
@@ -149,55 +147,28 @@ class PdfService {
           children: [
             _th('FECHA'),
             _th('TIPO'),
-            _th('CANTIDAD', align: pw.TextAlign.center),
-            _th('MOTIVO / REF'),
+            _th('CANT', align: pw.TextAlign.center),
+            _th('DETALLE'),
           ],
         ),
         ...movimientos.map((m) {
-          final colorTipo = m.tipo == TipoMovimiento.entrada ? PdfColors.green700 :
+          // Colores simples para PDF
+          final colorText = m.tipo == TipoMovimiento.entrada ? PdfColors.green700 :
           (m.tipo == TipoMovimiento.salida ? PdfColors.red700 : PdfColors.orange700);
 
           return pw.TableRow(
             children: [
               _td(ArgFormats.fechaHora(m.createdAt)),
-              _td(m.tipo.name.toUpperCase(), color: colorTipo, isBold: true),
+              _td(m.tipo.name.toUpperCase(), color: colorText, isBold: true),
               _td(m.cantidad.toStringAsFixed(2), align: pw.TextAlign.center, isBold: true),
-              _td('${m.motivo ?? "-"} ${m.referencia != null ? "(${m.referencia})" : ""}'),
-            ],
+              _td('${m.productoNombre}\n${m.motivo ?? "-"}', isBold: false),           ],
           );
         }),
       ],
     );
   }
 
-  // ... (Mantén los métodos _buildHeaderOrden, _buildInfoCliente, _buildTablaProductos, _buildFooterOrden, _th y _td iguales que antes)
-  // Solo agrego una pequeña mejora al helper _td para soportar color y negrita:
-
-  pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
-      child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: align),
-    );
-  }
-
-  pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, PdfColor? color, bool isBold = false}) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.all(5),
-      child: pw.Text(
-          text,
-          style: pw.TextStyle(
-              fontSize: 9,
-              color: color ?? PdfColors.black,
-              fontWeight: isBold ? pw.FontWeight.bold : pw.FontWeight.normal
-          ),
-          textAlign: align
-      ),
-    );
-  }
-
-  // --- COPIA AQUÍ TUS MÉTODOS RESTANTES (_buildHeaderOrden, etc) DEL ARCHIVO ANTERIOR ---
-  // ... (Si necesitas que te los pase de nuevo completos, avísame, pero con esto cubrimos el error y la nueva funcionalidad)
-
+  // --- WIDGETS DE ORDEN ---
   pw.Widget _buildHeaderOrden(OrdenInterna orden) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -249,8 +220,6 @@ class PdfService {
               children: [
                 pw.Text('OBRA / DESTINO', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey600)),
                 pw.Text(detalle.obraNombre ?? 'Sin especificar', style: const pw.TextStyle(fontSize: 12)),
-                if (detalle.orden.fechaEntregaEstimada != null)
-                  pw.Text('Entrega est.: ${ArgFormats.fecha(detalle.orden.fechaEntregaEstimada)}', style: const pw.TextStyle(fontSize: 10)),
               ],
             ),
           ),
@@ -299,38 +268,26 @@ class PdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
         pw.Expanded(
-          child: orden.observacionesCliente != null && orden.observacionesCliente!.isNotEmpty
-              ? pw.Container(
-            padding: const pw.EdgeInsets.all(8),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.grey100,
-              borderRadius: pw.BorderRadius.circular(4),
-            ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text('OBSERVACIONES:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
-                pw.Text(orden.observacionesCliente!, style: const pw.TextStyle(fontSize: 9)),
-              ],
-            ),
-          )
-              : pw.Container(),
+          child: orden.observacionesCliente != null ? pw.Text('OBS: ${orden.observacionesCliente!}', style: const pw.TextStyle(fontSize: 9)) : pw.Container(),
         ),
-        pw.SizedBox(width: 20),
         pw.Container(
           padding: const pw.EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          decoration: pw.BoxDecoration(
-            color: PdfColors.teal,
-            borderRadius: pw.BorderRadius.circular(4),
-          ),
-          child: pw.Row(
-            children: [
-              pw.Text('TOTAL: ', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold)),
-              pw.Text(ArgFormats.moneda(orden.total), style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 16)),
-            ],
-          ),
+          color: PdfColors.teal,
+          child: pw.Text('TOTAL: ${ArgFormats.moneda(orden.total)}', style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold)),
         ),
       ],
+    );
+  }
+
+  // Helpers
+  pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: align));
+  }
+
+  pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, PdfColor? color, bool isBold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.all(5),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 9, color: color, fontWeight: isBold ? pw.FontWeight.bold : null), textAlign: align),
     );
   }
 }
