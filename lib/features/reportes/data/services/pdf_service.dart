@@ -161,8 +161,7 @@ class PdfService {
               _td(ArgFormats.fechaHora(m.createdAt)),
               _td(m.tipo.name.toUpperCase(), color: colorText, isBold: true),
               _td(m.cantidad.toStringAsFixed(2), align: pw.TextAlign.center, isBold: true),
-              _td('${m.motivo ?? "-"} ${m.referencia != null ? "(${m.referencia})" : ""}'),
-            ],
+              _td('${m.productoNombre}\n${m.motivo ?? "-"}', isBold: false),           ],
           );
         }),
       ],

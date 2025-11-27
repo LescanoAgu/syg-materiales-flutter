@@ -20,7 +20,7 @@ class MovimientoStockProvider extends ChangeNotifier {
   MovimientoStockState get state => _state;
   List<MovimientoStock> get movimientos => _movimientos;
   String? get errorMessage => _errorMessage;
-  bool get isLoading => _state == MovimientoStockState.loading;
+  bool get isLoading => _state == MovimientoStockState.loading || _state == MovimientoStockState.registering;
 
   // Carga general (Reporte)
   Future<void> cargarMovimientos({DateTime? desde, DateTime? hasta, TipoMovimiento? tipo}) async {
@@ -45,14 +45,13 @@ class MovimientoStockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ MEJORADO: Ahora acepta filtro de TIPO
+  // ✅ CORREGIDO: Ahora acepta el parámetro 'tipo'
   Future<void> cargarMovimientosDeProducto(String productoId, {TipoMovimiento? tipo}) async {
     _state = MovimientoStockState.loading;
     _productoFiltroCodigo = productoId;
     _tipoFiltro = tipo;
     notifyListeners();
     try {
-      // El repositorio ya soportaba filtrar por producto Y tipo a la vez
       _movimientos = await _repository.obtenerMovimientos(
         productoId: productoId,
         tipo: tipo,
@@ -67,18 +66,23 @@ class MovimientoStockProvider extends ChangeNotifier {
 
   Future<bool> registrarMovimiento({
     required String productoId,
+    required String productoNombre,
     required TipoMovimiento tipo,
     required double cantidad,
     String? motivo,
     String? referencia,
     String? usuarioId,
   }) async {
+    // Evitar doble clic
+    if (_state == MovimientoStockState.registering) return false;
+
     try {
       _state = MovimientoStockState.registering;
       notifyListeners();
 
       await _repository.registrarMovimiento(
         productoId: productoId,
+        productoNombre: productoNombre,
         tipo: tipo,
         cantidad: cantidad,
         motivo: motivo,
@@ -86,13 +90,15 @@ class MovimientoStockProvider extends ChangeNotifier {
         usuarioId: usuarioId,
       );
 
-      // Recargar según el contexto donde estábamos
+      // Recargar según donde estábamos
       if (_productoFiltroCodigo != null) {
         await cargarMovimientosDeProducto(_productoFiltroCodigo!, tipo: _tipoFiltro);
       } else {
         await cargarMovimientos(tipo: _tipoFiltro);
       }
 
+      _state = MovimientoStockState.loaded;
+      notifyListeners();
       return true;
     } catch (e) {
       _state = MovimientoStockState.error;

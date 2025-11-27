@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/producto_search_delegate.dart'; // Importar Buscador
+import '../../../../core/widgets/producto_search_delegate.dart'; // Asegúrate de tener este archivo
 import '../../data/models/movimiento_stock_model.dart';
 import '../../data/models/producto_model.dart';
 import '../providers/movimiento_stock_provider.dart';
@@ -19,8 +19,10 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
   final _formKey = GlobalKey<FormState>();
   final _cantidadCtrl = TextEditingController();
   final _motivoCtrl = TextEditingController();
+
   ProductoModel? _productoSeleccionado;
   TipoMovimiento _tipo = TipoMovimiento.entrada;
+  bool _guardando = false;
 
   @override
   void initState() {
@@ -41,7 +43,7 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
           key: _formKey,
           child: Column(
             children: [
-              _buildSelectorProducto(),
+              _buildSelectorProducto(), // Ahora sí está definido abajo
               const SizedBox(height: 16),
               DropdownButtonFormField<TipoMovimiento>(
                 value: _tipo,
@@ -66,9 +68,11 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _guardar,
+                  onPressed: _guardando ? null : _guardar,
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-                  child: const Text('REGISTRAR'),
+                  child: _guardando
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : const Text('REGISTRAR'),
                 ),
               ),
             ],
@@ -78,6 +82,7 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
     );
   }
 
+  // ✅ MÉTODO QUE FALTABA
   Widget _buildSelectorProducto() {
     if (widget.productoInicial != null) {
       return ListTile(
@@ -100,7 +105,12 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
           children: [
             const Icon(Icons.search),
             const SizedBox(width: 10),
-            Expanded(child: Text(_productoSeleccionado?.nombre ?? 'Buscar Producto...', style: TextStyle(fontSize: 16, color: _productoSeleccionado == null ? Colors.grey : Colors.black))),
+            Expanded(
+                child: Text(
+                    _productoSeleccionado?.nombre ?? 'Buscar Producto...',
+                    style: TextStyle(fontSize: 16, color: _productoSeleccionado == null ? Colors.grey : Colors.black)
+                )
+            ),
           ],
         ),
       ),
@@ -108,13 +118,26 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
   }
 
   Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate() || _productoSeleccionado == null) return;
-    await context.read<MovimientoStockProvider>().registrarMovimiento(
+    if (!_formKey.currentState!.validate() || _productoSeleccionado == null) {
+      if (_productoSeleccionado == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Selecciona un producto')));
+      }
+      return;
+    }
+
+    setState(() => _guardando = true);
+
+    final exito = await context.read<MovimientoStockProvider>().registrarMovimiento(
       productoId: _productoSeleccionado!.codigo,
+      productoNombre: _productoSeleccionado!.nombre,
       tipo: _tipo,
-      cantidad: double.parse(_cantidadCtrl.text),
+      cantidad: double.tryParse(_cantidadCtrl.text) ?? 0,
       motivo: _motivoCtrl.text,
     );
-    if (mounted) Navigator.pop(context);
+
+    if (mounted) {
+      setState(() => _guardando = false);
+      if (exito) Navigator.pop(context);
+    }
   }
 }

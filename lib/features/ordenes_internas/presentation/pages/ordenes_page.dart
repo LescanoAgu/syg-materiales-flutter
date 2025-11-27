@@ -56,18 +56,38 @@ class _OrdenesPageState extends State<OrdenesPage> {
   Widget _buildCard(OrdenInternaDetalle od) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        title: Text('${od.orden.numero} - ${od.clienteRazonSocial}'),
-        subtitle: Text(od.orden.estado.toUpperCase()),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrdenDetallePage(ordenResumen: od))),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: () => _borrar(od.orden.id!),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0), // Padding interno
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('${od.orden.numero}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+              // Badge de estado
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                child: Text(od.orden.estado.toUpperCase(), style: const TextStyle(fontSize: 10)),
+              ),
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 8),
+              // ✅ SNEAK PEAK
+              Row(children: [const Icon(Icons.business, size: 14), const SizedBox(width: 4), Expanded(child: Text(od.clienteRazonSocial, overflow: TextOverflow.ellipsis))]),
+              Row(children: [const Icon(Icons.location_city, size: 14), const SizedBox(width: 4), Expanded(child: Text(od.obraNombre ?? 'Sin obra', overflow: TextOverflow.ellipsis))]),
+              Row(children: [const Icon(Icons.person, size: 14), const SizedBox(width: 4), Expanded(child: Text('Solicita: ${od.orden.solicitanteNombre}', overflow: TextOverflow.ellipsis))]),
+            ],
+          ),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrdenDetallePage(ordenResumen: od))),
         ),
       ),
     );
   }
-
   void _borrar(String id) {
     showDialog(
       context: context,
