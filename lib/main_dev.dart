@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'firebase_options_dev.dart';
 import 'app.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Widget initialScreen = const AuthGate();
@@ -29,4 +31,11 @@ void main() async {
   }
 
   runApp(SyGMaterialesApp(home: initialScreen));
+
+  if (kIsWeb) {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: false, // 👈 ESTO ES OBLIGATORIO EN WEB DEV
+    );
+  }
+
 }

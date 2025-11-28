@@ -40,28 +40,39 @@ class AuthProvider extends ChangeNotifier {
       _usuarioDb = await _repo.obtenerDatosUsuario(uid);
 
       if (_usuarioDb == null) {
-        // Usuario autenticado pero sin datos en DB (Raro, pero posible)
         _status = AuthStatus.unauthenticated;
       } else if (_usuarioDb!.estado == 'pendiente' || _usuarioDb!.estado == 'bloqueado') {
-        // 🔒 Usuario existe pero no está activo
         _status = AuthStatus.pending;
       } else {
-        // ✅ Usuario activo y feliz
         _status = AuthStatus.authenticated;
       }
     } catch (e) {
+      // 👇👇 AGREGA ESTO AQUÍ 👇👇
+      print("========================================");
+      print("🚨 ERROR LEYENDO FIRESTORE: $e");
+      print("========================================");
+      // 👆👆👆👆
       _status = AuthStatus.unauthenticated;
     }
     notifyListeners();
   }
-
   Future<bool> login(String email, String password) async {
     _errorMessage = null;
     try {
       await _repo.login(email, password);
       return true;
     } catch (e) {
-      _errorMessage = 'Email o contraseña incorrectos';
+      // 🚨 AGREGADO: ¡Imprimir el error real en la consola!
+      print("========================================");
+      print("🚨 ERROR REAL DE LOGIN: $e");
+      print("========================================");
+
+      // 🚨 AGREGADO: Mostrar el error técnico en pantalla (solo para dev)
+      _errorMessage = "Error técnico: $e";
+
+      // Antes tenías esto (ocúltalo por ahora):
+      // _errorMessage = 'Email o contraseña incorrectos';
+
       notifyListeners();
       return false;
     }
