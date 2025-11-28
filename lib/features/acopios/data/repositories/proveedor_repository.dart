@@ -5,11 +5,18 @@ class ProveedorRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'proveedores';
 
-  Future<List<ProveedorModel>> obtenerTodos() async {
+  Future<List<ProveedorModel>> obtenerTodos({bool soloActivos = true}) async {
     try {
-      final snapshot = await _firestore.collection(_collection).orderBy('nombre').get();
+      Query query = _firestore.collection(_collection).orderBy('nombre');
+      if (soloActivos) {
+        query = query.where('estado', isEqualTo: 'activo');
+      }
+
+      final snapshot = await query.get();
       return snapshot.docs.map((doc) {
-        final data = doc.data();
+        // ✅ CORRECCIÓN: Casting explícito para que Dart sepa que es un Mapa
+        final data = doc.data() as Map<String, dynamic>;
+
         data['id'] = doc.id;
         return ProveedorModel.fromMap(data);
       }).toList();
@@ -20,6 +27,17 @@ class ProveedorRepository {
   }
 
   Future<void> crear(ProveedorModel proveedor) async {
-    await _firestore.collection(_collection).doc(proveedor.codigo).set(proveedor.toMap());
+    // Usamos el código como ID si es posible, o automático
+    final id = proveedor.codigo.isNotEmpty ? proveedor.codigo : _firestore.collection(_collection).doc().id;
+    await _firestore.collection(_collection).doc(id).set(proveedor.toMap());
+  }
+
+  Future<void> actualizar(ProveedorModel proveedor) async {
+    if (proveedor.id == null) return;
+    await _firestore.collection(_collection).doc(proveedor.id).update(proveedor.toMap());
+  }
+
+  Future<void> eliminar(String id) async {
+    await _firestore.collection(_collection).doc(id).delete();
   }
 }

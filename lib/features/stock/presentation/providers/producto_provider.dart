@@ -204,4 +204,16 @@ class ProductoProvider extends ChangeNotifier {
   Future<String> generarCodigoParaCategoria(String catId) async {
     return await _repository.generarSiguienteCodigo(catId);
   }
+
+  Future<List<ProductoModel>> buscarParaDelegate(String query) async {
+    if (query.isEmpty) return [];
+    try {
+      // ✅ FIX: Convertir a mayúsculas para coincidir con la BD
+      return await _repository.buscar(query.toUpperCase());
+    } catch (e) {
+      print("Error búsqueda delegate: $e");
+      return [];
+    }
+  }
+
 }

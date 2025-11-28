@@ -10,7 +10,18 @@ class OrdenInterna {
   final String? solicitanteTelefono;
   final DateTime fechaPedido;
   final DateTime? fechaEntregaEstimada;
-  final String estado;
+  final String estado; // 'solicitado', 'aprobado', 'en_curso', 'finalizado', 'cancelado'
+
+  // Logística y Prioridad
+  final String prioridad; // 'baja', 'media', 'alta', 'urgente'
+  final String? responsableEntregaId;
+  final String? responsableEntregaNombre;
+  final double porcentajeAvance;
+
+  // ✅ NUEVOS CAMPOS: Fuente de Abastecimiento
+  final String? fuente; // 'stock' o 'proveedor'
+  final String? proveedorAsignadoId; // ID del proveedor si es compra directa
+
   final String? observacionesCliente;
   final String? observacionesInternas;
   final String? motivoRechazo;
@@ -36,6 +47,15 @@ class OrdenInterna {
     required this.fechaPedido,
     this.fechaEntregaEstimada,
     this.estado = 'solicitado',
+    this.prioridad = 'media',
+    this.responsableEntregaId,
+    this.responsableEntregaNombre,
+    this.porcentajeAvance = 0.0,
+
+    // Nuevos
+    this.fuente,
+    this.proveedorAsignadoId,
+
     this.observacionesCliente,
     this.observacionesInternas,
     this.motivoRechazo,
@@ -61,6 +81,16 @@ class OrdenInterna {
       fechaPedido: map['fechaPedido'] != null ? DateTime.parse(map['fechaPedido']) : DateTime.now(),
       fechaEntregaEstimada: map['fechaEntregaEstimada'] != null ? DateTime.parse(map['fechaEntregaEstimada']) : null,
       estado: map['estado']?.toString() ?? 'solicitado',
+
+      prioridad: map['prioridad']?.toString() ?? 'media',
+      responsableEntregaId: map['responsableEntregaId']?.toString(),
+      responsableEntregaNombre: map['responsableEntregaNombre']?.toString(),
+      porcentajeAvance: (map['porcentajeAvance'] as num?)?.toDouble() ?? 0.0,
+
+      // Nuevos
+      fuente: map['fuente']?.toString(),
+      proveedorAsignadoId: map['proveedorAsignadoId']?.toString(),
+
       observacionesCliente: map['observacionesCliente']?.toString(),
       observacionesInternas: map['observacionesInternas']?.toString(),
       motivoRechazo: map['motivoRechazo']?.toString(),
@@ -83,6 +113,16 @@ class OrdenInterna {
       'solicitanteNombre': solicitanteNombre,
       'fechaPedido': fechaPedido.toIso8601String(),
       'estado': estado,
+
+      'prioridad': prioridad,
+      'responsableEntregaId': responsableEntregaId,
+      'responsableEntregaNombre': responsableEntregaNombre,
+      'porcentajeAvance': porcentajeAvance,
+
+      // Nuevos
+      'fuente': fuente,
+      'proveedorAsignadoId': proveedorAsignadoId,
+
       'total': total,
       'createdAt': createdAt.toIso8601String(),
       'clienteRazonSocial': clienteRazonSocial,
@@ -90,7 +130,8 @@ class OrdenInterna {
     };
   }
 
-  bool get esFinal => ['despachado', 'facturado', 'cancelado', 'rechazado'].contains(estado);
+  bool get esFinal => ['finalizado', 'cancelado', 'rechazado'].contains(estado);
+  bool get esUrgente => prioridad == 'urgente' || prioridad == 'alta';
 }
 
 class OrdenInternaDetalle {
@@ -109,6 +150,16 @@ class OrdenInternaDetalle {
   });
 
   int get cantidadProductos => items.length;
-  double get cantidadTotal => items.fold(0.0, (sum, item) => sum + item.cantidadFinal);
-  bool get tieneModificaciones => false; // Placeholder logic
+
+  double get progresoReal {
+    if (items.isEmpty) return 0.0;
+    double totalSolicitado = 0;
+    double totalEntregado = 0;
+    for (var i in items) {
+      totalSolicitado += i.cantidadFinal;
+      totalEntregado += i.item.cantidadEntregada;
+    }
+    if (totalSolicitado == 0) return 0.0;
+    return (totalEntregado / totalSolicitado).clamp(0.0, 1.0);
+  }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/producto_search_delegate.dart'; // Asegúrate de tener este archivo
+import '../../../../core/widgets/producto_search_delegate.dart';
 import '../../data/models/movimiento_stock_model.dart';
 import '../../data/models/producto_model.dart';
 import '../providers/movimiento_stock_provider.dart';
@@ -28,9 +28,7 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
   void initState() {
     super.initState();
     _productoSeleccionado = widget.productoInicial;
-    if (_productoSeleccionado == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => context.read<ProductoProvider>().cargarProductos());
-    }
+    // Ya no necesitamos cargar productos aquí para el buscador nuevo
   }
 
   @override
@@ -43,7 +41,7 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
           key: _formKey,
           child: Column(
             children: [
-              _buildSelectorProducto(), // Ahora sí está definido abajo
+              _buildSelectorProducto(),
               const SizedBox(height: 16),
               DropdownButtonFormField<TipoMovimiento>(
                 value: _tipo,
@@ -82,7 +80,6 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
     );
   }
 
-  // ✅ MÉTODO QUE FALTABA
   Widget _buildSelectorProducto() {
     if (widget.productoInicial != null) {
       return ListTile(
@@ -94,8 +91,11 @@ class _MovimientoRegistroPageState extends State<MovimientoRegistroPage> {
 
     return InkWell(
       onTap: () async {
-        final provider = context.read<ProductoProvider>();
-        final p = await showSearch(context: context, delegate: ProductoSearchDelegate(provider.productos));
+        // ✅ CORRECCIÓN: Llamada sin argumentos al buscador
+        final p = await showSearch(
+            context: context,
+            delegate: ProductoSearchDelegate() // Sin lista, busca directo en BD
+        );
         if (p != null) setState(() => _productoSeleccionado = p);
       },
       child: Container(

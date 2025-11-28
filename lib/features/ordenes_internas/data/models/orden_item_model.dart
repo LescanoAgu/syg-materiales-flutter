@@ -4,9 +4,11 @@ class OrdenItem {
   final String productoId;
   final double cantidadSolicitada;
   final double? cantidadAprobada;
+  final double cantidadEntregada; // ✅ NUEVO: Control de entregas parciales
   final double precioUnitario;
   final double subtotal;
   final String? observaciones;
+  final String estadoItem; // ✅ NUEVO: 'pendiente', 'parcial', 'completado'
   final DateTime createdAt;
 
   OrdenItem({
@@ -15,11 +17,19 @@ class OrdenItem {
     required this.productoId,
     required this.cantidadSolicitada,
     this.cantidadAprobada,
+    this.cantidadEntregada = 0.0, // Default 0
     required this.precioUnitario,
     required this.subtotal,
     this.observaciones,
+    this.estadoItem = 'pendiente',
     required this.createdAt,
   });
+
+  // Getter útil para la UI
+  double get cantidadPendiente {
+    final meta = cantidadAprobada ?? cantidadSolicitada;
+    return (meta - cantidadEntregada).clamp(0.0, meta);
+  }
 
   factory OrdenItem.fromMap(Map<String, dynamic> map) {
     return OrdenItem(
@@ -28,9 +38,11 @@ class OrdenItem {
       productoId: map['productoId']?.toString() ?? '',
       cantidadSolicitada: (map['cantidadSolicitada'] as num?)?.toDouble() ?? 0.0,
       cantidadAprobada: (map['cantidadAprobada'] as num?)?.toDouble(),
+      cantidadEntregada: (map['cantidadEntregada'] as num?)?.toDouble() ?? 0.0,
       precioUnitario: (map['precioUnitario'] as num?)?.toDouble() ?? 0.0,
       subtotal: (map['subtotal'] as num?)?.toDouble() ?? 0.0,
       observaciones: map['observaciones']?.toString(),
+      estadoItem: map['estadoItem']?.toString() ?? 'pendiente',
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'].toString())
           : DateTime.now(),
@@ -43,15 +55,17 @@ class OrdenItem {
       'productoId': productoId,
       'cantidadSolicitada': cantidadSolicitada,
       'cantidadAprobada': cantidadAprobada,
+      'cantidadEntregada': cantidadEntregada,
       'precioUnitario': precioUnitario,
       'subtotal': subtotal,
       'observaciones': observaciones,
+      'estadoItem': estadoItem,
       'createdAt': createdAt.toIso8601String(),
     };
   }
 }
 
-/// Modelo para la UI (incluye nombres para mostrar en la lista)
+/// Modelo para la UI (incluye nombres)
 class OrdenItemDetalle {
   final OrdenItem item;
   final String productoNombre;
@@ -68,5 +82,8 @@ class OrdenItemDetalle {
   });
 
   double get cantidadFinal => item.cantidadAprobada ?? item.cantidadSolicitada;
-  bool get fueModificada => item.cantidadAprobada != null && item.cantidadAprobada != item.cantidadSolicitada;
+
+  // Lógica visual de estado
+  bool get estaCompleto => item.cantidadEntregada >= cantidadFinal;
+  bool get esParcial => item.cantidadEntregada > 0 && item.cantidadEntregada < cantidadFinal;
 }
