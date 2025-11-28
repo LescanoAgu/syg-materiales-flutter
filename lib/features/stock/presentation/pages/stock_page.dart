@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart'; // Asegúrate que esta ruta sea correcta en tu proyecto
+import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/producto_model.dart';
 import '../providers/producto_provider.dart';
 import 'movimiento_registro_page.dart';
 import 'producto_detalle_page.dart';
-import 'movimiento_historial_page.dart'; // ✅ IMPORT QUE FALTABA
+import 'movimiento_historial_page.dart';
 
 class StockPage extends StatefulWidget {
-  const StockPage({super.key});
+  // ✅ CORRECCIÓN: Definimos el parámetro
+  final bool esNavegacionPrincipal;
+
+  const StockPage({
+    super.key,
+    this.esNavegacionPrincipal = false // Por defecto es falso
+  });
+
   @override
   State<StockPage> createState() => _StockPageState();
 }
@@ -28,58 +35,80 @@ class _StockPageState extends State<StockPage> {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ CORRECCIÓN: Si es navegación principal, devolvemos solo el body (sin Scaffold extra)
+    if (widget.esNavegacionPrincipal) {
+      return _buildBody();
+    }
+
+    // Si entramos normal, devolvemos Scaffold completo
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
         title: const Text('Stock & Inventario'),
-        actions: [
-          Row(
-            children: [
-              const Text('Ocultar 0', style: TextStyle(fontSize: 12)),
-              Switch(
-                value: _ocultarCeros,
-                onChanged: (v) => setState(() => _ocultarCeros = v),
-                activeColor: Colors.white,
-              ),
-            ],
-          )
-        ],
+        actions: _buildActions(),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MovimientoRegistroPage()))
-            .then((_) => context.read<ProductoProvider>().cargarProductos()),
-        child: const Icon(Icons.swap_horiz),
-      ),
-      body: Column(
+      floatingActionButton: _buildFab(),
+      body: _buildBody(),
+    );
+  }
+
+  // Extraemos acciones para reutilizar
+  List<Widget> _buildActions() {
+    return [
+      Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(hintText: 'Buscar...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
-              onChanged: (val) => context.read<ProductoProvider>().buscarProductos(val),
-            ),
-          ),
-          Expanded(
-            child: Consumer<ProductoProvider>(
-              builder: (context, provider, _) {
-                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-
-                final lista = _ocultarCeros
-                    ? provider.productos.where((p) => p.cantidadDisponible != 0).toList()
-                    : provider.productos;
-
-                if (lista.isEmpty) return const Center(child: Text('Sin productos en stock'));
-
-                return ListView.builder(
-                  itemCount: lista.length,
-                  itemBuilder: (ctx, i) => _buildCard(lista[i]),
-                );
-              },
-            ),
+          const Text('Ocultar 0', style: TextStyle(fontSize: 12)),
+          Switch(
+            value: _ocultarCeros,
+            onChanged: (v) => setState(() => _ocultarCeros = v),
+            activeColor: Colors.white,
           ),
         ],
-      ),
+      )
+    ];
+  }
+
+  // Extraemos FAB
+  Widget _buildFab() {
+    return FloatingActionButton(
+      heroTag: "stock_fab", // Tag único para evitar conflictos de héroe
+      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MovimientoRegistroPage()))
+          .then((_) => context.read<ProductoProvider>().cargarProductos()),
+      child: const Icon(Icons.swap_horiz),
+    );
+  }
+
+  // Extraemos el Body
+  Widget _buildBody() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(hintText: 'Buscar...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder()),
+            onChanged: (val) => context.read<ProductoProvider>().buscarProductos(val),
+          ),
+        ),
+        Expanded(
+          child: Consumer<ProductoProvider>(
+            builder: (context, provider, _) {
+              if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+
+              final lista = _ocultarCeros
+                  ? provider.productos.where((p) => p.cantidadDisponible != 0).toList()
+                  : provider.productos;
+
+              if (lista.isEmpty) return const Center(child: Text('Sin productos en stock'));
+
+              return ListView.builder(
+                itemCount: lista.length,
+                itemBuilder: (ctx, i) => _buildCard(lista[i]),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 

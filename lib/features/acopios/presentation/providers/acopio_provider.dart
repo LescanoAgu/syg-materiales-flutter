@@ -184,4 +184,38 @@ class AcopioProvider extends ChangeNotifier {
   }) async {
     return true;
   }
+
+  Future<bool> crearProveedor(ProveedorModel proveedor) async {
+    _isLoading = true; notifyListeners();
+    try {
+      await _proveedorRepo.crear(proveedor);
+      await cargarProveedores();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false; notifyListeners();
+    }
+  }
+
+  Future<bool> actualizarProveedor(ProveedorModel proveedor) async {
+    _isLoading = true; notifyListeners();
+    try {
+      await _proveedorRepo.actualizar(proveedor);
+      await cargarProveedores();
+      return true;
+    } catch (e) { return false; }
+    finally { _isLoading = false; notifyListeners(); }
+  }
+
+  Future<bool> eliminarProveedor(String id) async {
+    try {
+      await _proveedorRepo.eliminar(id);
+      _proveedores.removeWhere((p) => p.id == id || p.codigo == id);
+      notifyListeners();
+      return true;
+    } catch (e) { return false; }
+  }
+
 }

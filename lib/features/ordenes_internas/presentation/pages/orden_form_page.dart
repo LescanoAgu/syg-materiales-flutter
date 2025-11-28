@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/producto_search_delegate.dart'; // Importar Buscador
+import '../../../../core/widgets/producto_search_delegate.dart';
 import '../../../clientes/data/models/cliente_model.dart';
 import '../../../clientes/presentation/providers/cliente_provider.dart';
 import '../../../obras/data/models/obra_model.dart';
@@ -9,6 +9,7 @@ import '../../../obras/presentation/providers/obra_provider.dart';
 import '../../../stock/data/models/producto_model.dart';
 import '../../../stock/presentation/providers/producto_provider.dart';
 import '../providers/orden_interna_provider.dart';
+import '../../../../features/auth/presentation/providers/auth_provider.dart'; // Importante para usuario
 
 class OrdenFormPage extends StatefulWidget {
   const OrdenFormPage({super.key});
@@ -19,10 +20,11 @@ class OrdenFormPage extends StatefulWidget {
 class _OrdenFormPageState extends State<OrdenFormPage> {
   final _formKey = GlobalKey<FormState>();
   final _observacionesCtrl = TextEditingController();
-  final _solicitanteCtrl = TextEditingController(text: 'Usuario App');
+  final _solicitanteCtrl = TextEditingController();
 
   ClienteModel? _clienteSel;
   ObraModel? _obraSel;
+  String _prioridad = 'media'; // Default
   final List<Map<String, dynamic>> _carrito = [];
 
   @override
@@ -32,6 +34,14 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
       context.read<ClienteProvider>().cargarClientes();
       context.read<ObraProvider>().cargarObras();
       context.read<ProductoProvider>().cargarProductos();
+
+      // ✅ AUTOCOMPLETAR NOMBRE
+      final usuario = context.read<AuthProvider>().usuario;
+      if (usuario != null) {
+        _solicitanteCtrl.text = usuario.nombre;
+      } else {
+        _solicitanteCtrl.text = "Usuario App";
+      }
     });
   }
 
@@ -47,11 +57,42 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
+                  // 1. Encabezado
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _solicitanteCtrl,
+                          decoration: const InputDecoration(labelText: 'Solicitante', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
+                          readOnly: true, // Bloqueado para integridad
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // ✅ SELECTOR DE PRIORIDAD
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: _prioridad,
+                          decoration: const InputDecoration(labelText: 'Prioridad', border: OutlineInputBorder(), prefixIcon: Icon(Icons.flag)),
+                          items: const [
+                            DropdownMenuItem(value: 'baja', child: Text('🟢 Baja')),
+                            DropdownMenuItem(value: 'media', child: Text('🔵 Normal')),
+                            DropdownMenuItem(value: 'alta', child: Text('🟠 Alta')),
+                            DropdownMenuItem(value: 'urgente', child: Text('🔴 URGENTE', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red))),
+                          ],
+                          onChanged: (v) => setState(() => _prioridad = v!),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
                   _buildSelectorCliente(),
                   const SizedBox(height: 12),
                   _buildSelectorObra(),
                   const SizedBox(height: 20),
+
                   _buildSeccionProductos(),
+
                   const SizedBox(height: 20),
                   TextFormField(
                     controller: _observacionesCtrl,
@@ -61,6 +102,8 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                 ],
               ),
             ),
+
+            // Botón Guardar
             Padding(
               padding: const EdgeInsets.all(16),
               child: SizedBox(
@@ -116,12 +159,17 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
           ],
         ),
         const Divider(),
-        if (_carrito.isEmpty) const Text('Sin productos', style: TextStyle(color: Colors.grey)),
+        if (_carrito.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            color: Colors.grey[100],
+            child: const Center(child: Text('Agrega materiales a la orden', style: TextStyle(color: Colors.grey))),
+          ),
         ..._carrito.map((item) {
           final p = item['producto'] as ProductoModel;
           return ListTile(
             title: Text(p.nombre),
-            subtitle: Text('${item['cantidad']} ${p.unidadBase}'), // SIN PRECIO
+            subtitle: Text('${item['cantidad']} ${p.unidadBase}'),
             trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => setState(() => _carrito.remove(item))),
           );
         }),
@@ -130,8 +178,13 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
   }
 
   Future<void> _agregarProducto() async {
-    final prods = context.read<ProductoProvider>().productos;
-    final p = await showSearch(context: context, delegate: ProductoSearchDelegate(prods));
+    // ✅ CAMBIO: Ya no pasamos la lista 'prods' al constructor.
+    // El SearchDelegate obtendrá el Provider por sí mismo mediante el context.
+
+    final p = await showSearch(
+        context: context,
+        delegate: ProductoSearchDelegate() // Sin argumentos
+    );
 
     if (p != null && mounted) {
       final cantCtrl = TextEditingController();
@@ -153,7 +206,8 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
                   'producto': p,
                   'productoId': p.codigo,
                   'cantidad': c,
-                  'precio': p.precioSinIva ?? 0
+                  'precio': p.precioSinIva ?? 0,
+                  'observaciones': ''
                 }));
                 Navigator.pop(ctx);
               }
@@ -163,19 +217,20 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
       );
     }
   }
-
   Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate() || _carrito.isEmpty) return;
+    if (!_formKey.currentState!.validate() || _carrito.isEmpty) {
+      if(_carrito.isEmpty) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Agrega al menos un producto")));
+      return;
+    }
 
     await context.read<OrdenInternaProvider>().crearOrden(
       clienteId: _clienteSel!.codigo,
       obraId: _obraSel!.codigo,
-      solicitanteNombre: _solicitanteController.text, // Usar controlador correcto
+      solicitanteNombre: _solicitanteCtrl.text,
       items: _carrito,
       observaciones: _observacionesCtrl.text,
+      prioridad: _prioridad, // ✅ ENVIAMOS LA PRIORIDAD
     );
     if (mounted) Navigator.pop(context);
   }
-  // Corrección: Variable faltante
-  final _solicitanteController = TextEditingController(text: "Usuario App");
 }

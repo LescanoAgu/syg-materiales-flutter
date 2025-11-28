@@ -3,7 +3,8 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'login_page.dart';
 import 'access_pending_page.dart';
-import '../../../stock/presentation/pages/stock_page.dart'; // Tu Home actual
+// ✅ Importamos el MainLayout en lugar de StockPage
+import '../../../../core/widgets/main_layout.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -15,16 +16,13 @@ class AuthGate extends StatelessWidget {
         switch (auth.status) {
           case AuthStatus.checking:
             return const Scaffold(body: Center(child: CircularProgressIndicator()));
-
           case AuthStatus.unauthenticated:
             return const LoginPage();
-
           case AuthStatus.pending:
             return const AccessPendingPage();
-
           case AuthStatus.authenticated:
-          // Aquí redirigimos a tu Home principal (StockPage)
-            return const StockPage();
+          // ✅ Ahora redirige a la nueva estructura con Footer
+            return const MainLayout();
         }
       },
     );

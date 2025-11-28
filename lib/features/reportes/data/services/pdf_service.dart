@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:intl/date_symbol_data_local.dart'; // ✅ FIX LOCALE
+import 'package:intl/date_symbol_data_local.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../stock/data/models/movimiento_stock_model.dart';
@@ -17,12 +17,9 @@ class PdfService {
     DateTime? fechaDesde,
     DateTime? fechaHasta,
   }) async {
-    // 1. Inicializar Locale para evitar errores
     await initializeDateFormatting('es_AR', null);
-
     final pdf = pw.Document();
 
-    // 2. Agrupar por Producto
     final Map<String, List<MovimientoStock>> movimientosPorProducto = {};
     for (var m in movimientos) {
       if (!movimientosPorProducto.containsKey(m.productoId)) {
@@ -39,12 +36,9 @@ class PdfService {
           return [
             _buildHeaderGeneral('REPORTE DE MOVIMIENTOS', fechaDesde, fechaHasta),
             pw.SizedBox(height: 20),
-
-            // Iteramos cada producto
             ...movimientosPorProducto.entries.map((entry) {
               final productoId = entry.key;
               final lista = entry.value;
-
               return pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
@@ -52,10 +46,7 @@ class PdfService {
                     padding: const pw.EdgeInsets.symmetric(vertical: 5, horizontal: 10),
                     color: PdfColors.grey200,
                     width: double.infinity,
-                    child: pw.Text(
-                      'PRODUCTO: $productoId',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
+                    child: pw.Text('PRODUCTO: $productoId', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                   ),
                   pw.SizedBox(height: 5),
                   _buildTablaMovimientos(lista),
@@ -68,16 +59,12 @@ class PdfService {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Reporte_Stock.pdf',
-    );
+    await Printing.sharePdf(bytes: await pdf.save(), filename: 'Reporte_Stock.pdf');
   }
 
   // --- REMITO DE ORDEN ---
   Future<void> generarRemitoOrden(OrdenInternaDetalle ordenDetalle) async {
     await initializeDateFormatting('es_AR', null);
-
     final pdf = pw.Document();
     final orden = ordenDetalle.orden;
 
@@ -99,10 +86,7 @@ class PdfService {
       ),
     );
 
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-      name: 'Orden_${orden.numero}.pdf',
-    );
+    await Printing.sharePdf(bytes: await pdf.save(), filename: 'Orden_${orden.numero}.pdf');
   }
 
   // ========================================
@@ -114,7 +98,6 @@ class PdfService {
     if (desde != null || hasta != null) {
       periodo = '${desde != null ? ArgFormats.fecha(desde) : "Inicio"} - ${hasta != null ? ArgFormats.fecha(hasta) : "Hoy"}';
     }
-
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -152,7 +135,6 @@ class PdfService {
           ],
         ),
         ...movimientos.map((m) {
-          // Colores simples para PDF
           final colorText = m.tipo == TipoMovimiento.entrada ? PdfColors.green700 :
           (m.tipo == TipoMovimiento.salida ? PdfColors.red700 : PdfColors.orange700);
 
@@ -161,14 +143,14 @@ class PdfService {
               _td(ArgFormats.fechaHora(m.createdAt)),
               _td(m.tipo.name.toUpperCase(), color: colorText, isBold: true),
               _td(m.cantidad.toStringAsFixed(2), align: pw.TextAlign.center, isBold: true),
-              _td('${m.productoNombre}\n${m.motivo ?? "-"}', isBold: false),           ],
+              _td('${m.productoNombre}\n${m.motivo ?? "-"}', isBold: false),
+            ],
           );
         }),
       ],
     );
   }
 
-  // --- WIDGETS DE ORDEN ---
   pw.Widget _buildHeaderOrden(OrdenInterna orden) {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -279,12 +261,13 @@ class PdfService {
     );
   }
 
-  // Helpers
   pw.Widget _th(String text, {pw.TextAlign align = pw.TextAlign.left}) {
+    // ✅ CORRECCIÓN AQUÍ: pw.FontWeight.bold
     return pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(text, style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: align));
   }
 
   pw.Widget _td(String text, {pw.TextAlign align = pw.TextAlign.left, PdfColor? color, bool isBold = false}) {
+    // ✅ CORRECCIÓN AQUÍ: pw.FontWeight.bold
     return pw.Padding(
       padding: const pw.EdgeInsets.all(5),
       child: pw.Text(text, style: pw.TextStyle(fontSize: 9, color: color, fontWeight: isBold ? pw.FontWeight.bold : null), textAlign: align),
