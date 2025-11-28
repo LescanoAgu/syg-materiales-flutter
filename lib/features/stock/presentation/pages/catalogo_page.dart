@@ -18,13 +18,22 @@ class CatalogoPage extends StatefulWidget {
 
 class _CatalogoPageState extends State<CatalogoPage> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ProductoProvider>().cargarProductos();
+      final provider = context.read<ProductoProvider>();
+      provider.cargarCategorias(); // Cargar las categorías para los chips
+      provider.cargarProductos(recargar: true); // Cargar productos iniciales
+    });
+
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+        context.read<ProductoProvider>().cargarMasProductos();
+      }
     });
   }
 
@@ -32,6 +41,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -56,13 +66,13 @@ class _CatalogoPageState extends State<CatalogoPage> {
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<ProductoProvider>().recargarProductos(),
+            onPressed: () => context.read<ProductoProvider>().cargarProductos(recargar: true),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductoFormPage()))
-            .then((_) => context.read<ProductoProvider>().cargarProductos()),
+            .then((_) => context.read<ProductoProvider>().cargarProductos(recargar: true)),
         child: const Icon(Icons.add),
       ),
       body: Column(
@@ -73,14 +83,14 @@ class _CatalogoPageState extends State<CatalogoPage> {
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'Buscar...',
+                hintText: 'Buscar material...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                   icon: const Icon(Icons.clear),
                   onPressed: () {
                     _searchController.clear();
-                    context.read<ProductoProvider>().cargarProductos();
+                    context.read<ProductoProvider>().buscarProductos('');
                   },
                 )
                     : null,
@@ -92,39 +102,73 @@ class _CatalogoPageState extends State<CatalogoPage> {
             ),
           ),
 
-          // 2. FILTROS DE ORDENAMIENTO (CHIPS)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          // 2. FILTROS DE CATEGORÍA (Horizontal Scroll)
+          SizedBox(
+            height: 50,
             child: Consumer<ProductoProvider>(
               builder: (context, provider, _) {
-                final actual = provider.ordenActual;
-                return Row(
+                return ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   children: [
-                    _buildSortChip(context, 'A-Z', OrdenamientoCatalogo.nombreAZ, actual),
-                    const SizedBox(width: 8),
-                    _buildSortChip(context, 'Z-A', OrdenamientoCatalogo.nombreZA, actual),
-                    const SizedBox(width: 8),
-                    _buildSortChip(context, 'Por Tipo', OrdenamientoCatalogo.categoria, actual),
-                    const SizedBox(width: 8),
-                    _buildSortChip(context, 'Por Código', OrdenamientoCatalogo.codigo, actual),
+                    // Chip "Todos"
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: const Text('Todos'),
+                        selected: provider.categoriaFiltroId == null,
+                        onSelected: (bool selected) {
+                          if (selected) provider.seleccionarCategoria(null);
+                        },
+                      ),
+                    ),
+                    // Chips de Categorías dinámicas
+                    ...provider.categorias.map((cat) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(cat.nombre),
+                          selected: provider.categoriaFiltroId == cat.codigo,
+                          onSelected: (bool selected) {
+                            // Si se deselecciona, volvemos a 'null' (Todos). Si se selecciona, mandamos el ID.
+                            provider.seleccionarCategoria(selected ? cat.codigo : null);
+                          },
+                        ),
+                      );
+                    }),
                   ],
                 );
               },
             ),
           ),
 
-          // 3. Lista
+          const Divider(height: 1),
+
+          // 3. Lista con Lazy Loading
           Expanded(
             child: Consumer<ProductoProvider>(
               builder: (ctx, provider, _) {
-                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-                if (provider.productos.isEmpty) return const Center(child: Text('Sin productos. ¡Importa tu Excel!'));
+                if (provider.isLoading && provider.productos.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (provider.productos.isEmpty) {
+                  return const Center(child: Text('No hay productos.'));
+                }
 
                 return ListView.separated(
-                  itemCount: provider.productos.length,
+                  controller: _scrollController,
+                  itemCount: provider.productos.length + (provider.isLoadingMore ? 1 : 0),
                   separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (ctx, i) => _buildItem(context, provider.productos[i]),
+                  itemBuilder: (ctx, i) {
+                    if (i == provider.productos.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    return _buildItem(context, provider.productos[i]);
+                  },
                 );
               },
             ),
@@ -134,31 +178,18 @@ class _CatalogoPageState extends State<CatalogoPage> {
     );
   }
 
-  Widget _buildSortChip(BuildContext context, String label, OrdenamientoCatalogo valor, OrdenamientoCatalogo actual) {
-    final selected = valor == actual;
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) {
-        context.read<ProductoProvider>().cambiarOrden(valor);
-      },
-      selectedColor: AppColors.primary.withOpacity(0.2),
-      labelStyle: TextStyle(
-        color: selected ? AppColors.primary : Colors.black,
-        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-      ),
-      side: BorderSide(color: selected ? AppColors.primary : Colors.grey.shade300),
-    );
-  }
-
   Widget _buildItem(BuildContext context, ProductoModel p) {
     return ListTile(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProductoFormPage(producto: p)))
-          .then((_) => context.read<ProductoProvider>().cargarProductos()),
+          .then((_) => context.read<ProductoProvider>().cargarProductos(recargar: true)),
 
       leading: CircleAvatar(
         backgroundColor: AppColors.primary.withOpacity(0.1),
-        child: Text(p.nombre.isNotEmpty ? p.nombre[0].toUpperCase() : '?', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+        // Mostramos las primeras 2 letras del código o '?'
+        child: Text(
+            p.codigo.length > 2 ? p.codigo.substring(0,2) : (p.nombre.isNotEmpty ? p.nombre[0] : '?'),
+            style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)
+        ),
       ),
       title: Text(p.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Text('${p.codigo} • ${p.categoriaNombre ?? "-"}', style: const TextStyle(fontSize: 12)),
@@ -181,81 +212,63 @@ class _CatalogoPageState extends State<CatalogoPage> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => MovimientoHistorialPage(productoId: p.codigo)));
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: () => _confirmarBorrado(context, p),
-          ),
         ],
       ),
     );
   }
 
-  void _confirmarBorrado(BuildContext context, ProductoModel p) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('¿Eliminar?'),
-        content: Text('Se borrará ${p.nombre}.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () {
-              context.read<ProductoProvider>().eliminarProducto(p.id ?? p.codigo);
-              Navigator.pop(ctx);
-            },
-            child: const Text('BORRAR'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- IMPORTACIÓN INTELIGENTE ---
+  // --- IMPORTACIÓN DE EXCEL (Lógica corregida) ---
   void _mostrarDialogoImportacion(BuildContext context) {
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Pegar contenido CSV'),
+        title: const Text('Pegar contenido CSV (Excel)'),
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Orden esperado:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const Text('CODIGO, MATERIAL, PRECIO, TIPO, UNIDAD', style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.blue)),
+              const Text('Formato esperado (Punto y coma):', style: TextStyle(fontWeight: FontWeight.bold)),
+              const Text('CODIGO; MATERIAL; PRECIO; TIPO; UNIDAD', style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: Colors.blue)),
               const SizedBox(height: 10),
               TextField(
                 controller: controller,
                 maxLines: 10,
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Pega aquí tu Excel...', filled: true),
+                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Pega aquí el contenido...', filled: true),
               ),
             ],
           ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton.icon(icon: const Icon(Icons.upload), label: const Text('IMPORTAR'), onPressed: () { _procesarImportacion(context, controller.text); Navigator.pop(ctx); }),
+          ElevatedButton.icon(
+              icon: const Icon(Icons.upload),
+              label: const Text('IMPORTAR'),
+              onPressed: () {
+                _procesarImportacion(context, controller.text);
+                Navigator.pop(ctx);
+              }
+          ),
         ],
       ),
     );
   }
 
-  // Función interna para limpiar comillas de Excel
   String _limpiarDato(String raw) {
     String s = raw.trim();
     if (s.startsWith('"') && s.endsWith('"')) {
       s = s.substring(1, s.length - 1);
     }
-    return s.replaceAll('""', '"'); // Comillas dobles a simples
+    return s.replaceAll('""', '"');
   }
 
   void _procesarImportacion(BuildContext context, String texto) async {
     if (texto.isEmpty) return;
     final provider = context.read<ProductoProvider>();
-    await provider.cargarCategorias();
+    // Aseguramos tener las categorías para no duplicarlas
+    if (provider.categorias.isEmpty) await provider.cargarCategorias();
 
     Set<String> categoriasNuevasDetectadas = {};
     List<ProductoModel> listaAImportar = [];
@@ -266,21 +279,31 @@ class _CatalogoPageState extends State<CatalogoPage> {
       for (var i = 0; i < lineas.length; i++) {
         final linea = lineas[i].trim();
         if (linea.isEmpty) continue;
-        if (i == 0 && (linea.toLowerCase().contains('codigo') || linea.toLowerCase().contains('materiales'))) continue;
+        // Ignorar encabezados probables
+        if (i == 0 && (linea.toLowerCase().contains('codigo') || linea.toLowerCase().startsWith('a;'))) continue;
 
-        // Split respetando comillas básicas (simple) o split por coma
-        final partes = linea.split(','); // Para Excel simple suele bastar
+        // SEPARADOR PUNTO Y COMA
+        final partes = linea.split(';');
 
         if (partes.length >= 4) {
-          // Aplicamos limpieza a cada parte
           String codigo = _limpiarDato(partes[0]);
           String nombre = _limpiarDato(partes[1]);
-          String precioStr = _limpiarDato(partes[2]).replaceAll('\$', '');
+          // Limpieza de precio: quitar $, puntos de miles, y cambiar coma decimal por punto para Dart
+          String precioStr = _limpiarDato(partes[2])
+              .replaceAll(r'$', '')
+              .replaceAll('.', '') // Quitar separador miles
+              .replaceAll(',', '.'); // Coma decimal a punto
+
           double precio = double.tryParse(precioStr) ?? 0.0;
           String nombreCategoria = _limpiarDato(partes[3]);
-          String unidad = partes.length > 4 ? _limpiarDato(partes[4]) : 'Unidad';
+          String unidad = partes.length > 4 ? _limpiarDato(partes[4]) : 'u';
 
-          String catId = nombreCategoria.length >= 3 ? nombreCategoria.substring(0, 3).toUpperCase() : nombreCategoria.toUpperCase();
+          // ID Categoría: Las 3 primeras letras en mayúscula (Agua -> AGU)
+          String catId = nombreCategoria.length >= 3
+              ? nombreCategoria.substring(0, 3).toUpperCase()
+              : nombreCategoria.toUpperCase();
+
+          // Lógica de Categorías: Si no existe en el provider ni en las detectadas, la creamos
           bool existe = provider.categorias.any((c) => c.codigo == catId || c.nombre.toLowerCase() == nombreCategoria.toLowerCase());
 
           if (!existe && !categoriasNuevasDetectadas.contains(nombreCategoria)) {
@@ -289,19 +312,38 @@ class _CatalogoPageState extends State<CatalogoPage> {
           }
 
           listaAImportar.add(ProductoModel(
-            id: codigo, codigo: codigo, nombre: nombre, precioSinIva: precio,
-            categoriaId: catId, categoriaNombre: nombreCategoria, unidadBase: unidad, cantidadDisponible: 0,
+            id: codigo,
+            codigo: codigo,
+            nombre: nombre,
+            precioSinIva: precio,
+            categoriaId: catId,
+            categoriaNombre: nombreCategoria,
+            unidadBase: unidad,
+            cantidadDisponible: 0,
           ));
-        } else { ignorados++; }
+        } else {
+          ignorados++;
+        }
       }
 
       if (listaAImportar.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Procesando...')));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Procesando ${listaAImportar.length} productos...')));
+
         await provider.importarProductos(listaAImportar);
-        if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ Importados: ${listaAImportar.length}'), backgroundColor: AppColors.success));
+
+        if(context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                  content: Text('✅ Éxito: ${listaAImportar.length} productos importados.'),
+                  backgroundColor: AppColors.success
+              )
+          );
+        }
+      } else {
+        if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚠️ No se leyeron productos. Verifica el separador (;).')));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
+      if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error crítico: $e'), backgroundColor: AppColors.error));
     }
   }
 }

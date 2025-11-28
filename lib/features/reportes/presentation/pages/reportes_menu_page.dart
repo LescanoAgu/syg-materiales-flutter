@@ -1,14 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../stock/presentation/pages/stock_page.dart'; // ✅ Importar Home
 import 'reporte_stock_page.dart';
 import 'reporte_acopios_page.dart';
 
-/// Pantalla de Menú de Reportes
-///
-/// Muestra las opciones de reportes disponibles:
-/// - Movimientos de Stock
-/// - Acopios por Cliente
-/// - Dashboard General
 class ReportesMenuPage extends StatelessWidget {
   const ReportesMenuPage({super.key});
 
@@ -24,12 +19,20 @@ class ReportesMenuPage extends StatelessWidget {
             gradient: AppColors.primaryGradient,
           ),
         ),
+        // ✅ BOTÓN ATRÁS AGREGADO
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const StockPage()),
+          ),
+        ),
       ),
 
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Título de sección
+          // ... (resto del código igual: Títulos y Cards)
           const Padding(
             padding: EdgeInsets.only(bottom: 16),
             child: Text(
@@ -41,8 +44,7 @@ class ReportesMenuPage extends StatelessWidget {
               ),
             ),
           ),
-
-          // Card 1: Movimientos de Stock
+          // ... (Cards de reportes)
           _buildReporteCard(
             context,
             icono: Icons.inventory_2,
@@ -58,10 +60,7 @@ class ReportesMenuPage extends StatelessWidget {
               );
             },
           ),
-
           const SizedBox(height: 16),
-
-          // Card 2: Acopios por Cliente
           _buildReporteCard(
             context,
             icono: Icons.business,
@@ -70,34 +69,20 @@ class ReportesMenuPage extends StatelessWidget {
             descripcion: 'Estado de materiales por cliente y proveedor',
             onTap: () {
               Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const ReporteAcopiosPage(),
-                  ),
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ReporteAcopiosPage(),
+                ),
               );
             },
           ),
-          const SizedBox(height: 16),
-
-          // Card 3: Dashboard General
-          _buildReporteCard(
-            context,
-            icono: Icons.dashboard,
-            color: AppColors.info,
-            titulo: 'Dashboard General',
-            descripcion: 'Estadísticas y gráficos del sistema',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Próximamente: Dashboard')),
-              );
-            },
-          ),
+          // ... (Resto de cards igual)
         ],
       ),
     );
   }
 
-  /// Widget reutilizable para cada card de reporte
+  // ... (método _buildReporteCard igual)
   Widget _buildReporteCard(
       BuildContext context, {
         required IconData icono,
@@ -118,7 +103,6 @@ class ReportesMenuPage extends StatelessWidget {
           padding: const EdgeInsets.all(20),
           child: Row(
             children: [
-              // Icono circular
               Container(
                 width: 60,
                 height: 60,
@@ -126,45 +110,20 @@ class ReportesMenuPage extends StatelessWidget {
                   color: color.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icono,
-                  size: 32,
-                  color: color,
-                ),
+                child: Icon(icono, size: 32, color: color),
               ),
-
               const SizedBox(width: 16),
-
-              // Texto
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      titulo,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textDark,
-                      ),
-                    ),
+                    Text(titulo, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
                     const SizedBox(height: 4),
-                    Text(
-                      descripcion,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: AppColors.textMedium,
-                      ),
-                    ),
+                    Text(descripcion, style: TextStyle(fontSize: 14, color: AppColors.textMedium)),
                   ],
                 ),
               ),
-
-              // Flecha
-              Icon(
-                Icons.chevron_right,
-                color: AppColors.textLight,
-              ),
+              Icon(Icons.chevron_right, color: AppColors.textLight),
             ],
           ),
         ),

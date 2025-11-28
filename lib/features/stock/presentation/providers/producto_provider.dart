@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/models/producto_model.dart';
 import '../../data/models/categoria_model.dart';
 import '../../data/repositories/producto_repository.dart';
@@ -10,36 +11,107 @@ class ProductoProvider extends ChangeNotifier {
   final ProductoRepository _repository = ProductoRepository();
   final CategoriaRepository _catRepo = CategoriaRepository();
 
+  // --- ESTADO ---
   List<ProductoModel> _productos = [];
   List<CategoriaModel> _categorias = [];
   bool _isLoading = false;
+  bool _isLoadingMore = false; // Para scroll infinito
   String? _errorMessage;
-  OrdenamientoCatalogo _ordenActual = OrdenamientoCatalogo.nombreAZ;
 
+  // Filtros y Orden
+  OrdenamientoCatalogo _ordenActual = OrdenamientoCatalogo.codigo; // Por defecto código para que se vean correlativos
+  String? _categoriaFiltroId; // Categoría seleccionada actualmente (null = todas)
+
+  // Paginación
+  DocumentSnapshot? _ultimoDocumento;
+  bool _hayMas = true;
+
+  // --- GETTERS ---
   List<ProductoModel> get productos => _productos;
   List<CategoriaModel> get categorias => _categorias;
   bool get isLoading => _isLoading;
+  bool get isLoadingMore => _isLoadingMore;
   String? get errorMessage => _errorMessage;
   OrdenamientoCatalogo get ordenActual => _ordenActual;
+  String? get categoriaFiltroId => _categoriaFiltroId;
 
-  Future<void> cargarProductos() async {
+  // --- CARGA INICIAL Y RECARGA ---
+  Future<void> cargarProductos({bool recargar = false}) async {
+    if (recargar) {
+      _ultimoDocumento = null;
+      _productos = [];
+      _hayMas = true;
+    }
+
+    if (_isLoading) return;
     _isLoading = true;
-    _errorMessage = null;
     notifyListeners();
+
     try {
-      _productos = await _repository.obtenerTodos();
-      _aplicarOrdenamiento();
+      final snapshot = await _repository.obtenerPaginados(
+        limite: 20,
+        ordenarPor: _mapearOrdenamiento(),
+        filtroCategoriaId: _categoriaFiltroId,
+      );
+
+      _procesarSnapshot(snapshot);
+
     } catch (e) {
       _errorMessage = e.toString();
-      _productos = [];
+      print("Error cargando productos: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<void> recargarProductos() => cargarProductos();
+  // --- SCROLL INFINITO (LAZY LOADING) ---
+  Future<void> cargarMasProductos() async {
+    if (_isLoadingMore || !_hayMas || _isLoading) return;
 
+    _isLoadingMore = true;
+    notifyListeners();
+
+    try {
+      final snapshot = await _repository.obtenerPaginados(
+        limite: 20,
+        ultimoDocumento: _ultimoDocumento,
+        ordenarPor: _mapearOrdenamiento(),
+        filtroCategoriaId: _categoriaFiltroId,
+      );
+
+      _procesarSnapshot(snapshot);
+
+    } catch (e) {
+      print("Error cargando más: $e");
+    } finally {
+      _isLoadingMore = false;
+      notifyListeners();
+    }
+  }
+
+  void _procesarSnapshot(QuerySnapshot snapshot) {
+    if (snapshot.docs.isEmpty) {
+      _hayMas = false;
+      return;
+    }
+
+    _ultimoDocumento = snapshot.docs.last;
+
+    final nuevos = snapshot.docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      data['id'] = doc.id;
+      return ProductoModel.fromMap(data);
+    }).toList();
+
+    _productos.addAll(nuevos);
+
+    if (snapshot.docs.length < 20) {
+      _hayMas = false;
+    }
+  }
+
+  // --- CATEGORÍAS ---
   Future<void> cargarCategorias() async {
     try {
       _categorias = await _catRepo.obtenerTodas();
@@ -47,42 +119,56 @@ class ProductoProvider extends ChangeNotifier {
     } catch (e) { print("Error cat: $e"); }
   }
 
-  // ✅ NUEVO: Crear Categoría al vuelo
+  void seleccionarCategoria(String? categoriaId) {
+    if (_categoriaFiltroId == categoriaId) return; // Ya estaba seleccionada
+    _categoriaFiltroId = categoriaId;
+    cargarProductos(recargar: true); // Recargamos la lista desde cero con el filtro
+  }
+
   Future<void> crearCategoria(String nombre, String codigo) async {
     try {
+      // Verificar si ya existe localmente para evitar duplicados visuales
+      if (_categorias.any((c) => c.codigo == codigo)) return;
+
       final nuevaCat = CategoriaModel(
         codigo: codigo,
         nombre: nombre,
-        orden: 99, // Al final por defecto
+        orden: 99,
         createdAt: DateTime.now().toIso8601String(),
       );
       await _catRepo.crear(nuevaCat);
-      // Actualizamos la lista local
       _categorias.add(nuevaCat);
+      // Ordenar categorías alfabéticamente para el filtro
+      _categorias.sort((a,b) => a.nombre.compareTo(b.nombre));
       notifyListeners();
     } catch (e) {
       print("Error creando categoría automática: $e");
     }
   }
 
-  Future<String> generarCodigoParaCategoria(String catId) async {
-    return await _repository.generarSiguienteCodigo(catId);
-  }
-
+  // --- BÚSQUEDA ---
   Future<void> buscarProductos(String query) async {
-    if (query.isEmpty) return cargarProductos();
+    if (query.isEmpty) {
+      // Si borra la búsqueda, volvemos a la lista paginada normal
+      cargarProductos(recargar: true);
+      return;
+    }
+
     _isLoading = true;
     notifyListeners();
     try {
+      // La búsqueda ignora la paginación actual y trae coincidencias directas
       _productos = await _repository.buscar(query);
-      _aplicarOrdenamiento();
-    } catch (e) { print(e); } finally { _isLoading = false; notifyListeners(); }
+      _hayMas = false; // En búsqueda desactivamos scroll infinito por simplicidad
+    } catch (e) { print(e); }
+    finally { _isLoading = false; notifyListeners(); }
   }
 
+  // --- IMPORTACIÓN Y GESTIÓN ---
   Future<bool> importarProductos(List<ProductoModel> lista) async {
     try {
       await _repository.importarMasivos(lista);
-      await cargarProductos();
+      await cargarProductos(recargar: true);
       return true;
     } catch (e) { return false; }
   }
@@ -99,22 +185,23 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
+  // --- ORDENAMIENTO ---
   void cambiarOrden(OrdenamientoCatalogo orden) {
     _ordenActual = orden;
-    _aplicarOrdenamiento();
-    notifyListeners();
+    cargarProductos(recargar: true); // Recargar desde BD con el nuevo orden
   }
 
-  void _aplicarOrdenamiento() {
+  String _mapearOrdenamiento() {
     switch (_ordenActual) {
-      case OrdenamientoCatalogo.nombreAZ: _productos.sort((a, b) => a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase())); break;
-      case OrdenamientoCatalogo.nombreZA: _productos.sort((a, b) => b.nombre.toLowerCase().compareTo(a.nombre.toLowerCase())); break;
-      case OrdenamientoCatalogo.codigo: _productos.sort((a, b) => a.codigo.compareTo(b.codigo)); break;
-      case OrdenamientoCatalogo.categoria:
-        _productos.sort((a, b) => (a.categoriaNombre ?? '').compareTo(b.categoriaNombre ?? ''));
-        break;
+      case OrdenamientoCatalogo.nombreAZ: return 'nombre';
+      case OrdenamientoCatalogo.nombreZA: return 'nombre'; // Firestore solo permite ASC/DESC en query, lo simplificamos a nombre por ahora
+      case OrdenamientoCatalogo.codigo: return 'codigo';
+      case OrdenamientoCatalogo.categoria: return 'categoriaId';
     }
   }
 
-  void limpiarBusqueda() => cargarProductos();
+  // Helpers
+  Future<String> generarCodigoParaCategoria(String catId) async {
+    return await _repository.generarSiguienteCodigo(catId);
+  }
 }
