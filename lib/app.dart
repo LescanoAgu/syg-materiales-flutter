@@ -28,6 +28,8 @@ class SyGMaterialesApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ObraProvider()),
         ChangeNotifierProvider(create: (_) => AcopioProvider()),
         ChangeNotifierProvider(create: (_) => OrdenInternaProvider()),
+        ChangeNotifierProvider(create: (_) => UsuariosProvider()),
+
       ],
       child: MaterialApp(
         title: 'S&G Materiales',

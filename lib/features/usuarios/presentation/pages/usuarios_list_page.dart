@@ -5,6 +5,7 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/auth/data/models/usuario_model.dart';
 import '../providers/usuarios_provider.dart';
 import 'usuario_detalle_page.dart';
+import '../../../stock/presentation/pages/stock_page.dart'; // ✅ Importar Home
 
 class UsuariosListPage extends StatefulWidget {
   const UsuariosListPage({super.key});
@@ -21,7 +22,6 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Cargamos usuarios de la MISMA organización que el admin logueado
       final miOrg = context.read<AuthProvider>().usuario?.organizationId;
       if (miOrg != null) {
         context.read<UsuariosProvider>().cargarUsuarios(miOrg);
@@ -34,6 +34,14 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gestión de Equipo'),
+        // ✅ BOTÓN ATRÁS AGREGADO
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const StockPage()),
+          ),
+        ),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
@@ -44,6 +52,7 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
         ),
       ),
       body: Consumer<UsuariosProvider>(
+        // ... (resto del código igual)
         builder: (context, provider, _) {
           if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
@@ -59,6 +68,7 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
     );
   }
 
+  // ... (método _buildLista igual)
   Widget _buildLista(List<UsuarioModel> usuarios, {bool esPendiente = false}) {
     if (usuarios.isEmpty) {
       return Center(
@@ -82,7 +92,7 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
         return ListTile(
           leading: CircleAvatar(
             backgroundColor: esPendiente ? Colors.orange.withOpacity(0.2) : AppColors.primary.withOpacity(0.2),
-            child: Text(u.nombre[0].toUpperCase()),
+            child: Text(u.nombre.isNotEmpty ? u.nombre[0].toUpperCase() : '?'),
           ),
           title: Text(u.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text('${u.email}\nRol: ${u.rol.toUpperCase()}'),

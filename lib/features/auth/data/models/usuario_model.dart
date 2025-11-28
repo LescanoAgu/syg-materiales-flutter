@@ -1,13 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 class UsuarioModel extends Equatable {
   final String uid;
   final String email;
   final String nombre;
-  final String organizationId; // 🏢 Clave para separar empresas
-  final String rol;            // 'admin', 'usuario', 'pañolero', etc.
-  final String estado;         // 'pendiente', 'activo', 'bloqueado'
-  final Map<String, bool> permisos; // 🎛️ Permisos granulares
+  final String organizationId;
+  final String rol;
+  final String estado;
+  final Map<String, bool> permisos;
 
   const UsuarioModel({
     required this.uid,
@@ -19,10 +20,28 @@ class UsuarioModel extends Equatable {
     this.permisos = const {},
   });
 
-  // Helper para verificar permisos rápido
   bool tienePermiso(String key) {
-    if (rol == 'admin') return true; // Admin todo poderoso
+    if (rol == 'admin') return true;
     return permisos[key] == true;
+  }
+
+  // ✅ MÉTODO QUE FALTABA: fromFirestore
+  factory UsuarioModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>?;
+
+    if (data == null) {
+      throw Exception('Documento vacío para usuario ${doc.id}');
+    }
+
+    return UsuarioModel(
+      uid: doc.id,
+      email: data['email'] ?? '',
+      nombre: data['nombre'] ?? 'Sin Nombre',
+      organizationId: data['organizationId'] ?? '',
+      rol: data['rol'] ?? 'usuario',
+      estado: data['estado'] ?? 'pendiente',
+      permisos: Map<String, bool>.from(data['permisos'] ?? {}),
+    );
   }
 
   factory UsuarioModel.fromMap(Map<String, dynamic> map, String uid) {
@@ -45,11 +64,10 @@ class UsuarioModel extends Equatable {
       'rol': rol,
       'estado': estado,
       'permisos': permisos,
-      'createdAt': DateTime.now().toIso8601String(),
+      'createdAt': FieldValue.serverTimestamp(),
     };
   }
 
-  // ✅ MÉTODO QUE FALTABA: copyWith
   UsuarioModel copyWith({
     String? nombre,
     String? rol,
@@ -59,7 +77,7 @@ class UsuarioModel extends Equatable {
     return UsuarioModel(
       uid: uid,
       email: email,
-      organizationId: organizationId, // Estos no suelen cambiar
+      organizationId: organizationId,
       nombre: nombre ?? this.nombre,
       rol: rol ?? this.rol,
       estado: estado ?? this.estado,
