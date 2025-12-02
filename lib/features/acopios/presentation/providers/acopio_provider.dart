@@ -4,30 +4,28 @@ import '../../data/models/proveedor_model.dart';
 import '../../data/models/movimiento_acopio_model.dart';
 import '../../data/repositories/acopio_repository.dart';
 import '../../data/repositories/proveedor_repository.dart';
-// Importamos para obtener datos completos al registrar movimiento
 import '../../../stock/data/repositories/producto_repository.dart';
 import '../../../clientes/data/repositories/cliente_repository.dart';
 
 class AcopioProvider extends ChangeNotifier {
   final AcopioRepository _acopioRepo = AcopioRepository();
   final ProveedorRepository _proveedorRepo = ProveedorRepository();
-
-  // Repos adicionales para buscar info al registrar movimiento
   final ProductoRepository _productoRepo = ProductoRepository();
   final ClienteRepository _clienteRepo = ClienteRepository();
 
   List<AcopioDetalle> _acopios = [];
+  List<AcopioDetalle> _acopiosFiltrados = []; // Para filtros locales
   List<ProveedorModel> _proveedores = [];
 
   bool _isLoading = false;
   String? _errorMessage;
 
-  List<AcopioDetalle> get acopios => _acopios;
+  List<AcopioDetalle> get acopios => _acopiosFiltrados.isEmpty ? _acopios : _acopiosFiltrados;
   List<ProveedorModel> get proveedores => _proveedores;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // Getters de UI
+  // Getters para UI
   int get totalAcopios => _acopios.length;
   int get totalClientes => _acopios.map((a) => a.clienteRazonSocial).toSet().length;
   int get totalProveedores => _acopios.map((a) => a.proveedorNombre).toSet().length;
@@ -36,6 +34,7 @@ class AcopioProvider extends ChangeNotifier {
   bool get hasData => _acopios.isNotEmpty;
   bool get hasError => _errorMessage != null;
 
+  // --- CARGA INICIAL ---
   Future<void> cargarTodo() async {
     _isLoading = true;
     _errorMessage = null;
@@ -56,6 +55,7 @@ class AcopioProvider extends ChangeNotifier {
   Future<void> cargarAcopios() async {
     try {
       _acopios = await _acopioRepo.obtenerTodosConDetalle();
+      _acopiosFiltrados = [];
       notifyListeners();
     } catch (e) {
       print("Error cargando acopios: $e");
@@ -71,10 +71,10 @@ class AcopioProvider extends ChangeNotifier {
     }
   }
 
-  // Agrupadores para las vistas de la UI
+  // --- MÉTODOS DE AGRUPACIÓN Y UI ---
   Map<String, List<AcopioDetalle>> obtenerAgrupadosPorCliente() {
     var map = <String, List<AcopioDetalle>>{};
-    for (var a in _acopios) {
+    for (var a in acopios) {
       map.putIfAbsent(a.clienteRazonSocial, () => []).add(a);
     }
     return map;
@@ -82,28 +82,34 @@ class AcopioProvider extends ChangeNotifier {
 
   Map<String, List<AcopioDetalle>> obtenerAgrupadosPorProveedor() {
     var map = <String, List<AcopioDetalle>>{};
-    for (var a in _acopios) {
+    for (var a in acopios) {
       map.putIfAbsent(a.proveedorNombre, () => []).add(a);
     }
     return map;
   }
 
-  Future<List<MovimientoAcopioModel>> obtenerHistorialAcopio({
-    String? productoCodigo, String? clienteCodigo, String? proveedorCodigo
-  }) async {
-    return await _acopioRepo.obtenerHistorialAcopio(
-        productoId: productoCodigo,
-        clienteId: clienteCodigo,
-        proveedorId: proveedorCodigo
-    );
+  void buscarPorProducto(String query) {
+    if (query.isEmpty) {
+      _acopiosFiltrados = [];
+    } else {
+      _acopiosFiltrados = _acopios.where((a) =>
+      a.productoNombre.toLowerCase().contains(query.toLowerCase()) ||
+          a.productoCodigo.toLowerCase().contains(query.toLowerCase())
+      ).toList();
+    }
+    notifyListeners();
+  }
+
+  void limpiarFiltros() {
+    _acopiosFiltrados = [];
+    notifyListeners();
   }
 
   // --- REGISTRO DE MOVIMIENTOS ---
-
   Future<bool> registrarMovimiento({
-    required String productoId, // Código del producto
-    required String clienteId,  // Código del cliente
-    required String proveedorId,// Código del proveedor
+    required String productoId,
+    required String clienteId,
+    required String proveedorId,
     required TipoMovimientoAcopio tipo,
     required double cantidad,
     String? motivo,
@@ -116,10 +122,8 @@ class AcopioProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Buscar datos completos para desnormalizar (evitar lecturas futuras)
       final producto = await _productoRepo.obtenerPorCodigo(productoId);
       final cliente = await _clienteRepo.obtenerPorId(clienteId);
-      // Buscamos el proveedor en la lista local que ya tenemos cargada
       final proveedor = _proveedores.firstWhere(
               (p) => p.codigo == proveedorId || p.id == proveedorId,
           orElse: () => ProveedorModel(codigo: proveedorId, nombre: 'Desconocido', tipo: TipoProveedor.proveedor, createdAt: DateTime.now())
@@ -129,7 +133,6 @@ class AcopioProvider extends ChangeNotifier {
         throw Exception("Datos de producto o cliente no encontrados");
       }
 
-      // 2. Llamar al repositorio para ejecutar la transacción
       await _acopioRepo.registrarMovimiento(
         productoId: producto.codigo,
         clienteId: cliente.codigo,
@@ -140,7 +143,7 @@ class AcopioProvider extends ChangeNotifier {
         referencia: referencia,
         facturaNumero: facturaNumero,
         facturaFecha: facturaFecha,
-
+        valorizado: valorizado,
         // Datos desnormalizados
         productoNombre: producto.nombre,
         productoCodigo: producto.codigo,
@@ -150,7 +153,6 @@ class AcopioProvider extends ChangeNotifier {
         proveedorNombre: proveedor.nombre,
       );
 
-      // 3. Recargar todo para reflejar cambios
       await cargarTodo();
       return true;
 
@@ -163,28 +165,17 @@ class AcopioProvider extends ChangeNotifier {
     }
   }
 
-  // Filtros placeholders
-  void buscarPorProducto(String t) {}
-  void limpiarFiltros() {}
-  Future<void> filtrarPorFactura(String f) async {}
-  Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async => [];
-
-  // Traspaso (Placeholder - Futura implementación)
-  Future<bool> registrarTraspaso({
-    required String productoCodigo,
-    required String origenClienteCodigo,
-    required String origenProveedorCodigo,
-    required String destinoClienteCodigo,
-    required String destinoProveedorCodigo,
-    required double cantidad,
-    String? motivo,
-    String? referencia,
-    String? facturaNumero,
-    DateTime? facturaFecha,
+  Future<List<MovimientoAcopioModel>> obtenerHistorialAcopio({
+    String? productoCodigo, String? clienteCodigo, String? proveedorCodigo
   }) async {
-    return true;
+    return await _acopioRepo.obtenerHistorialAcopio(
+        productoId: productoCodigo,
+        clienteId: clienteCodigo,
+        proveedorId: proveedorCodigo
+    );
   }
 
+  // --- PROVEEDORES ---
   Future<bool> crearProveedor(ProveedorModel proveedor) async {
     _isLoading = true; notifyListeners();
     try {
@@ -218,4 +209,28 @@ class AcopioProvider extends ChangeNotifier {
     } catch (e) { return false; }
   }
 
+  // --- TRASPASOS Y OTROS (Placeholders para evitar errores de compilación) ---
+  Future<bool> registrarTraspaso({
+    required String productoCodigo,
+    required String origenClienteCodigo,
+    required String origenProveedorCodigo,
+    required String destinoClienteCodigo,
+    required String destinoProveedorCodigo,
+    required double cantidad,
+    String? motivo,
+    String? referencia,
+    String? facturaNumero,
+    DateTime? facturaFecha,
+  }) async {
+    // Implementar lógica de traspaso real aquí
+    return true;
+  }
+
+  Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async {
+    return await _acopioRepo.obtenerFacturasUnicas();
+  }
+
+  Future<void> filtrarPorFactura(String factura) async {
+    await _acopioRepo.filtrarPorFactura(factura);
+  }
 }

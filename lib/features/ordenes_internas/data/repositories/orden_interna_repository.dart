@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:typed_data';
 import '../models/orden_interna_model.dart';
 import '../models/orden_item_model.dart';
 import '../../../../features/clientes/data/repositories/cliente_repository.dart';
-import '../../../../features/obras/data/repositories/obra_repository.dart';
+import '../../../../core/services/storage_service.dart'; // ✅ Necesario para la firma
 
 class OrdenInternaRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -65,6 +66,7 @@ class OrdenInternaRepository {
             itemMap['productoNombre'] = prod.nombre;
             itemMap['productoCodigo'] = prod.codigo;
             itemMap['unidadBase'] = prod.unidadBase;
+            itemMap['fuente'] = null;
           } catch (_) {}
         }
         transaction.set(itemRef, itemMap);
@@ -92,46 +94,49 @@ class OrdenInternaRepository {
     });
   }
 
-  // --- APROBAR ORDEN (CON VALIDACIÓN DE STOCK) ---
+  // --- APROBAR ORDEN ---
   Future<void> aprobarOrden({
     required String ordenId,
-    required String fuente, // 'stock' o 'proveedor'
+    required Map<String, String> configuracionItems,
     String? proveedorId,
     required String usuarioAprobadorId,
   }) async {
     return _firestore.runTransaction((transaction) async {
       final ordenRef = _firestore.collection(_collection).doc(ordenId);
+      final itemsSnap = await ordenRef.collection('items').get();
 
-      // ✅ VALIDACIÓN: Si la fuente es Stock, verificamos que alcance.
-      if (fuente == 'stock') {
-        final itemsSnap = await ordenRef.collection('items').get();
+      for (var doc in itemsSnap.docs) {
+        final itemData = doc.data();
+        final itemId = doc.id;
+        final fuenteItem = configuracionItems[itemId] ?? 'stock';
 
-        for (var doc in itemsSnap.docs) {
-          final itemData = doc.data();
-          final productoId = itemData['productoId'];
-          final productoNombre = itemData['productoNombre'] ?? 'Producto';
-          final cantidadSolicitada = (itemData['cantidadSolicitada'] as num).toDouble();
+        final productoId = itemData['productoId'];
+        final productoNombre = itemData['productoNombre'] ?? 'Producto';
+        final cantidadSolicitada = (itemData['cantidadSolicitada'] as num).toDouble();
 
-          // Consultar stock real en la BD
+        if (fuenteItem == 'stock') {
           final stockRef = _firestore.collection('stock').doc(productoId);
           final stockDoc = await transaction.get(stockRef);
 
           if (!stockDoc.exists) {
             throw Exception("El producto $productoNombre no tiene registro de stock.");
           }
-
           final stockDisponible = (stockDoc.data()?['cantidadDisponible'] as num?)?.toDouble() ?? 0.0;
 
-          // 🚨 BLOQUEO SI NO ALCANZA
           if (stockDisponible < cantidadSolicitada) {
-            throw Exception("❌ Stock insuficiente para $productoNombre.\nSolicitado: $cantidadSolicitada | Disponible: $stockDisponible");
+            throw Exception("❌ Stock insuficiente para $productoNombre.");
           }
         }
+
+        transaction.update(doc.reference, {
+          'fuente': fuenteItem,
+          'cantidadAprobada': cantidadSolicitada,
+        });
       }
 
       transaction.update(ordenRef, {
         'estado': 'aprobado',
-        'fuente': fuente,
+        'fuente': 'mixto',
         'proveedorAsignadoId': proveedorId,
         'aprobadoPorUsuarioId': usuarioAprobadorId,
         'aprobadoFecha': DateTime.now().toIso8601String(),
@@ -166,7 +171,6 @@ class OrdenInternaRepository {
 
       final dataOrden = ordenDoc.data()!;
       final estadoActual = dataOrden['estado'];
-      final fuente = dataOrden['fuente'];
 
       if (estadoActual == 'finalizado' || estadoActual == 'cancelado') {
         throw Exception("No se puede despachar una orden cerrada");
@@ -179,6 +183,8 @@ class OrdenInternaRepository {
 
       for (var doc in itemsSnap.docs) {
         final data = doc.data();
+        final fuenteItem = data['fuente'] ?? 'stock';
+
         double solicitada = (data['cantidadAprobada'] ?? data['cantidadSolicitada'] ?? 0).toDouble();
         double entregadaPrevia = (data['cantidadEntregada'] ?? 0).toDouble();
 
@@ -192,23 +198,13 @@ class OrdenInternaRepository {
             throw Exception("Exceso de cantidad en ${data['productoNombre']}");
           }
 
-          // ✅ VALIDACIÓN EXTRA: Verificar stock físico antes de restar
-          if (fuente == 'stock') {
+          if (fuenteItem == 'stock') {
             final stockRef = _firestore.collection('stock').doc(data['productoId']);
-            final stockDoc = await transaction.get(stockRef);
-            final disponible = (stockDoc.data()?['cantidadDisponible'] as num?)?.toDouble() ?? 0.0;
-
-            if (disponible < cantidadADespachar) {
-              throw Exception("Stock insuficiente en pañol para despachar ${data['productoNombre']}");
-            }
-
-            // Actualizar Stock (Resta)
             transaction.update(stockRef, {
               'cantidadDisponible': FieldValue.increment(-cantidadADespachar),
               'ultimaActualizacion': DateTime.now().toIso8601String(),
             });
 
-            // Actualizar Espejo Producto
             final prodRef = _firestore.collection('productos').doc(data['productoId']);
             transaction.update(prodRef, {
               'cantidadDisponible': FieldValue.increment(-cantidadADespachar),
@@ -220,16 +216,15 @@ class OrdenInternaRepository {
             'estadoItem': (entregadaPrevia + cantidadADespachar >= solicitada) ? 'completado' : 'parcial',
           });
 
-          // ✅ REGISTRO DE MOVIMIENTO (ÚNICO)
           final movRef = _firestore.collection('movimientos_stock').doc();
           transaction.set(movRef, {
             'productoId': data['productoId'],
             'productoNombre': data['productoNombre'],
             'tipo': 'salida',
             'subtipo': 'orden_interna',
-            'fuente': fuente,
+            'fuente': fuenteItem,
             'cantidad': cantidadADespachar,
-            'motivo': 'Despacho Orden $ordenNumero',
+            'motivo': 'Despacho Orden $ordenNumero ($fuenteItem)',
             'referenciaId': ordenId,
             'usuarioId': usuarioId,
             'usuarioNombre': usuarioNombre,
@@ -250,12 +245,64 @@ class OrdenInternaRepository {
       transaction.update(ordenRef, {
         'porcentajeAvance': nuevoAvance,
         'updatedAt': DateTime.now().toIso8601String(),
-        'estado': (nuevoAvance >= 1.0) ? 'finalizado' : 'en_curso',
+        'estado': (nuevoAvance >= 1.0) ? 'entregado' : 'en_curso',
       });
     });
   }
 
-  // --- LECTURA ---
+  // --- NUEVOS MÉTODOS REQUERIDOS ---
+  Future<List<OrdenInternaDetalle>> getMisDespachos(String userId) async {
+    try {
+      Query query = _firestore.collection(_collection)
+          .where('usuariosEtiquetados', arrayContains: userId)
+          .orderBy('createdAt', descending: true);
+
+      final snap = await query.get();
+      return snap.docs.map((d) {
+        final data = d.data() as Map<String, dynamic>;
+        data['id'] = d.id;
+        return OrdenInternaDetalle(
+          orden: OrdenInterna.fromMap(data),
+          clienteRazonSocial: data['clienteRazonSocial'] ?? '?',
+          obraNombre: data['obraNombre'],
+          items: [],
+        );
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  Future<void> etiquetarUsuario(String ordenId, String usuarioId) async {
+    await _firestore.collection(_collection).doc(ordenId).update({
+      'usuariosEtiquetados': FieldValue.arrayUnion([usuarioId])
+    });
+  }
+
+  Future<void> quitarEtiquetaUsuario(String ordenId, String usuarioId) async {
+    await _firestore.collection(_collection).doc(ordenId).update({
+      'usuariosEtiquetados': FieldValue.arrayRemove([usuarioId])
+    });
+  }
+
+  Future<void> finalizarEntregaConFirma({
+    required String ordenId,
+    required Uint8List firmaBytes,
+  }) async {
+    final String nombreArchivo = 'firma_${ordenId}_${DateTime.now().millisecondsSinceEpoch}';
+    final String? urlFirma = await StorageService().subirFirma(firmaBytes, nombreArchivo);
+
+    if (urlFirma == null) throw Exception("Error al subir firma");
+
+    await _firestore.collection(_collection).doc(ordenId).update({
+      'estado': 'entregado',
+      'firmaUrl': urlFirma,
+      'fechaEntregaReal': DateTime.now().toIso8601String(),
+      'porcentajeAvance': 1.0,
+    });
+  }
+
+  // --- LECTURA GENERAL ---
   Future<List<OrdenInternaDetalle>> getOrdenes({String? estado}) async {
     Query query = _firestore.collection(_collection).orderBy('createdAt', descending: true);
     if (estado != null) query = query.where('estado', isEqualTo: estado);

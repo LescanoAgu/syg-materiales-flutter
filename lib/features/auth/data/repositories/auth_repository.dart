@@ -1,14 +1,29 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // ✅ Importar Messaging
 import '../models/usuario_model.dart';
-import '../../../../core/services/notification_service.dart'; // ✅ IMPORTAR
+import '../../../../core/services/notification_service.dart';
 
 class AuthRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance; // ✅ Instancia
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
   User? get currentUser => _auth.currentUser;
+
+  // --- LOGIN ---
+  Future<void> login(String email, String password) async {
+    try {
+      final credencial = await _auth.signInWithEmailAndPassword(email: email, password: password);
+
+      if (credencial.user != null) {
+        await _actualizarConfiguracionUsuario(credencial.user!.uid);
+      }
+    } catch (e) {
+      throw Exception('Error en login: $e');
+    }
+  }
 
   // --- REGISTRO ---
   Future<void> registrar({
@@ -30,7 +45,7 @@ class AuthRepository {
         email: email,
         nombre: nombre,
         organizationId: codigoOrganizacion.toUpperCase(),
-        rol: 'operario',
+        rol: 'operario', // Por defecto entra como operario
         estado: 'pendiente',
         permisos: {
           'ver_precios': false,
@@ -40,54 +55,52 @@ class AuthRepository {
       );
 
       await _firestore.collection('users').doc(nuevoUsuario.uid).set(nuevoUsuario.toMap());
-
-      // ✅ Guardar Token FCM al registrarse
-      await _guardarFcmToken(nuevoUsuario.uid);
+      await _actualizarConfiguracionUsuario(nuevoUsuario.uid);
 
     } catch (e) {
       throw Exception('Error en registro: $e');
     }
   }
 
-  // --- LOGIN ---
-  Future<void> login(String email, String password) async {
+  // --- CONFIGURACIÓN POST-LOGIN (Token y Tópicos) ---
+  Future<void> _actualizarConfiguracionUsuario(String uid) async {
     try {
-      final credencial = await _auth.signInWithEmailAndPassword(email: email, password: password);
-
-      // ✅ Guardar Token FCM al loguearse
-      if (credencial.user != null) {
-        await _guardarFcmToken(credencial.user!.uid);
-      }
-
-    } catch (e) {
-      throw Exception('Error en login: $e');
-    }
-  }
-
-  // --- HELPER PARA GUARDAR TOKEN ---
-  Future<void> _guardarFcmToken(String uid) async {
-    try {
+      // 1. Guardar Token FCM
       String? token = await NotificationService().getToken();
-      if (token != null) {
+
+      // 2. Obtener datos del usuario para saber su rol
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        final rol = data['rol'] ?? 'usuario';
+        final orgId = data['organizationId'] ?? 'general';
+
+        // 3. Suscribir a Tópicos de Firebase Messaging
+        // Esto permite enviar notificaciones masivas a "todos los admins" o "toda la empresa X"
+        await _messaging.subscribeToTopic('org_$orgId'); // Mensajes para toda la empresa
+        await _messaging.subscribeToTopic('rol_$rol');   // Mensajes para el rol (ej: rol_admin)
+
+        // Actualizar BD
         await _firestore.collection('users').doc(uid).update({
           'fcmToken': token,
           'lastLogin': DateTime.now().toIso8601String(),
         });
-        print("📲 Token FCM actualizado en Firestore");
       }
     } catch (e) {
-      print("⚠️ No se pudo guardar el token FCM: $e");
+      print("⚠️ Error configurando usuario post-login: $e");
     }
   }
 
   // --- LOGOUT ---
   Future<void> logout() async {
     try {
-      // Opcional: Borrar token al salir para no recibir notificaciones en cuenta cerrada
+      // Desuscribir (Opcional, pero buena práctica si cambia de usuario en el mismo cel)
+      // Nota: Se requiere conocer los tópicos anteriores, por simplicidad solo borramos token
       if (_auth.currentUser != null) {
         await _firestore.collection('users').doc(_auth.currentUser!.uid).update({
           'fcmToken': FieldValue.delete(),
         });
+        await _messaging.deleteToken(); // Invalida el token actual
       }
       await _auth.signOut();
     } catch (_) {
@@ -95,7 +108,6 @@ class AuthRepository {
     }
   }
 
-  // --- OBTENER DATOS ---
   Future<UsuarioModel?> obtenerDatosUsuario(String uid) async {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();

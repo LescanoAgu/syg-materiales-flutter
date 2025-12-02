@@ -27,7 +27,9 @@ class _FacturasListPageState extends State<FacturasListPage> {
   Future<void> _cargarFacturas() async {
     setState(() => _isLoading = true);
 
-    final facturas = await context.read<AcopioProvider>().obtenerFacturasUnicas();
+    final facturas = await context
+        .read<AcopioProvider>()
+        .obtenerFacturasUnicas();
 
     setState(() {
       _facturas = facturas;
@@ -114,11 +116,13 @@ class _FacturasListPageState extends State<FacturasListPage> {
         ? DateTime.parse(factura['factura_fecha'])
         : null;
     final cantidadItems = factura['cantidad_items'] as int;
-    final cantidadTotal = (factura['cantidad_total'] as num?)?.toDouble() ?? 0.0;
+    final cantidadTotal =
+        (factura['cantidad_total'] as num?)?.toDouble() ?? 0.0;
     final montoTotal = (factura['monto_total'] as num?)?.toDouble() ?? 0.0;
 
     // Determinar si es reciente (últimos 30 días)
-    final esReciente = facturaFecha != null &&
+    final esReciente =
+        facturaFecha != null &&
         DateTime.now().difference(facturaFecha).inDays <= 30;
 
     return Card(
@@ -145,7 +149,7 @@ class _FacturasListPageState extends State<FacturasListPage> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
+                      color: AppColors.primary.withAlpha(26),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
@@ -179,9 +183,12 @@ class _FacturasListPageState extends State<FacturasListPage> {
                   ),
                   if (esReciente)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppColors.success.withOpacity(0.1),
+                        color: AppColors.success.withAlpha(26),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Text(
@@ -209,11 +216,7 @@ class _FacturasListPageState extends State<FacturasListPage> {
                       AppColors.primary,
                     ),
                   ),
-                  Container(
-                    width: 1,
-                    height: 40,
-                    color: Colors.grey[300],
-                  ),
+                  Container(width: 1, height: 40, color: Colors.grey[300]),
                   Expanded(
                     child: _buildEstadisticaItem(
                       'Unidades',
@@ -223,11 +226,7 @@ class _FacturasListPageState extends State<FacturasListPage> {
                     ),
                   ),
                   if (montoTotal > 0) ...[
-                    Container(
-                      width: 1,
-                      height: 40,
-                      color: Colors.grey[300],
-                    ),
+                    Container(width: 1, height: 40, color: Colors.grey[300]),
                     Expanded(
                       child: _buildEstadisticaItem(
                         'Total',
@@ -247,11 +246,11 @@ class _FacturasListPageState extends State<FacturasListPage> {
   }
 
   Widget _buildEstadisticaItem(
-      String label,
-      String valor,
-      IconData icono,
-      Color color,
-      ) {
+    String label,
+    String valor,
+    IconData icono,
+    Color color,
+  ) {
     return Column(
       children: [
         Icon(icono, color: color, size: 20),
@@ -264,13 +263,7 @@ class _FacturasListPageState extends State<FacturasListPage> {
             color: color,
           ),
         ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: Colors.grey[600],
-          ),
-        ),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
       ],
     );
   }

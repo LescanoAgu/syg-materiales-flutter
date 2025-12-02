@@ -8,7 +8,7 @@ class AcopioRepository {
   static const String _colAcopios = 'acopios';
   static const String _colMovimientos = 'movimientos_acopio';
   static const String _colProductos = 'productos';
-  static const String _colStock = 'stock'; // Colección espejo de stock
+  static const String _colStock = 'stock';
 
   // --- LECTURA ---
 
@@ -16,16 +16,13 @@ class AcopioRepository {
     try {
       Query query = _firestore.collection(_colAcopios);
       if (soloActivos) {
-        // Solo traemos acopios que tengan saldo positivo (> 0)
         query = query.where('cantidadDisponible', isGreaterThan: 0);
       }
-      // Ordenar por cliente para agrupar visualmente
       query = query.orderBy('cantidadDisponible', descending: true);
 
       final snapshot = await query.get();
 
       return snapshot.docs.map((doc) {
-        // CORRECCIÓN: Casting explícito a Map<String, dynamic>
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return AcopioDetalle.fromMap(data);
@@ -50,7 +47,6 @@ class AcopioRepository {
       final snapshot = await query.limit(50).get();
 
       return snapshot.docs.map((doc) {
-        // CORRECCIÓN: Casting explícito a Map<String, dynamic>
         final data = doc.data() as Map<String, dynamic>;
         data['id'] = doc.id;
         return MovimientoAcopioModel.fromMap(data);
@@ -61,23 +57,18 @@ class AcopioRepository {
     }
   }
 
-  // --- ESCRITURA (TRANSACCIONES REALES) ---
-
+  // --- ESCRITURA ---
   Future<void> registrarMovimiento({
     required String productoId,
     required String clienteId,
-    required String proveedorId, // Dónde está guardado (ej: Depósito S&G)
+    required String proveedorId,
     required TipoMovimientoAcopio tipo,
     required double cantidad,
-
-    // Datos opcionales
     String? motivo,
     String? referencia,
     String? facturaNumero,
     DateTime? facturaFecha,
     bool valorizado = false,
-
-    // Datos desnormalizados para la UI (Nombres)
     String productoNombre = '',
     String productoCodigo = '',
     String clienteNombre = '',
@@ -86,19 +77,17 @@ class AcopioRepository {
     String unidadBase = '',
   }) async {
 
-    // Referencias a documentos
     final acopioQuery = _firestore.collection(_colAcopios)
         .where('clienteId', isEqualTo: clienteId)
         .where('productoId', isEqualTo: productoId)
         .where('proveedorId', isEqualTo: proveedorId)
         .limit(1);
 
-    final stockRef = _firestore.collection(_colStock).doc(productoCodigo); // Usamos código como ID en stock
+    final stockRef = _firestore.collection(_colStock).doc(productoCodigo);
     final productoRef = _firestore.collection(_colProductos).doc(productoCodigo);
     final movimientoRef = _firestore.collection(_colMovimientos).doc();
 
     return _firestore.runTransaction((transaction) async {
-      // 1. Leer estado actual del Acopio (si existe)
       final acopioSnapshot = await acopioQuery.get();
       DocumentReference? acopioDocRef;
       double saldoAcopioActual = 0;
@@ -107,11 +96,9 @@ class AcopioRepository {
         acopioDocRef = acopioSnapshot.docs.first.reference;
         saldoAcopioActual = (acopioSnapshot.docs.first.data()['cantidadDisponible'] as num).toDouble();
       } else {
-        // Si no existe, crearemos uno nuevo
         acopioDocRef = _firestore.collection(_colAcopios).doc();
       }
 
-      // 2. Leer Stock Físico S&G (Solo necesario si entra o sale mercadería física)
       double stockFisicoActual = 0;
       if (tipo == TipoMovimientoAcopio.entrada || tipo == TipoMovimientoAcopio.devolucion) {
         final stockDoc = await transaction.get(stockRef);
@@ -120,52 +107,28 @@ class AcopioRepository {
         }
       }
 
-      // 3. Calcular Nuevos Saldos y Validar
       double nuevoSaldoAcopio = saldoAcopioActual;
       double nuevoStockFisico = stockFisicoActual;
 
       switch (tipo) {
         case TipoMovimientoAcopio.entrada:
-        // Cliente COMPRA y deja en acopio:
-        // -> Aumenta su Acopio
-        // -> Disminuye nuestro Stock Físico (porque ya no es nuestro, es del cliente)
-          if (stockFisicoActual < cantidad) {
-            throw Exception("Stock físico insuficiente para realizar este acopio. Disponible: $stockFisicoActual");
-          }
+          if (stockFisicoActual < cantidad) throw Exception("Stock físico insuficiente");
           nuevoSaldoAcopio += cantidad;
           nuevoStockFisico -= cantidad;
           break;
-
         case TipoMovimientoAcopio.salida:
-        // Cliente RETIRA material:
-        // -> Disminuye su Acopio
-        // -> El Stock Físico no cambia (porque ya se descontó cuando compró)
-          if (saldoAcopioActual < cantidad) {
-            throw Exception("Saldo de acopio insuficiente. Disponible: $saldoAcopioActual");
-          }
+          if (saldoAcopioActual < cantidad) throw Exception("Saldo de acopio insuficiente");
           nuevoSaldoAcopio -= cantidad;
           break;
-
         case TipoMovimientoAcopio.devolucion:
-        // Cliente DEVUELVE material (cancela compra):
-        // -> Disminuye su Acopio
-        // -> Aumenta nuestro Stock Físico
-          if (saldoAcopioActual < cantidad) {
-            throw Exception("No puede devolver más de lo que tiene acopiado.");
-          }
+          if (saldoAcopioActual < cantidad) throw Exception("Devolución excede acopio");
           nuevoSaldoAcopio -= cantidad;
           nuevoStockFisico += cantidad;
           break;
-
         default:
-        // Otros tipos (traspaso, ajuste) por ahora solo afectan acopio
-        // Implementar lógica específica si hace falta
           break;
       }
 
-      // 4. Ejecutar Escrituras en la Transacción
-
-      // A) Actualizar/Crear Acopio
       final datosAcopio = {
         'clienteId': clienteId,
         'productoId': productoId,
@@ -173,9 +136,8 @@ class AcopioRepository {
         'cantidadDisponible': nuevoSaldoAcopio,
         'estado': nuevoSaldoAcopio > 0 ? 'activo' : 'inactivo',
         'updatedAt': DateTime.now().toIso8601String(),
-        // Datos desnormalizados (se guardan siempre para mantenerlos actualizados)
         'clienteRazonSocial': clienteNombre,
-        'clienteCodigo': clienteId, // Asumiendo que ID = Código
+        'clienteCodigo': clienteId,
         'productoNombre': productoNombre,
         'productoCodigo': productoCodigo,
         'proveedorNombre': proveedorNombre,
@@ -184,19 +146,17 @@ class AcopioRepository {
         'categoriaNombre': categoriaNombre,
       };
 
-      transaction.set(acopioDocRef!, datosAcopio, SetOptions(merge: true));
+      // ✅ CORRECCIÓN: Eliminado el '!' porque acopioDocRef ya es seguro
+      transaction.set(acopioDocRef, datosAcopio, SetOptions(merge: true));
 
-      // B) Actualizar Stock Físico (si corresponde)
       if (tipo == TipoMovimientoAcopio.entrada || tipo == TipoMovimientoAcopio.devolucion) {
         transaction.update(stockRef, {
           'cantidadDisponible': nuevoStockFisico,
           'ultimaActualizacion': DateTime.now().toIso8601String(),
         });
-        // Espejo en producto también
         transaction.update(productoRef, {'cantidadDisponible': nuevoStockFisico});
       }
 
-      // C) Registrar el Movimiento (Historial)
       final datosMovimiento = {
         'productoId': productoId,
         'clienteId': clienteId,
@@ -208,7 +168,6 @@ class AcopioRepository {
         'facturaNumero': facturaNumero,
         'facturaFecha': facturaFecha?.toIso8601String(),
         'createdAt': DateTime.now().toIso8601String(),
-        // Desnormalizados para reporte rápido
         'productoNombre': productoNombre,
         'clienteNombre': clienteNombre,
       };
@@ -217,7 +176,6 @@ class AcopioRepository {
     });
   }
 
-  // Métodos placeholders que puedes implementar a futuro
   Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async => [];
   Future<void> filtrarPorFactura(String f) async {}
 }

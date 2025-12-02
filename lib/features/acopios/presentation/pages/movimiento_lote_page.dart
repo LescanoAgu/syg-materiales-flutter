@@ -1,9 +1,3 @@
-// ========================================
-// ARCHIVO CORREGIDO: lib/features/acopios/presentation/pages/movimiento_lote_page.dart
-// ✅ FIX: Agregado WillPopScope con confirmación y leading button
-// PARTE 1/2 - Imports y Build Method
-// ========================================
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -22,10 +16,6 @@ class MovimientoLotePage extends StatefulWidget {
 }
 
 class _MovimientoLotePageState extends State<MovimientoLotePage> {
-  // ========================================
-  // ESTADO
-  // ========================================
-
   final _formKey = GlobalKey<FormState>();
   final _facturaNumeroController = TextEditingController();
   final _motivoController = TextEditingController();
@@ -36,8 +26,7 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
   bool _esEntrada = true;
   ClienteModel? _clienteSeleccionado;
   ProveedorModel? _proveedorSeleccionado;
-  DateTime? _facturaFecha;
-  final bool _valorizar = false;
+
   final List<MovimientoLoteItem> _items = [];
 
   @override
@@ -59,29 +48,23 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
     super.dispose();
   }
 
-  // ========================================
-  // BUILD - ✅ CON WILLPOPSCOPE Y CONFIRMACIÓN
-  // ========================================
-
   @override
   Widget build(BuildContext context) {
-    // 👉 CAMBIO 1: Envolver con WillPopScope
-    return WillPopScope(
-      onWillPop: () async {
-        // Si hay productos agregados, pedir confirmación
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
         if (_items.isNotEmpty) {
           final bool? confirmar = await _mostrarDialogoConfirmacion();
-          return confirmar ?? false; // Si cancela o cierra el diálogo, no cerrar
+          if (confirmar == true && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else {
+          Navigator.of(context).pop();
         }
-        // Si no hay productos, permitir salir directamente
-        return true;
       },
       child: Scaffold(
-        // ========================================
-        // APP BAR - ✅ CON LEADING BUTTON
-        // ========================================
         appBar: AppBar(
-          // 👉 CAMBIO 2: Leading button con confirmación
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () async {
@@ -115,13 +98,8 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
             ],
           ),
         ),
-
-        // ========================================
-        // BODY
-        // ========================================
         body: Column(
           children: [
-            // Formulario principal
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -130,45 +108,30 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Selector tipo destino
                       _buildSelectorTipoDestino(),
                       const SizedBox(height: 16),
-
-                      // Selector entrada/salida
                       _buildSelectorEntradaSalida(),
                       const SizedBox(height: 16),
-
-                      // Si es acopio, mostrar selector cliente/proveedor
                       if (_tipoDestino == TipoDestinoLote.acopio) ...[
                         _buildSelectorCliente(),
                         const SizedBox(height: 16),
                         _buildSelectorProveedor(),
                         const SizedBox(height: 16),
                       ],
-
-                      // Campos opcionales
                       _buildCamposOpcionales(),
                       const SizedBox(height: 16),
-
-                      // Lista de productos agregados
                       _buildListaProductos(),
                     ],
                   ),
                 ),
               ),
             ),
-
-            // Botones inferiores
             _buildBotonesInferiores(),
           ],
         ),
-      ), // 👈 Cierra WillPopScope
+      ),
     );
   }
-
-  // ========================================
-  // MÉTODO DE CONFIRMACIÓN - ✅ NUEVO
-  // ========================================
 
   Future<bool?> _mostrarDialogoConfirmacion() {
     return showDialog<bool>(
@@ -177,7 +140,7 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
         title: const Text('¿Salir sin guardar?'),
         content: Text(
           'Tienes ${_items.length} producto${_items.length == 1 ? '' : 's'} agregado${_items.length == 1 ? '' : 's'}.\n\n'
-              '¿Deseas salir sin registrar el movimiento?',
+          '¿Deseas salir sin registrar el movimiento?',
         ),
         actions: [
           TextButton(
@@ -186,19 +149,13 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             child: const Text('Salir sin guardar'),
           ),
         ],
       ),
     );
   }
-
-  // ========================================
-  // WIDGETS DE UI - Continuación en Parte 2
-  // ========================================
 
   Widget _buildSelectorTipoDestino() {
     return SegmentedButton<TipoDestinoLote>(
@@ -246,8 +203,6 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
     );
   }
 
-  // Continuación de los métodos en la parte 2...
-
   Widget _buildSelectorCliente() {
     return Card(
       child: ListTile(
@@ -277,7 +232,6 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
   Widget _buildCamposOpcionales() {
     return Column(
       children: [
-        // Factura número
         TextFormField(
           controller: _facturaNumeroController,
           decoration: const InputDecoration(
@@ -286,8 +240,6 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // Motivo
         TextFormField(
           controller: _motivoController,
           decoration: const InputDecoration(
@@ -306,7 +258,11 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
           padding: const EdgeInsets.all(32),
           child: Column(
             children: [
-              Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade400),
+              Icon(
+                Icons.inventory_2_outlined,
+                size: 48,
+                color: Colors.grey.shade400,
+              ),
               const SizedBox(height: 16),
               Text(
                 'No hay productos agregados',
@@ -323,15 +279,12 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
       children: [
         Text(
           'Productos (${_items.length})',
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         ...List.generate(
           _items.length,
-              (index) => _buildItemCard(_items[index], index),
+          (index) => _buildItemCard(_items[index], index),
         ),
       ],
     );
@@ -362,7 +315,7 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withAlpha(26),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -383,23 +336,16 @@ class _MovimientoLotePageState extends State<MovimientoLotePage> {
           Expanded(
             flex: 2,
             child: ElevatedButton.icon(
-              onPressed: _items.isEmpty ? null : () async {
-                // Llamar a _registrarLote()
-              },
+              onPressed: _items.isEmpty
+                  ? null
+                  : () async {
+                      // Llamar a _registrarLote()
+                    },
               icon: const Icon(Icons.check_circle),
               label: const Text('REGISTRAR TODO'),
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _mostrarError(String mensaje) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensaje),
-        backgroundColor: AppColors.error,
       ),
     );
   }

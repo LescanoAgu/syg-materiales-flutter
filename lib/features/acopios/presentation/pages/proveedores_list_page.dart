@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/widgets/app_drawer.dart'; // Si lo usas con Scaffold normal
 import '../providers/acopio_provider.dart';
 import 'proveedor_form_page.dart';
 
@@ -30,7 +29,10 @@ class _ProveedoresListPageState extends State<ProveedoresListPage> {
       appBar: AppBar(title: const Text('Proveedores')),
       body: _buildBody(),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProveedorFormPage())),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ProveedorFormPage()),
+        ),
         child: const Icon(Icons.add),
       ),
     );
@@ -39,7 +41,8 @@ class _ProveedoresListPageState extends State<ProveedoresListPage> {
   Widget _buildBody() {
     return Consumer<AcopioProvider>(
       builder: (context, provider, _) {
-        if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+        if (provider.isLoading)
+          return const Center(child: CircularProgressIndicator());
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -49,16 +52,29 @@ class _ProveedoresListPageState extends State<ProveedoresListPage> {
             return Card(
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: p.esDepositoSyg ? AppColors.primary : Colors.grey[300],
-                  child: Icon(p.esDepositoSyg ? Icons.warehouse : Icons.store, color: p.esDepositoSyg ? Colors.white : Colors.grey[700]),
+                  backgroundColor: p.esDepositoSyg
+                      ? AppColors.primary
+                      : Colors.grey[300],
+                  child: Icon(
+                    p.esDepositoSyg ? Icons.warehouse : Icons.store,
+                    color: p.esDepositoSyg ? Colors.white : Colors.grey[700],
+                  ),
                 ),
-                title: Text(p.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+                title: Text(
+                  p.nombre,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: Text(p.direccion ?? 'Sin dirección'),
-                trailing: !p.esDepositoSyg // No dejar borrar el depósito central
+                trailing: !p.esDepositoSyg
                     ? IconButton(
-                  icon: const Icon(Icons.edit, color: Colors.blue),
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProveedorFormPage(proveedor: p))),
-                )
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProveedorFormPage(proveedor: p),
+                          ),
+                        ),
+                      )
                     : null,
               ),
             );
