@@ -87,4 +87,15 @@ class UsuarioModel extends Equatable {
 
   @override
   List<Object?> get props => [uid, organizationId, estado, permisos, rol];
+
+  Map<String, dynamic> toUpdateMap() {
+    return {
+      'rol': rol,
+      'estado': estado,
+      'permisos': permisos,
+      'updatedAt': FieldValue.serverTimestamp(),
+      // Solo actualizamos la fecha de modificación
+
+    };
+  }
 }

@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
+import 'dart:typed_data';
 import '../../data/repositories/orden_interna_repository.dart';
 import '../../data/models/orden_interna_model.dart';
 
 class OrdenInternaProvider extends ChangeNotifier {
   final OrdenInternaRepository _repository = OrdenInternaRepository();
+
   List<OrdenInternaDetalle> _ordenes = [];
+  List<OrdenInternaDetalle> _misDespachos = []; // ✅ NUEVO
+
   bool _isLoading = false;
   String? _errorMessage;
 
   List<OrdenInternaDetalle> get ordenes => _ordenes;
+  List<OrdenInternaDetalle> get misDespachos => _misDespachos; // ✅ NUEVO
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
@@ -24,6 +29,20 @@ class OrdenInternaProvider extends ChangeNotifier {
       });
     } catch (_) {}
     finally { _isLoading = false; notifyListeners(); }
+  }
+
+  // ✅ NUEVO: Cargar mis despachos
+  Future<void> cargarMisDespachos(String userId) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      _misDespachos = await _repository.getMisDespachos(userId);
+    } catch (e) {
+      print("Error cargando mis despachos: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<OrdenInternaDetalle?> cargarDetalleOrden(String id) async {
@@ -51,7 +70,7 @@ class OrdenInternaProvider extends ChangeNotifier {
 
   Future<bool> aprobarOrden({
     required String ordenId,
-    required String fuente,
+    required Map<String, String> configuracionItems,
     String? proveedorId,
     required String usuarioId,
   }) async {
@@ -61,7 +80,7 @@ class OrdenInternaProvider extends ChangeNotifier {
     try {
       await _repository.aprobarOrden(
         ordenId: ordenId,
-        fuente: fuente,
+        configuracionItems: configuracionItems,
         proveedorId: proveedorId,
         usuarioAprobadorId: usuarioId,
       );
@@ -110,6 +129,31 @@ class OrdenInternaProvider extends ChangeNotifier {
       await cargarOrdenes(); return true;
     } catch (e) { return false; }
     finally { _isLoading = false; notifyListeners(); }
+  }
+
+  // ✅ NUEVO: Etiquetar usuario
+  Future<bool> agregarEtiqueta(String ordenId, String userId) async {
+    try {
+      await _repository.etiquetarUsuario(ordenId, userId);
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // ✅ NUEVO: Confirmar entrega con firma
+  Future<bool> confirmarEntrega(String ordenId, Uint8List firmaBytes) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _repository.finalizarEntregaConFirma(ordenId: ordenId, firmaBytes: firmaBytes);
+      await cargarOrdenes();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<bool> eliminarOrden(String id) async {

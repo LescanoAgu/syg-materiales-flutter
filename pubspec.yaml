@@ -36,6 +36,8 @@ dependencies:
 
   # Notificaciones Locales
   flutter_local_notifications: ^19.5.0
+  firebase_storage: ^13.0.4
+  signature: ^5.4.0
 
 dev_dependencies:
   flutter_test:

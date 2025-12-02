@@ -7,20 +7,10 @@ import '../../data/models/movimiento_acopio_model.dart';
 import '../providers/acopio_provider.dart';
 import 'acopio_movimiento_page.dart';
 
-/// Pantalla de Detalle Completo de un Acopio
-///
-/// Muestra:
-/// - Información general del acopio
-/// - Historial de movimientos
-/// - Estadísticas (totales entrada/salida)
-/// - Acciones rápidas
 class AcopioDetallePage extends StatefulWidget {
   final AcopioDetalle acopio;
 
-  const AcopioDetallePage({
-    super.key,
-    required this.acopio,
-  });
+  const AcopioDetallePage({super.key, required this.acopio});
 
   @override
   State<AcopioDetallePage> createState() => _AcopioDetallePageState();
@@ -28,45 +18,32 @@ class AcopioDetallePage extends StatefulWidget {
 
 class _AcopioDetallePageState extends State<AcopioDetallePage>
     with SingleTickerProviderStateMixin {
-
-  // TabController maneja las pestañas
   late TabController _tabController;
-
-  // Lista de movimientos del acopio
   List<MovimientoAcopioModel> _movimientos = [];
-
-  // Estado de carga
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-
-    // Inicializar el TabController con 2 tabs
     _tabController = TabController(length: 2, vsync: this);
-
-    // Cargar los movimientos
     _cargarMovimientos();
   }
 
   @override
   void dispose() {
-    // IMPORTANTE: Liberar recursos cuando se cierra la pantalla
     _tabController.dispose();
     super.dispose();
   }
 
-  /// Carga los movimientos del acopio desde el repositorio
   Future<void> _cargarMovimientos() async {
     setState(() => _isLoading = true);
 
     final provider = Provider.of<AcopioProvider>(context, listen: false);
 
-    // Obtenemos el historial usando los datos del acopio
     final movimientos = await provider.obtenerHistorialAcopio(
-      productoCodigo: widget.acopio.acopio.productoId, // CORREGIDO: 'productoCodigo'
-      clienteCodigo: widget.acopio.acopio.clienteId,   // CORREGIDO: 'clienteCodigo'
-      proveedorCodigo: widget.acopio.acopio.proveedorId, // CORREGIDO: 'proveedorCodigo'
+      productoCodigo: widget.acopio.acopio.productoId,
+      clienteCodigo: widget.acopio.acopio.clienteId,
+      proveedorCodigo: widget.acopio.acopio.proveedorId,
     );
 
     setState(() {
@@ -79,18 +56,13 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-
-      // AppBar con degradado
       appBar: AppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               widget.acopio.productoNombre,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
               widget.acopio.clienteRazonSocial,
@@ -102,47 +74,29 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
           ],
         ),
         flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: AppColors.primaryGradient,
-          ),
+          decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
         ),
         actions: [
-          // Botón de refrescar
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _cargarMovimientos,
             tooltip: 'Actualizar',
           ),
         ],
-
-        // TabBar en el AppBar
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: AppColors.textWhite,
           indicatorWeight: 3,
           tabs: const [
-            Tab(
-              icon: Icon(Icons.info_outline),
-              text: 'Información',
-            ),
-            Tab(
-              icon: Icon(Icons.history),
-              text: 'Movimientos',
-            ),
+            Tab(icon: Icon(Icons.info_outline), text: 'Información'),
+            Tab(icon: Icon(Icons.history), text: 'Movimientos'),
           ],
         ),
       ),
-
-      // Cuerpo con TabBarView
       body: TabBarView(
         controller: _tabController,
-        children: [
-          _buildInformacionTab(),
-          _buildMovimientosTab(),
-        ],
+        children: [_buildInformacionTab(), _buildMovimientosTab()],
       ),
-
-      // Botón flotante para registrar movimiento
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _registrarMovimiento(context),
         icon: const Icon(Icons.add),
@@ -152,23 +106,14 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  // ========================================
-  // TAB DE INFORMACIÓN
-  // ========================================
-
-  /// Tab de Información General
   Widget _buildInformacionTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Tarjeta de estadísticas
           _buildEstadisticasCard(),
-
           const SizedBox(height: 16),
-
-          // Información del producto
           _buildInfoCard(
             title: 'Producto',
             items: [
@@ -178,10 +123,7 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
               _buildInfoRow('Unidad', widget.acopio.unidadBase),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Información del cliente
           _buildInfoCard(
             title: 'Cliente',
             items: [
@@ -189,16 +131,16 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
               _buildInfoRow('Razón Social', widget.acopio.clienteRazonSocial),
             ],
           ),
-
           const SizedBox(height: 16),
-
-          // Información del proveedor/ubicación
           _buildInfoCard(
             title: 'Ubicación',
             items: [
               _buildInfoRow('Proveedor', widget.acopio.proveedorNombre),
               _buildInfoRow('Código', widget.acopio.proveedorCodigo),
-              _buildInfoRow('Tipo', _formatearTipoProveedor(widget.acopio.proveedorTipo)),
+              _buildInfoRow(
+                'Tipo',
+                _formatearTipoProveedor(widget.acopio.proveedorTipo),
+              ),
             ],
           ),
         ],
@@ -206,9 +148,7 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  /// Card con estadísticas del acopio
   Widget _buildEstadisticasCard() {
-    // Calcular totales
     double totalEntradas = 0;
     double totalSalidas = 0;
 
@@ -222,14 +162,11 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
 
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            // Título
             Row(
               children: [
                 Icon(Icons.analytics, color: AppColors.primary),
@@ -244,13 +181,9 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
                 ),
               ],
             ),
-
             const Divider(height: 24),
-
-            // Fila con 3 estadísticas
             Row(
               children: [
-                // Stock Disponible
                 Expanded(
                   child: _buildEstadistica(
                     label: 'Disponible',
@@ -260,8 +193,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
                     icon: Icons.inventory_2,
                   ),
                 ),
-
-                // Total Entradas
                 Expanded(
                   child: _buildEstadistica(
                     label: 'Entradas',
@@ -271,8 +202,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
                     icon: Icons.arrow_downward,
                   ),
                 ),
-
-                // Total Salidas
                 Expanded(
                   child: _buildEstadistica(
                     label: 'Salidas',
@@ -290,7 +219,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  /// Widget individual de estadística
   Widget _buildEstadistica({
     required String label,
     required double valor,
@@ -312,37 +240,21 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
         ),
         Text(
           unidad,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.textLight,
-          ),
+          style: TextStyle(fontSize: 12, color: AppColors.textLight),
         ),
         const SizedBox(height: 4),
         Text(
           label,
-          style: TextStyle(
-            fontSize: 14,
-            color: AppColors.textMedium,
-          ),
+          style: TextStyle(fontSize: 14, color: AppColors.textMedium),
         ),
       ],
     );
   }
 
-  // ========================================
-  // WIDGETS HELPER
-  // ========================================
-
-  /// Card genérica de información
-  Widget _buildInfoCard({
-    required String title,
-    required List<Widget> items,
-  }) {
+  Widget _buildInfoCard({required String title, required List<Widget> items}) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -364,7 +276,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  /// Fila de información (label: valor)
   Widget _buildInfoRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -385,10 +296,7 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
           Expanded(
             child: Text(
               value,
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textDark,
-              ),
+              style: TextStyle(fontSize: 14, color: AppColors.textDark),
             ),
           ),
         ],
@@ -396,7 +304,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  /// Formatea el tipo de proveedor para mostrar
   String _formatearTipoProveedor(String tipo) {
     switch (tipo) {
       case 'deposito_syg':
@@ -408,16 +315,9 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     }
   }
 
-  // ========================================
-  // TAB DE MOVIMIENTOS
-  // ========================================
-
-  /// Tab de Movimientos (historial)
   Widget _buildMovimientosTab() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_movimientos.isEmpty) {
@@ -425,26 +325,16 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.history,
-              size: 80,
-              color: AppColors.textLight,
-            ),
+            Icon(Icons.history, size: 80, color: AppColors.textLight),
             const SizedBox(height: 16),
             Text(
               'Sin movimientos registrados',
-              style: TextStyle(
-                fontSize: 16,
-                color: AppColors.textMedium,
-              ),
+              style: TextStyle(fontSize: 16, color: AppColors.textMedium),
             ),
             const SizedBox(height: 8),
             Text(
               'Registrá el primer movimiento con el botón + ',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppColors.textLight,
-              ),
+              style: TextStyle(fontSize: 14, color: AppColors.textLight),
             ),
           ],
         ),
@@ -460,14 +350,11 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  /// Card de movimiento individual
   Widget _buildMovimientoItem(MovimientoAcopioModel movimiento) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: CircleAvatar(
@@ -498,10 +385,7 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
             const SizedBox(width: 4),
             Text(
               widget.acopio.unidadBase,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textLight,
-              ),
+              style: TextStyle(fontSize: 12, color: AppColors.textLight),
             ),
           ],
         ),
@@ -511,10 +395,7 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
             const SizedBox(height: 8),
             Text(
               ArgFormats.fechaHora(movimiento.createdAt),
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textLight,
-              ),
+              style: TextStyle(fontSize: 12, color: AppColors.textLight),
             ),
             if (movimiento.motivo != null && movimiento.motivo!.isNotEmpty)
               Padding(
@@ -552,7 +433,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     );
   }
 
-  /// Retorna el color según tipo de movimiento
   Color _getColorMovimiento(TipoMovimientoAcopio tipo) {
     switch (tipo) {
       case TipoMovimientoAcopio.entrada:
@@ -568,7 +448,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     }
   }
 
-  /// Retorna el icono según tipo de movimiento
   IconData _getIconoMovimiento(TipoMovimientoAcopio tipo) {
     switch (tipo) {
       case TipoMovimientoAcopio.entrada:
@@ -584,7 +463,6 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
     }
   }
 
-  /// Formatea el tipo de movimiento para mostrar
   String _formatearTipoMovimiento(TipoMovimientoAcopio tipo) {
     switch (tipo) {
       case TipoMovimientoAcopio.entrada:
@@ -601,26 +479,17 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
         return 'Cambio de Dueño';
       case TipoMovimientoAcopio.devolucion:
         return 'Devolución';
-      default:
-        return tipo.name;
     }
   }
 
-  // ========================================
-  // ACCIONES
-  // ========================================
-
-  /// Navega a la pantalla de registro de movimiento
   void _registrarMovimiento(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AcopioMovimientoPage(
-          acopioInicial: widget.acopio,
-        ),
+        builder: (context) =>
+            AcopioMovimientoPage(acopioInicial: widget.acopio),
       ),
     ).then((_) {
-      // Recargar movimientos al volver
       _cargarMovimientos();
     });
   }

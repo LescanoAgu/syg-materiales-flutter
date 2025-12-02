@@ -14,9 +14,7 @@ class ProveedorRepository {
 
       final snapshot = await query.get();
       return snapshot.docs.map((doc) {
-        // ✅ CORRECCIÓN: Casting explícito para que Dart sepa que es un Mapa
         final data = doc.data() as Map<String, dynamic>;
-
         data['id'] = doc.id;
         return ProveedorModel.fromMap(data);
       }).toList();
@@ -27,7 +25,6 @@ class ProveedorRepository {
   }
 
   Future<void> crear(ProveedorModel proveedor) async {
-    // Usamos el código como ID si es posible, o automático
     final id = proveedor.codigo.isNotEmpty ? proveedor.codigo : _firestore.collection(_collection).doc().id;
     await _firestore.collection(_collection).doc(id).set(proveedor.toMap());
   }

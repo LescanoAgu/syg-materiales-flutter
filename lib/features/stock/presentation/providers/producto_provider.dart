@@ -15,12 +15,12 @@ class ProductoProvider extends ChangeNotifier {
   List<ProductoModel> _productos = [];
   List<CategoriaModel> _categorias = [];
   bool _isLoading = false;
-  bool _isLoadingMore = false; // Para scroll infinito
+  bool _isLoadingMore = false;
   String? _errorMessage;
 
   // Filtros y Orden
-  OrdenamientoCatalogo _ordenActual = OrdenamientoCatalogo.codigo; // Por defecto código para que se vean correlativos
-  String? _categoriaFiltroId; // Categoría seleccionada actualmente (null = todas)
+  OrdenamientoCatalogo _ordenActual = OrdenamientoCatalogo.codigo;
+  String? _categoriaFiltroId;
 
   // Paginación
   DocumentSnapshot? _ultimoDocumento;
@@ -65,7 +65,7 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  // --- SCROLL INFINITO (LAZY LOADING) ---
+  // --- SCROLL INFINITO ---
   Future<void> cargarMasProductos() async {
     if (_isLoadingMore || !_hayMas || _isLoading) return;
 
@@ -120,14 +120,13 @@ class ProductoProvider extends ChangeNotifier {
   }
 
   void seleccionarCategoria(String? categoriaId) {
-    if (_categoriaFiltroId == categoriaId) return; // Ya estaba seleccionada
+    if (_categoriaFiltroId == categoriaId) return;
     _categoriaFiltroId = categoriaId;
-    cargarProductos(recargar: true); // Recargamos la lista desde cero con el filtro
+    cargarProductos(recargar: true);
   }
 
   Future<void> crearCategoria(String nombre, String codigo) async {
     try {
-      // Verificar si ya existe localmente para evitar duplicados visuales
       if (_categorias.any((c) => c.codigo == codigo)) return;
 
       final nuevaCat = CategoriaModel(
@@ -138,7 +137,6 @@ class ProductoProvider extends ChangeNotifier {
       );
       await _catRepo.crear(nuevaCat);
       _categorias.add(nuevaCat);
-      // Ordenar categorías alfabéticamente para el filtro
       _categorias.sort((a,b) => a.nombre.compareTo(b.nombre));
       notifyListeners();
     } catch (e) {
@@ -149,7 +147,6 @@ class ProductoProvider extends ChangeNotifier {
   // --- BÚSQUEDA ---
   Future<void> buscarProductos(String query) async {
     if (query.isEmpty) {
-      // Si borra la búsqueda, volvemos a la lista paginada normal
       cargarProductos(recargar: true);
       return;
     }
@@ -157,14 +154,13 @@ class ProductoProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      // La búsqueda ignora la paginación actual y trae coincidencias directas
       _productos = await _repository.buscar(query);
-      _hayMas = false; // En búsqueda desactivamos scroll infinito por simplicidad
+      _hayMas = false;
     } catch (e) { print(e); }
     finally { _isLoading = false; notifyListeners(); }
   }
 
-  // --- IMPORTACIÓN Y GESTIÓN ---
+  // --- GESTIÓN ---
   Future<bool> importarProductos(List<ProductoModel> lista) async {
     try {
       await _repository.importarMasivos(lista);
@@ -185,35 +181,32 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  // --- ORDENAMIENTO ---
   void cambiarOrden(OrdenamientoCatalogo orden) {
     _ordenActual = orden;
-    cargarProductos(recargar: true); // Recargar desde BD con el nuevo orden
+    cargarProductos(recargar: true);
   }
 
   String _mapearOrdenamiento() {
     switch (_ordenActual) {
       case OrdenamientoCatalogo.nombreAZ: return 'nombre';
-      case OrdenamientoCatalogo.nombreZA: return 'nombre'; // Firestore solo permite ASC/DESC en query, lo simplificamos a nombre por ahora
+      case OrdenamientoCatalogo.nombreZA: return 'nombre';
       case OrdenamientoCatalogo.codigo: return 'codigo';
       case OrdenamientoCatalogo.categoria: return 'categoriaId';
     }
   }
 
-  // Helpers
   Future<String> generarCodigoParaCategoria(String catId) async {
     return await _repository.generarSiguienteCodigo(catId);
   }
 
+  // ✅ FIX: Ahora usamos la búsqueda flexible del repo sin forzar mayúsculas
   Future<List<ProductoModel>> buscarParaDelegate(String query) async {
     if (query.isEmpty) return [];
     try {
-      // ✅ FIX: Convertir a mayúsculas para coincidir con la BD
-      return await _repository.buscar(query.toUpperCase());
+      return await _repository.buscar(query);
     } catch (e) {
       print("Error búsqueda delegate: $e");
       return [];
     }
   }
-
 }
