@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../data/models/acopio_model.dart';
+import '../../data/models/billetera_acopio_model.dart'; // ✅ Usar Billetera
+import '../../data/models/proveedor_model.dart';
 import '../../../clientes/data/models/cliente_model.dart';
 import '../../../clientes/presentation/providers/cliente_provider.dart';
-// IMPORT FALTANTE:
-import '../../../stock/data/models/producto_model.dart';
 import '../../../stock/presentation/providers/producto_provider.dart';
-import '../../data/models/proveedor_model.dart';
 import '../providers/acopio_provider.dart';
 
 class AcopioTraspasoPage extends StatefulWidget {
@@ -21,17 +19,13 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
   final _cantidadController = TextEditingController();
   final _motivoController = TextEditingController();
   final _referenciaController = TextEditingController();
-  final _facturaNumeroController = TextEditingController();
 
-  // Ahora sí reconoce ProductoConStock
-  ProductoConStock? _productoSeleccionado;
-  ClienteModel? _origenClienteSeleccionado;
-  ProveedorModel? _origenProveedorSeleccionado;
-  AcopioDetalle? _acopioOrigenSeleccionado;
-
+  BilleteraAcopio? _billeteraOrigenSeleccionada; // ✅ Cambio de tipo
   ClienteModel? _destinoClienteSeleccionado;
   ProveedorModel? _destinoProveedorSeleccionado;
-  DateTime? _facturaFecha;
+
+  // Origen específico dentro de la billetera (ej: Proveedor A)
+  String? _origenSubId;
 
   @override
   void initState() {
@@ -39,35 +33,40 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ProductoProvider>().cargarProductos();
       context.read<ClienteProvider>().cargarClientes();
-      context.read<AcopioProvider>().cargarProveedores();
-      context.read<AcopioProvider>().cargarAcopios();
+      context.read<AcopioProvider>().cargarTodo();
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Traspaso')),
+      appBar: AppBar(title: const Text('Traspaso de Material')),
       body: Form(
         key: _formKey,
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _buildSelectorAcopioOrigen(),
+            _buildSelectorBilletera(),
             const SizedBox(height: 16),
+            // Si hay billetera, preguntar de dónde sale (S&G o Proveedor X)
+            if (_billeteraOrigenSeleccionada != null)
+              _buildSelectorSubOrigen(),
+            const SizedBox(height: 16),
+            const Divider(),
+            const Text("Destino", style: TextStyle(fontWeight: FontWeight.bold)),
             _buildSelectorClienteDestino(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             _buildSelectorProveedorDestino(),
             const SizedBox(height: 16),
             TextFormField(
               controller: _cantidadController,
-              decoration: const InputDecoration(labelText: 'Cantidad'),
+              decoration: const InputDecoration(labelText: 'Cantidad a Mover', border: OutlineInputBorder()),
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: _registrarTraspaso,
-              child: const Text('Registrar Traspaso'),
+              child: const Text('CONFIRMAR TRASPASO'),
             ),
           ],
         ),
@@ -75,44 +74,23 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
     );
   }
 
-  Widget _buildSelectorAcopioOrigen() {
+  Widget _buildSelectorBilletera() {
     return Consumer<AcopioProvider>(
       builder: (context, provider, _) {
-        return DropdownButtonFormField<AcopioDetalle>(
-          initialValue: _acopioOrigenSeleccionado,
-          hint: const Text('Seleccionar Origen'),
+        return DropdownButtonFormField<BilleteraAcopio>(
+          decoration: const InputDecoration(labelText: 'Origen (Cliente / Producto)'),
+          value: _billeteraOrigenSeleccionada,
           isExpanded: true,
-          items: provider.acopios.map((a) {
+          items: provider.acopios.map((b) { // 'acopios' ahora es lista de Billeteras
             return DropdownMenuItem(
-              value: a,
-              child: Text('${a.productoNombre} - ${a.clienteRazonSocial}'),
+              value: b,
+              child: Text('${b.clienteNombre} - ${b.productoNombre} (Total: ${b.saldoTotal})'),
             );
           }).toList(),
           onChanged: (val) {
             setState(() {
-              _acopioOrigenSeleccionado = val;
-              if (val != null) {
-                // Crear objeto ProductoConStock ficticio para mantener compatibilidad
-                _productoSeleccionado = ProductoConStock(
-                    id: val.acopio.productoId,
-                    codigo: val.productoCodigo,
-                    categoriaId: '',
-                    nombre: val.productoNombre,
-                    unidadBase: val.unidadBase
-                );
-                _origenClienteSeleccionado = ClienteModel(
-                    id: val.acopio.clienteId,
-                    codigo: val.clienteCodigo,
-                    razonSocial: val.clienteRazonSocial
-                );
-                _origenProveedorSeleccionado = ProveedorModel(
-                    id: val.acopio.proveedorId,
-                    codigo: val.proveedorCodigo,
-                    nombre: val.proveedorNombre,
-                    tipo: TipoProveedor.proveedor,
-                    createdAt: DateTime.now()
-                );
-              }
+              _billeteraOrigenSeleccionada = val;
+              _origenSubId = null; // Reset sub-origen
             });
           },
         );
@@ -120,10 +98,39 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
     );
   }
 
+  Widget _buildSelectorSubOrigen() {
+    final b = _billeteraOrigenSeleccionada!;
+    List<DropdownMenuItem<String>> items = [];
+
+    // Opción Stock Propio
+    if (b.cantidadEnDepositoPropio > 0) {
+      items.add(DropdownMenuItem(
+        value: 'stockPropio',
+        child: Text('Depósito S&G (${b.cantidadEnDepositoPropio})'),
+      ));
+    }
+    // Opciones Proveedores
+    b.cantidadEnProveedores.forEach((provId, cant) {
+      if (cant > 0) {
+        items.add(DropdownMenuItem(
+          value: provId,
+          child: Text('Proveedor $provId ($cant)'), // Idealmente buscar nombre en provider
+        ));
+      }
+    });
+
+    return DropdownButtonFormField<String>(
+      decoration: const InputDecoration(labelText: '¿De qué depósito sale?'),
+      value: _origenSubId,
+      items: items,
+      onChanged: (val) => setState(() => _origenSubId = val),
+    );
+  }
+
   Widget _buildSelectorClienteDestino() {
     return Consumer<ClienteProvider>(
         builder: (ctx, prov, _) => DropdownButtonFormField<ClienteModel>(
-          hint: const Text('Cliente Destino'),
+          decoration: const InputDecoration(labelText: 'Cliente Destino'),
           items: prov.clientes.map((c) => DropdownMenuItem(value: c, child: Text(c.razonSocial))).toList(),
           onChanged: (v) => setState(() => _destinoClienteSeleccionado = v),
         )
@@ -133,7 +140,7 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
   Widget _buildSelectorProveedorDestino() {
     return Consumer<AcopioProvider>(
         builder: (ctx, prov, _) => DropdownButtonFormField<ProveedorModel>(
-          hint: const Text('Ubicación Destino'),
+          decoration: const InputDecoration(labelText: 'Ubicación Destino'),
           items: prov.proveedores.map((p) => DropdownMenuItem(value: p, child: Text(p.nombre))).toList(),
           onChanged: (v) => setState(() => _destinoProveedorSeleccionado = v),
         )
@@ -141,24 +148,23 @@ class _AcopioTraspasoPageState extends State<AcopioTraspasoPage> {
   }
 
   Future<void> _registrarTraspaso() async {
-    if (_acopioOrigenSeleccionado == null || _destinoClienteSeleccionado == null || _destinoProveedorSeleccionado == null) {
+    if (_billeteraOrigenSeleccionada == null || _origenSubId == null ||
+        _destinoClienteSeleccionado == null || _destinoProveedorSeleccionado == null) {
       return;
     }
 
     final cantidad = double.tryParse(_cantidadController.text) ?? 0;
 
-    // Casting seguro de IDs
+    // Usamos el método genérico registrarTraspaso del provider
     final exito = await context.read<AcopioProvider>().registrarTraspaso(
-      productoCodigo: _productoSeleccionado!.productoCodigo,
-      origenClienteCodigo: _origenClienteSeleccionado!.id ?? _origenClienteSeleccionado!.codigo,
-      origenProveedorCodigo: _origenProveedorSeleccionado!.id ?? _origenProveedorSeleccionado!.codigo,
-      destinoClienteCodigo: _destinoClienteSeleccionado!.id ?? _destinoClienteSeleccionado!.codigo,
+      productoCodigo: _billeteraOrigenSeleccionada!.productoId,
+      origenClienteCodigo: _billeteraOrigenSeleccionada!.clienteId,
+      origenProveedorCodigo: _origenSubId!,
+      destinoClienteCodigo: _destinoClienteSeleccionado!.codigo,
       destinoProveedorCodigo: _destinoProveedorSeleccionado!.id ?? _destinoProveedorSeleccionado!.codigo,
       cantidad: cantidad,
       motivo: _motivoController.text,
       referencia: _referenciaController.text,
-      facturaNumero: _facturaNumeroController.text,
-      facturaFecha: _facturaFecha,
     );
 
     if (exito && mounted) Navigator.pop(context, true);

@@ -1,53 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
-import '../../data/models/acopio_model.dart';
+import '../../data/models/billetera_acopio_model.dart';
 import '../../data/models/movimiento_acopio_model.dart';
 import '../providers/acopio_provider.dart';
-import 'acopio_movimiento_page.dart';
 
 class AcopioDetallePage extends StatefulWidget {
-  final AcopioDetalle acopio;
+  final BilleteraAcopio billetera; // ✅ Usamos el modelo nuevo
 
-  const AcopioDetallePage({super.key, required this.acopio});
+  const AcopioDetallePage({super.key, required this.billetera});
 
   @override
   State<AcopioDetallePage> createState() => _AcopioDetallePageState();
 }
 
-class _AcopioDetallePageState extends State<AcopioDetallePage>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _AcopioDetallePageState extends State<AcopioDetallePage> {
   List<MovimientoAcopioModel> _movimientos = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _cargarMovimientos();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _cargarMovimientos() async {
     setState(() => _isLoading = true);
-
-    final provider = Provider.of<AcopioProvider>(context, listen: false);
-
-    final movimientos = await provider.obtenerHistorialAcopio(
-      productoCodigo: widget.acopio.acopio.productoId,
-      clienteCodigo: widget.acopio.acopio.clienteId,
-      proveedorCodigo: widget.acopio.acopio.proveedorId,
+    final movs = await context.read<AcopioProvider>().obtenerHistorialAcopio(
+      productoCodigo: widget.billetera.productoId,
+      clienteCodigo: widget.billetera.clienteId,
     );
-
     setState(() {
-      _movimientos = movimientos;
+      _movimientos = movs;
       _isLoading = false;
     });
   }
@@ -55,442 +39,65 @@ class _AcopioDetallePageState extends State<AcopioDetallePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.acopio.productoNombre,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              widget.acopio.clienteRazonSocial,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _cargarMovimientos,
-            tooltip: 'Actualizar',
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.textWhite,
-          indicatorWeight: 3,
-          tabs: const [
-            Tab(icon: Icon(Icons.info_outline), text: 'Información'),
-            Tab(icon: Icon(Icons.history), text: 'Movimientos'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [_buildInformacionTab(), _buildMovimientosTab()],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _registrarMovimiento(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Registrar Movimiento'),
-        backgroundColor: AppColors.primary,
-      ),
-    );
-  }
-
-  Widget _buildInformacionTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(title: Text(widget.billetera.productoNombre)),
+      body: Column(
         children: [
-          _buildEstadisticasCard(),
-          const SizedBox(height: 16),
-          _buildInfoCard(
-            title: 'Producto',
-            items: [
-              _buildInfoRow('Código', widget.acopio.productoCodigo),
-              _buildInfoRow('Nombre', widget.acopio.productoNombre),
-              _buildInfoRow('Categoría', widget.acopio.categoriaNombre),
-              _buildInfoRow('Unidad', widget.acopio.unidadBase),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildInfoCard(
-            title: 'Cliente',
-            items: [
-              _buildInfoRow('Código', widget.acopio.clienteCodigo),
-              _buildInfoRow('Razón Social', widget.acopio.clienteRazonSocial),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildInfoCard(
-            title: 'Ubicación',
-            items: [
-              _buildInfoRow('Proveedor', widget.acopio.proveedorNombre),
-              _buildInfoRow('Código', widget.acopio.proveedorCodigo),
-              _buildInfoRow(
-                'Tipo',
-                _formatearTipoProveedor(widget.acopio.proveedorTipo),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEstadisticasCard() {
-    double totalEntradas = 0;
-    double totalSalidas = 0;
-
-    for (var mov in _movimientos) {
-      if (mov.tipo == TipoMovimientoAcopio.entrada) {
-        totalEntradas += mov.cantidad;
-      } else if (mov.tipo == TipoMovimientoAcopio.salida) {
-        totalSalidas += mov.cantidad;
-      }
-    }
-
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(Icons.analytics, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(
-                  'Estadísticas',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildEstadistica(
-                    label: 'Disponible',
-                    valor: widget.acopio.acopio.cantidadDisponible,
-                    unidad: widget.acopio.unidadBase,
-                    color: AppColors.primary,
-                    icon: Icons.inventory_2,
-                  ),
-                ),
-                Expanded(
-                  child: _buildEstadistica(
-                    label: 'Entradas',
-                    valor: totalEntradas,
-                    unidad: widget.acopio.unidadBase,
-                    color: AppColors.success,
-                    icon: Icons.arrow_downward,
-                  ),
-                ),
-                Expanded(
-                  child: _buildEstadistica(
-                    label: 'Salidas',
-                    valor: totalSalidas,
-                    unidad: widget.acopio.unidadBase,
-                    color: AppColors.error,
-                    icon: Icons.arrow_upward,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEstadistica({
-    required String label,
-    required double valor,
-    required String unidad,
-    required Color color,
-    required IconData icon,
-  }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 32),
-        const SizedBox(height: 8),
-        Text(
-          ArgFormats.decimal(valor),
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          unidad,
-          style: TextStyle(fontSize: 12, color: AppColors.textLight),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(fontSize: 14, color: AppColors.textMedium),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoCard({required String title, required List<Widget> items}) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-            const Divider(height: 16),
-            ...items,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textMedium,
+          // Header con Saldos
+          Card(
+            margin: const EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Text("Saldo Total: ${widget.billetera.saldoTotal}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                  const Divider(),
+                  _rowSaldo("En Depósito S&G", widget.billetera.cantidadEnDepositoPropio),
+                  ...widget.billetera.cantidadEnProveedores.entries.map((e) => _rowSaldo("Prov: ${e.key}", e.value)),
+                ],
               ),
             ),
           ),
+
+          // Lista Movimientos
           Expanded(
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 14, color: AppColors.textDark),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+              itemCount: _movimientos.length,
+              itemBuilder: (ctx, i) {
+                final m = _movimientos[i];
+                return ListTile(
+                  title: Text(m.tipo.toString().split('.').last.toUpperCase()),
+                  subtitle: Text("Fecha: ${m.createdAt.toLocal()}"),
+                  trailing: Text("${m.cantidad > 0 ? '+' : ''}${m.cantidad}",
+                      style: TextStyle(fontWeight: FontWeight.bold, color: m.cantidad > 0 ? Colors.green : Colors.red)
+                  ),
+                );
+              },
             ),
-          ),
+          )
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () {
+          // Navegar a agregar movimiento pre-llenado
+          // Navigator.push(...)
+        },
+      ),
+    );
+  }
+
+  Widget _rowSaldo(String label, double cant) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label),
+          Text(cant.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
         ],
       ),
     );
-  }
-
-  String _formatearTipoProveedor(String tipo) {
-    switch (tipo) {
-      case 'deposito_syg':
-        return 'Depósito S&G';
-      case 'proveedor_externo':
-        return 'Proveedor Externo';
-      default:
-        return tipo;
-    }
-  }
-
-  Widget _buildMovimientosTab() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (_movimientos.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 80, color: AppColors.textLight),
-            const SizedBox(height: 16),
-            Text(
-              'Sin movimientos registrados',
-              style: TextStyle(fontSize: 16, color: AppColors.textMedium),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Registrá el primer movimiento con el botón + ',
-              style: TextStyle(fontSize: 14, color: AppColors.textLight),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _movimientos.length,
-      itemBuilder: (context, index) {
-        return _buildMovimientoItem(_movimientos[index]);
-      },
-    );
-  }
-
-  Widget _buildMovimientoItem(MovimientoAcopioModel movimiento) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: CircleAvatar(
-          backgroundColor: _getColorMovimiento(movimiento.tipo),
-          child: Icon(
-            _getIconoMovimiento(movimiento.tipo),
-            color: Colors.white,
-          ),
-        ),
-        title: Row(
-          children: [
-            Text(
-              _formatearTipoMovimiento(movimiento.tipo),
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.textDark,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              ArgFormats.decimal(movimiento.cantidad),
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: _getColorMovimiento(movimiento.tipo),
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              widget.acopio.unidadBase,
-              style: TextStyle(fontSize: 12, color: AppColors.textLight),
-            ),
-          ],
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 8),
-            Text(
-              ArgFormats.fechaHora(movimiento.createdAt),
-              style: TextStyle(fontSize: 12, color: AppColors.textLight),
-            ),
-            if (movimiento.motivo != null && movimiento.motivo!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  movimiento.motivo!,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                    color: AppColors.textMedium,
-                  ),
-                ),
-              ),
-            if (movimiento.tieneFactura)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.receipt, size: 12, color: AppColors.info),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Factura: ${movimiento.facturaNumero}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.info,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Color _getColorMovimiento(TipoMovimientoAcopio tipo) {
-    switch (tipo) {
-      case TipoMovimientoAcopio.entrada:
-        return AppColors.success;
-      case TipoMovimientoAcopio.salida:
-        return AppColors.error;
-      case TipoMovimientoAcopio.traspaso:
-        return AppColors.info;
-      case TipoMovimientoAcopio.reserva:
-        return AppColors.warning;
-      default:
-        return AppColors.primary;
-    }
-  }
-
-  IconData _getIconoMovimiento(TipoMovimientoAcopio tipo) {
-    switch (tipo) {
-      case TipoMovimientoAcopio.entrada:
-        return Icons.arrow_downward;
-      case TipoMovimientoAcopio.salida:
-        return Icons.arrow_upward;
-      case TipoMovimientoAcopio.traspaso:
-        return Icons.swap_horiz;
-      case TipoMovimientoAcopio.reserva:
-        return Icons.bookmark;
-      default:
-        return Icons.edit;
-    }
-  }
-
-  String _formatearTipoMovimiento(TipoMovimientoAcopio tipo) {
-    switch (tipo) {
-      case TipoMovimientoAcopio.entrada:
-        return 'Entrada';
-      case TipoMovimientoAcopio.salida:
-        return 'Salida';
-      case TipoMovimientoAcopio.traspaso:
-        return 'Traspaso';
-      case TipoMovimientoAcopio.reserva:
-        return 'Reserva';
-      case TipoMovimientoAcopio.liberacion:
-        return 'Liberación';
-      case TipoMovimientoAcopio.cambio_dueno:
-        return 'Cambio de Dueño';
-      case TipoMovimientoAcopio.devolucion:
-        return 'Devolución';
-    }
-  }
-
-  void _registrarMovimiento(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            AcopioMovimientoPage(acopioInicial: widget.acopio),
-      ),
-    ).then((_) {
-      _cargarMovimientos();
-    });
   }
 }

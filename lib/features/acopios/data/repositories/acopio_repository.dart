@@ -1,45 +1,51 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/acopio_model.dart';
+import '../models/billetera_acopio_model.dart';
 import '../models/movimiento_acopio_model.dart';
 
 class AcopioRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static const String _colAcopios = 'acopios';
+  static const String _colBilleteras = 'acopios_billeteras';
   static const String _colMovimientos = 'movimientos_acopio';
-  static const String _colProductos = 'productos';
-  static const String _colStock = 'stock';
 
-  // --- LECTURA ---
-
-  Future<List<AcopioDetalle>> obtenerTodosConDetalle({bool soloActivos = true}) async {
+  // --- LECTURA BILLETERA ---
+  Future<BilleteraAcopio> obtenerBilletera(String clienteId, String productoId) async {
+    final id = '${clienteId}_$productoId';
     try {
-      Query query = _firestore.collection(_colAcopios);
-      if (soloActivos) {
-        query = query.where('cantidadDisponible', isGreaterThan: 0);
+      final doc = await _firestore.collection(_colBilleteras).doc(id).get();
+      if (doc.exists) {
+        return BilleteraAcopio.fromMap(doc.data()!, doc.id);
       }
-      query = query.orderBy('cantidadDisponible', descending: true);
-
-      final snapshot = await query.get();
-
-      return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return AcopioDetalle.fromMap(data);
-      }).toList();
+      return BilleteraAcopio(
+        id: id,
+        clienteId: clienteId,
+        clienteNombre: '',
+        productoId: productoId,
+        productoNombre: '',
+      );
     } catch (e) {
-      print('❌ Error cargando acopios: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<BilleteraAcopio>> obtenerBilleterasConSaldo() async {
+    try {
+      final snapshot = await _firestore.collection(_colBilleteras)
+          .where('saldoTotal', isGreaterThan: 0)
+          .get();
+      return snapshot.docs.map((d) => BilleteraAcopio.fromMap(d.data(), d.id)).toList();
+    } catch (e) {
       return [];
     }
   }
 
+  // --- HISTORIAL GENERAL (Por Cliente/Producto) ---
   Future<List<MovimientoAcopioModel>> obtenerHistorialAcopio({
     String? productoId,
     String? clienteId,
-    String? proveedorId
   }) async {
     try {
-      Query query = _firestore.collection(_colMovimientos).orderBy('createdAt', descending: true);
+      Query query = _firestore.collection(_colMovimientos).orderBy('fecha', descending: true);
 
       if (productoId != null) query = query.where('productoId', isEqualTo: productoId);
       if (clienteId != null) query = query.where('clienteId', isEqualTo: clienteId);
@@ -48,8 +54,9 @@ class AcopioRepository {
 
       return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return MovimientoAcopioModel.fromMap(data);
+        // Usamos el fromMap del modelo. Asegúrate que MovimientoAcopioModel tenga fromMap
+        // Si no, aquí habría que mapear manualmente. Asumimos que fromMap existe y es robusto.
+        return MovimientoAcopioModel.fromMap(data..['id'] = doc.id);
       }).toList();
     } catch (e) {
       print('❌ Error historial: $e');
@@ -57,125 +64,94 @@ class AcopioRepository {
     }
   }
 
-  // --- ESCRITURA ---
+  // --- HISTORIAL POR UBICACIÓN (Para Proveedores) ---
+  /// Este método busca todos los movimientos que afectaron a un proveedor específico
+  Future<List<MovimientoAcopioModel>> obtenerMovimientosPorUbicacion(String ubicacionId) async {
+    try {
+      final snapshot = await _firestore.collection(_colMovimientos)
+          .where('ubicacionAfectada', isEqualTo: ubicacionId)
+      // Se requiere un índice compuesto en Firestore para 'ubicacionAfectada' + 'fecha'
+      // Si falla, quita el orderBy temporalmente o crea el índice siguiendo el link de la consola
+          .orderBy('fecha', descending: true)
+          .limit(50)
+          .get();
+
+      return snapshot.docs.map((doc) {
+        final data = doc.data();
+        return MovimientoAcopioModel.fromMap(data..['id'] = doc.id);
+      }).toList();
+    } catch (e) {
+      print("Error historial proveedor: $e");
+      return [];
+    }
+  }
+
+  // --- ESCRITURA (MOVIMIENTOS) ---
   Future<void> registrarMovimiento({
-    required String productoId,
     required String clienteId,
-    required String proveedorId,
-    required TipoMovimientoAcopio tipo,
+    required String clienteNombre,
+    required String productoId,
+    required String productoNombre,
     required double cantidad,
-    String? motivo,
+    required String origenDestinoId,
+    required String tipoMovimiento,
     String? referencia,
-    String? facturaNumero,
-    DateTime? facturaFecha,
-    bool valorizado = false,
-    String productoNombre = '',
-    String productoCodigo = '',
-    String clienteNombre = '',
-    String proveedorNombre = '',
-    String categoriaNombre = '',
-    String unidadBase = '',
+    String? usuarioId,
   }) async {
-
-    final acopioQuery = _firestore.collection(_colAcopios)
-        .where('clienteId', isEqualTo: clienteId)
-        .where('productoId', isEqualTo: productoId)
-        .where('proveedorId', isEqualTo: proveedorId)
-        .limit(1);
-
-    final stockRef = _firestore.collection(_colStock).doc(productoCodigo);
-    final productoRef = _firestore.collection(_colProductos).doc(productoCodigo);
+    final billeteraId = '${clienteId}_$productoId';
+    final billeteraRef = _firestore.collection(_colBilleteras).doc(billeteraId);
     final movimientoRef = _firestore.collection(_colMovimientos).doc();
 
     return _firestore.runTransaction((transaction) async {
-      final acopioSnapshot = await acopioQuery.get();
-      DocumentReference? acopioDocRef;
-      double saldoAcopioActual = 0;
+      final doc = await transaction.get(billeteraRef);
 
-      if (acopioSnapshot.docs.isNotEmpty) {
-        acopioDocRef = acopioSnapshot.docs.first.reference;
-        saldoAcopioActual = (acopioSnapshot.docs.first.data()['cantidadDisponible'] as num).toDouble();
+      BilleteraAcopio billetera;
+      if (doc.exists) {
+        billetera = BilleteraAcopio.fromMap(doc.data()!, doc.id);
       } else {
-        acopioDocRef = _firestore.collection(_colAcopios).doc();
+        billetera = BilleteraAcopio(
+          id: billeteraId,
+          clienteId: clienteId,
+          clienteNombre: clienteNombre,
+          productoId: productoId,
+          productoNombre: productoNombre,
+        );
       }
 
-      double stockFisicoActual = 0;
-      if (tipo == TipoMovimientoAcopio.entrada || tipo == TipoMovimientoAcopio.devolucion) {
-        final stockDoc = await transaction.get(stockRef);
-        if (stockDoc.exists) {
-          stockFisicoActual = (stockDoc.data()?['cantidadDisponible'] as num?)?.toDouble() ?? 0;
-        }
+      double nuevoStockPropio = billetera.cantidadEnDepositoPropio;
+      Map<String, double> nuevosProveedores = Map.from(billetera.cantidadEnProveedores);
+
+      if (origenDestinoId == 'stockPropio') {
+        nuevoStockPropio += cantidad;
+      } else {
+        double actual = nuevosProveedores[origenDestinoId] ?? 0.0;
+        nuevosProveedores[origenDestinoId] = actual + cantidad;
       }
 
-      double nuevoSaldoAcopio = saldoAcopioActual;
-      double nuevoStockFisico = stockFisicoActual;
+      final nuevaBilletera = BilleteraAcopio(
+        id: billeteraId,
+        clienteId: clienteId,
+        clienteNombre: clienteNombre,
+        productoId: productoId,
+        productoNombre: productoNombre,
+        cantidadEnDepositoPropio: nuevoStockPropio,
+        cantidadEnProveedores: nuevosProveedores,
+      );
 
-      switch (tipo) {
-        case TipoMovimientoAcopio.entrada:
-          if (stockFisicoActual < cantidad) throw Exception("Stock físico insuficiente");
-          nuevoSaldoAcopio += cantidad;
-          nuevoStockFisico -= cantidad;
-          break;
-        case TipoMovimientoAcopio.salida:
-          if (saldoAcopioActual < cantidad) throw Exception("Saldo de acopio insuficiente");
-          nuevoSaldoAcopio -= cantidad;
-          break;
-        case TipoMovimientoAcopio.devolucion:
-          if (saldoAcopioActual < cantidad) throw Exception("Devolución excede acopio");
-          nuevoSaldoAcopio -= cantidad;
-          nuevoStockFisico += cantidad;
-          break;
-        default:
-          break;
-      }
+      transaction.set(billeteraRef, nuevaBilletera.toMap(), SetOptions(merge: true));
 
-      final datosAcopio = {
+      transaction.set(movimientoRef, {
+        'fecha': DateTime.now().toIso8601String(),
         'clienteId': clienteId,
+        'clienteNombre': clienteNombre, // Guardamos nombres para facilitar reportes
         'productoId': productoId,
-        'proveedorId': proveedorId,
-        'cantidadDisponible': nuevoSaldoAcopio,
-        'estado': nuevoSaldoAcopio > 0 ? 'activo' : 'inactivo',
-        'updatedAt': DateTime.now().toIso8601String(),
-        'clienteRazonSocial': clienteNombre,
-        'clienteCodigo': clienteId,
         'productoNombre': productoNombre,
-        'productoCodigo': productoCodigo,
-        'proveedorNombre': proveedorNombre,
-        'proveedorCodigo': proveedorId,
-        'unidadBase': unidadBase,
-        'categoriaNombre': categoriaNombre,
-      };
-
-      // ✅ CORRECCIÓN: Eliminado el '!' porque acopioDocRef ya es seguro
-      transaction.set(acopioDocRef, datosAcopio, SetOptions(merge: true));
-
-      if (tipo == TipoMovimientoAcopio.entrada || tipo == TipoMovimientoAcopio.devolucion) {
-        transaction.update(stockRef, {
-          'cantidadDisponible': nuevoStockFisico,
-          'ultimaActualizacion': DateTime.now().toIso8601String(),
-        });
-        transaction.update(productoRef, {'cantidadDisponible': nuevoStockFisico});
-      }
-
-      final datosMovimiento = {
-        'productoId': productoId,
-        'clienteId': clienteId,
-        'proveedorId': proveedorId,
-        'tipo': tipo.name,
         'cantidad': cantidad,
-        'motivo': motivo,
+        'tipo': tipoMovimiento,
+        'ubicacionAfectada': origenDestinoId,
         'referencia': referencia,
-        'facturaNumero': facturaNumero,
-        'facturaFecha': facturaFecha?.toIso8601String(),
-        'createdAt': DateTime.now().toIso8601String(),
-        'productoNombre': productoNombre,
-        'clienteNombre': clienteNombre,
-      };
-
-      transaction.set(movimientoRef, datosMovimiento);
+        'usuarioId': usuarioId,
+      });
     });
   }
-
-  Future<List<Map<String, dynamic>>> obtenerFacturasUnicas() async => [];
-  Future<void> filtrarPorFactura(String f) async {}
 }

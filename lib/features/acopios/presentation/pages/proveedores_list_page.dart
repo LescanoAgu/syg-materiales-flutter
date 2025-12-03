@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/acopio_provider.dart';
 import 'proveedor_form_page.dart';
+import 'proveedor_detalle_page.dart';
 
 class ProveedoresListPage extends StatefulWidget {
   final bool esNavegacionPrincipal;
@@ -65,7 +66,13 @@ class _ProveedoresListPageState extends State<ProveedoresListPage> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(p.direccion ?? 'Sin dirección'),
-                trailing: !p.esDepositoSyg
+                onTap: () {
+                  // ✅ Navegación al detalle
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => ProveedorDetallePage(proveedor: p)),
+                  );
+                },                trailing: !p.esDepositoSyg
                     ? IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
                         onPressed: () => Navigator.push(

@@ -30,8 +30,7 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
 
   // Variables de estado
   TipoMovimientoAcopio _tipoMovimiento = TipoMovimientoAcopio.entrada;
-  DateTime? _facturaFecha;
-  final bool _valorizar = false;
+
 
   ProductoConStock? _productoSeleccionado;
   ClienteModel? _clienteSeleccionado;
@@ -117,24 +116,30 @@ class _AcopioMovimientoPageState extends State<AcopioMovimientoPage> {
   }
 
   Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate() || _productoSeleccionado == null || _clienteSeleccionado == null || _proveedorSeleccionado == null) {
-      return;
+    if (!_formKey.currentState!.validate() || _productoSeleccionado == null || _clienteSeleccionado == null) {
+      return; // Proveedor puede ser null si es 'stockPropio'
     }
 
     final cantidad = double.tryParse(_cantidadController.text) ?? 0;
+    // Si es salida, la cantidad debe ser negativa para la lógica de billetera
+    final cantidadFinal = _tipoMovimiento == TipoMovimientoAcopio.salida ? -cantidad : cantidad;
+
+    // Determinamos el ID del destino/origen
+    final destinoId = _proveedorSeleccionado != null
+        ? (_proveedorSeleccionado!.id ?? _proveedorSeleccionado!.codigo)
+        : 'stockPropio';
 
     final exito = await context.read<AcopioProvider>().registrarMovimiento(
-      productoId: _productoSeleccionado!.productoId, // String
-      clienteId: _clienteSeleccionado!.id ?? _clienteSeleccionado!.codigo, // String seguro
-      proveedorId: _proveedorSeleccionado!.id ?? _proveedorSeleccionado!.codigo, // String seguro
+      clienteId: _clienteSeleccionado!.id ?? _clienteSeleccionado!.codigo,
+      clienteNombre: _clienteSeleccionado!.razonSocial, // ✅ AGREGADO
+      productoId: _productoSeleccionado!.productoId,
+      productoNombre: _productoSeleccionado!.nombre, // ✅ AGREGADO
+      cantidad: cantidadFinal,
+      proveedorId: destinoId, // Pasamos el ID calculado
       tipo: _tipoMovimiento,
-      cantidad: cantidad,
       motivo: _motivoController.text,
       facturaNumero: _facturaNumeroController.text,
-      facturaFecha: _facturaFecha,
-      valorizado: _valorizar,
     );
 
     if (exito && mounted) Navigator.pop(context, true);
-  }
-}
+  }}

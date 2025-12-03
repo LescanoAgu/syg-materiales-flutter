@@ -1,89 +1,120 @@
-class OrdenItem {
-  final String? id;
-  final String ordenId;
-  final String productoId;
-  final double cantidadSolicitada;
-  final double? cantidadAprobada;
-  final double cantidadEntregada; // ✅ NUEVO: Control de entregas parciales
-  final double precioUnitario;
-  final double subtotal;
-  final String? observaciones;
-  final String estadoItem; // ✅ NUEVO: 'pendiente', 'parcial', 'completado'
-  final DateTime createdAt;
+import 'package:equatable/equatable.dart';
 
-  OrdenItem({
-    this.id,
-    required this.ordenId,
+enum OrigenProducto {
+  stockPropio, // Sale de nuestro depósito
+  compraDirecta, // Se compra al proveedor y va a obra
+  descuentoAcopio // Se descuenta de un acopio previo del cliente
+}
+
+class OrdenItem extends Equatable {
+  final String id;
+  final String productoId;
+  final String productoNombre; // Desnormalizado
+  final String unidad;
+  final double cantidadSolicitada;
+
+  // Gestión de Aprobación/Logística
+  final double cantidadAprobada;
+  final double cantidadEntregada; // Progreso
+  final OrigenProducto origen;
+  final String? proveedorId;
+  final double precioCompra;
+  final String? observaciones;
+  final String estadoItem; // pendiente, parcial, completado
+
+  const OrdenItem({
+    required this.id,
     required this.productoId,
+    required this.productoNombre,
+    required this.unidad,
     required this.cantidadSolicitada,
-    this.cantidadAprobada,
-    this.cantidadEntregada = 0.0, // Default 0
-    required this.precioUnitario,
-    required this.subtotal,
+    this.cantidadAprobada = 0,
+    this.cantidadEntregada = 0,
+    this.origen = OrigenProducto.stockPropio,
+    this.proveedorId,
+    this.precioCompra = 0,
     this.observaciones,
     this.estadoItem = 'pendiente',
-    required this.createdAt,
   });
-
-  // Getter útil para la UI
-  double get cantidadPendiente {
-    final meta = cantidadAprobada ?? cantidadSolicitada;
-    return (meta - cantidadEntregada).clamp(0.0, meta);
-  }
 
   factory OrdenItem.fromMap(Map<String, dynamic> map) {
     return OrdenItem(
-      id: map['id']?.toString(),
-      ordenId: map['ordenId']?.toString() ?? '',
+      id: map['id']?.toString() ?? '',
       productoId: map['productoId']?.toString() ?? '',
+      productoNombre: map['productoNombre']?.toString() ?? '',
+      unidad: map['unidad']?.toString() ?? '',
       cantidadSolicitada: (map['cantidadSolicitada'] as num?)?.toDouble() ?? 0.0,
-      cantidadAprobada: (map['cantidadAprobada'] as num?)?.toDouble(),
+      cantidadAprobada: (map['cantidadAprobada'] as num?)?.toDouble() ?? 0.0,
       cantidadEntregada: (map['cantidadEntregada'] as num?)?.toDouble() ?? 0.0,
-      precioUnitario: (map['precioUnitario'] as num?)?.toDouble() ?? 0.0,
-      subtotal: (map['subtotal'] as num?)?.toDouble() ?? 0.0,
+      origen: OrigenProducto.values.firstWhere(
+            (e) => e.name == (map['origen'] ?? 'stockPropio'),
+        orElse: () => OrigenProducto.stockPropio,
+      ),
+      proveedorId: map['proveedorId']?.toString(),
+      precioCompra: (map['precioCompra'] as num?)?.toDouble() ?? 0.0,
       observaciones: map['observaciones']?.toString(),
       estadoItem: map['estadoItem']?.toString() ?? 'pendiente',
-      createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'].toString())
-          : DateTime.now(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'ordenId': ordenId,
+      'id': id,
       'productoId': productoId,
+      'productoNombre': productoNombre,
+      'unidad': unidad,
       'cantidadSolicitada': cantidadSolicitada,
       'cantidadAprobada': cantidadAprobada,
       'cantidadEntregada': cantidadEntregada,
-      'precioUnitario': precioUnitario,
-      'subtotal': subtotal,
+      'origen': origen.name,
+      'proveedorId': proveedorId,
+      'precioCompra': precioCompra,
       'observaciones': observaciones,
       'estadoItem': estadoItem,
-      'createdAt': createdAt.toIso8601String(),
     };
   }
+
+  OrdenItem copyWith({
+    double? cantidadAprobada,
+    OrigenProducto? origen,
+    String? proveedorId,
+    double? cantidadEntregada,
+    String? estadoItem,
+  }) {
+    return OrdenItem(
+      id: id,
+      productoId: productoId,
+      productoNombre: productoNombre,
+      unidad: unidad,
+      cantidadSolicitada: cantidadSolicitada,
+      cantidadAprobada: cantidadAprobada ?? this.cantidadAprobada,
+      cantidadEntregada: cantidadEntregada ?? this.cantidadEntregada,
+      origen: origen ?? this.origen,
+      proveedorId: proveedorId ?? this.proveedorId,
+      precioCompra: precioCompra,
+      observaciones: observaciones,
+      estadoItem: estadoItem ?? this.estadoItem,
+    );
+  }
+
+  @override
+  List<Object?> get props => [id, productoId, cantidadSolicitada, origen, cantidadEntregada];
 }
 
-/// Modelo para la UI (incluye nombres)
+/// ✅ CLASE NECESARIA PARA LA UI (WRAPPER)
+/// Esta clase envuelve el OrdenItem y agrega helpers visuales
 class OrdenItemDetalle {
   final OrdenItem item;
-  final String productoNombre;
-  final String productoCodigo;
-  final String unidadBase;
-  final String categoriaNombre;
 
-  OrdenItemDetalle({
-    required this.item,
-    required this.productoNombre,
-    required this.productoCodigo,
-    required this.unidadBase,
-    required this.categoriaNombre,
-  });
+  // Getters directos al item o lógica visual
+  String get productoNombre => item.productoNombre;
+  String get productoCodigo => item.productoId;
+  String get unidadBase => item.unidad;
 
-  double get cantidadFinal => item.cantidadAprobada ?? item.cantidadSolicitada;
+  double get cantidadFinal => item.cantidadAprobada > 0 ? item.cantidadAprobada : item.cantidadSolicitada;
 
-  // Lógica visual de estado
+  OrdenItemDetalle({required this.item});
+
   bool get estaCompleto => item.cantidadEntregada >= cantidadFinal;
   bool get esParcial => item.cantidadEntregada > 0 && item.cantidadEntregada < cantidadFinal;
 }

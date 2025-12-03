@@ -9,10 +9,10 @@ import '../../../reportes/data/services/pdf_service.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/usuarios/presentation/providers/usuarios_provider.dart';
 
-import '../widgets/orden_despacho_dialog.dart';
+// Widgets y Páginas
 import '../widgets/orden_aprobacion_dialog.dart';
-// ✅ Importamos el widget de firma que acabamos de crear
-import '../widgets/firma_digital_dialog.dart';
+import '../widgets/remitos_historicos_dialog.dart'; // ✅ IMPORTANTE
+import 'orden_despacho_page.dart';
 
 class OrdenDetallePage extends StatefulWidget {
   final OrdenInternaDetalle ordenResumen;
@@ -58,73 +58,86 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
   Widget build(BuildContext context) {
     final orden = _ordenCompleta.orden;
     final color = _getEstadoColor(orden.estado);
+    final usuario = context.watch<AuthProvider>().usuario;
+    final puedeAprobar = usuario?.rol == 'admin' || usuario?.rol == 'gerente';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text('Orden ${orden.numero}'),
         actions: [
+          // ✅ BOTÓN DE HISTORIAL DE REMITOS
+          if (orden.estado == 'en_curso' || orden.estado == 'entregado')
+            IconButton(
+              icon: const Icon(Icons.history_edu),
+              tooltip: 'Ver Remitos Históricos',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => RemitosHistoricosDialog(
+                    ordenId: orden.id!,
+                    ordenDetalle: _ordenCompleta,
+                  ),
+                );
+              },
+            ),
+
           IconButton(
             icon: const Icon(Icons.print),
             tooltip: 'Imprimir Orden',
             onPressed: () => PdfService().generarOrdenInterna(_ordenCompleta),
           ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _cargarDetallesCompletos,
+          ),
         ],
       ),
-      floatingActionButton: _buildFabAction(orden),
+
+      // Solo lectura/aprobación aquí. Despacho en la otra pantalla.
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderEstado(orden, color),
+            _buildHeaderEstado(orden, color, puedeAprobar),
             const SizedBox(height: 20),
             _buildSeccionInvolucrados(orden),
             const SizedBox(height: 20),
             _buildSeccionInfo(orden),
             const SizedBox(height: 20),
             const Text('Productos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
+            const SizedBox(height: 10),
             if (_cargandoItems)
               const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
             else
               ..._ordenCompleta.items.map((item) => _buildProductoItem(item)),
 
-            if (orden.estado == 'entregado' && orden.firmaUrl != null)
+            // Si ya está entregado o en curso, mostrar última firma si existe
+            if ((orden.estado == 'entregado' || orden.estado == 'en_curso') && orden.firmaUrl != null)
               _buildFirmaVisual(orden.firmaUrl!),
 
-            const SizedBox(height: 80),
+            const SizedBox(height: 40),
+
+            if (orden.estado == 'aprobado' || orden.estado == 'en_curso')
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: Colors.blue[50],
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue),
+                    SizedBox(width: 10),
+                    Expanded(child: Text("Para entregar material, diríjase al menú 'Área de Despacho'.", style: TextStyle(fontSize: 13))),
+                  ],
+                ),
+              )
           ],
         ),
       ),
     );
   }
 
-  Widget? _buildFabAction(OrdenInterna orden) {
-    if (orden.estado == 'solicitado') return null;
-
-    if (orden.estado == 'aprobado' || (orden.estado == 'en_curso' && orden.porcentajeAvance < 1.0)) {
-      return FloatingActionButton.extended(
-        icon: const Icon(Icons.local_shipping),
-        label: const Text("DESPACHAR MATERIAL"),
-        backgroundColor: AppColors.primary,
-        onPressed: _abrirDespacho,
-      );
-    }
-
-    if (orden.estado == 'en_curso') {
-      return FloatingActionButton.extended(
-        // ✅ FIX: Usamos Icons.draw porque Icons.signature no existe
-        icon: const Icon(Icons.draw),
-        label: const Text("FIRMAR Y ENTREGAR"),
-        backgroundColor: Colors.green,
-        onPressed: _abrirFirma,
-      );
-    }
-
-    return null;
-  }
-
-  Widget _buildHeaderEstado(OrdenInterna orden, Color color) {
+  Widget _buildHeaderEstado(OrdenInterna orden, Color color, bool puedeAprobar) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -136,16 +149,17 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
         children: [
           Icon(_getEstadoIcon(orden.estado), color: color, size: 30),
           const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(orden.estado.toUpperCase().replaceAll('_', ' '), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
-              if(orden.prioridad == 'urgente')
-                const Text("PRIORIDAD URGENTE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(orden.estado.toUpperCase().replaceAll('_', ' '), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
+                if(orden.prioridad == 'urgente')
+                  const Text("PRIORIDAD URGENTE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+              ],
+            ),
           ),
-          const Spacer(),
-          if (orden.estado == 'solicitado')
+          if (orden.estado == 'solicitado' && puedeAprobar)
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
               onPressed: () => _aprobarOrden(context, orden),
@@ -157,71 +171,38 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
   }
 
   Widget _buildSeccionInvolucrados(OrdenInterna orden) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text("Equipo Vinculado", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            TextButton.icon(
-              icon: const Icon(Icons.person_add, size: 16),
-              label: const Text("Etiquetar"),
-              onPressed: _abrirDialogoEtiquetar,
-            )
-          ],
-        ),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-          child: orden.usuariosEtiquetados.isEmpty
-              ? const Text("Nadie etiquetado aún.", style: TextStyle(color: Colors.grey, fontSize: 13))
-              : Wrap(
-            spacing: 8,
-            children: orden.usuariosEtiquetados.map((uid) {
-              final usuarios = context.watch<UsuariosProvider>().usuarios;
-              // Búsqueda segura
-              String nombre = "Usuario";
-              try {
-                final u = usuarios.firstWhere((u) => u.uid == uid);
-                nombre = u.nombre;
-              } catch (_) {}
-
-              return Chip(
-                avatar: CircleAvatar(child: Text(nombre.isNotEmpty ? nombre[0].toUpperCase() : "?")),
-                label: Text(nombre),
-                backgroundColor: Colors.blue.shade50,
-              );
-            }).toList(),
-          ),
-        ),
-      ],
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Equipo Vinculado", style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (orden.usuariosEtiquetados.isEmpty)
+            const Text("Nadie etiquetado.", style: TextStyle(color: Colors.grey, fontSize: 13))
+          else
+            Wrap(
+              spacing: 8,
+              children: orden.usuariosEtiquetados.map((uid) => Chip(label: Text(uid.substring(0, 4)))).toList(),
+            ),
+        ],
+      ),
     );
   }
 
-  // ... (Resto de métodos visuales como _buildSeccionInfo, _buildDato, _buildProductoItem, _buildFirmaVisual)
-  // Puedes dejar los que tenías, solo asegúrate de que _buildFirmaVisual use Image.network
-
   Widget _buildSeccionInfo(OrdenInterna orden) {
     return Card(
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildDato("Cliente", _ordenCompleta.clienteRazonSocial),
             const Divider(),
             _buildDato("Obra", _ordenCompleta.obraNombre ?? "N/A"),
             const Divider(),
-            _buildDato("Solicitante", orden.solicitanteNombre),
-            if (orden.observacionesCliente != null) ...[
-              const Divider(),
-              _buildDato("Notas", orden.observacionesCliente!),
-            ]
+            _buildDato("Notas", orden.observacionesCliente ?? "-"),
           ],
         ),
       ),
@@ -232,7 +213,7 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(width: 100, child: Text(label, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w500))),
+        SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.grey))),
         Expanded(child: Text(valor, style: const TextStyle(fontWeight: FontWeight.bold))),
       ],
     );
@@ -242,6 +223,7 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
     double entregado = d.item.cantidadEntregada;
     double total = d.cantidadFinal;
     bool completo = entregado >= total;
+    double porcentaje = total > 0 ? (entregado/total).clamp(0.0, 1.0) : 0;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -251,9 +233,19 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            LinearProgressIndicator(value: total > 0 ? entregado/total : 0, backgroundColor: Colors.grey[200], color: completo ? Colors.green : Colors.orange),
+            LinearProgressIndicator(
+                value: porcentaje,
+                backgroundColor: Colors.grey[200],
+                color: completo ? Colors.green : Colors.orange
+            ),
             const SizedBox(height: 4),
-            Text('${entregado.toStringAsFixed(1)} / ${total.toStringAsFixed(1)} ${d.unidadBase}', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('${entregado.toStringAsFixed(0)} / ${total.toStringAsFixed(0)} ${d.unidadBase}'),
+                Text(d.item.origen.name.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+              ],
+            ),
           ],
         ),
         trailing: Icon(completo ? Icons.check_circle : Icons.timelapse, color: completo ? Colors.green : Colors.grey),
@@ -262,157 +254,46 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
   }
 
   Widget _buildFirmaVisual(String url) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 20),
-        const Text("Comprobante de Entrega", style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        Container(
-          height: 150,
-          width: double.infinity,
-          decoration: BoxDecoration(border: Border.all(color: Colors.grey), color: Colors.white),
-          child: Image.network(url, fit: BoxFit.contain),
-        ),
-      ],
-    );
-  }
-
-  // --- ACCIONES ---
-
-  void _abrirDespacho() async {
-    final items = await showDialog<List<Map<String, dynamic>>>(
-      context: context,
-      builder: (_) => OrdenDespachoDialog(ordenDetalle: _ordenCompleta),
-    );
-
-    if (items != null && items.isNotEmpty && mounted) {
-      final user = context.read<AuthProvider>().usuario;
-      final provider = context.read<OrdenInternaProvider>();
-
-      final exito = await provider.registrarDespacho(
-        ordenId: _ordenCompleta.orden.id!,
-        ordenNumero: _ordenCompleta.orden.numero,
-        obraId: _ordenCompleta.orden.obraId,
-        usuarioId: user!.uid,
-        usuarioNombre: user.nombre,
-        items: items,
-      );
-
-      if (exito) {
-        _cargarDetallesCompletos();
-        if(mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Despacho registrado")));
-          _preguntarImprimirRemito(items, user.nombre);
-        }
-      }
-    }
-  }
-
-  void _preguntarImprimirRemito(List<Map<String, dynamic>> items, String nombreResponsable) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("🖨️ Remito de Entrega"),
-        content: const Text("¿Generar PDF para que el chofer lleve a la obra?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Ahora no")),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.print),
-            label: const Text("IMPRIMIR"),
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await PdfService().generarRemitoDespacho(
-                ordenDetalle: _ordenCompleta,
-                itemsDespachados: items,
-                nombreResponsable: nombreResponsable,
-              );
-            },
-          )
+    return Padding(
+      padding: const EdgeInsets.only(top: 20),
+      child: Column(
+        children: [
+          const Text("Última Firma Registrada", style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: Colors.grey), color: Colors.white),
+            height: 120,
+            width: double.infinity,
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (c,e,s) => const Center(child: Text("Error cargando firma")),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  void _abrirFirma() async {
-    final firmaBytes = await showDialog<Uint8List>(
-      context: context,
-      builder: (_) => const FirmaDigitalDialog(),
-    );
-
-    if (firmaBytes != null && mounted) {
-      // ✅ FIX: Llama al método que ahora SÍ existe en el Provider
-      final exito = await context.read<OrdenInternaProvider>().confirmarEntrega(
-        _ordenCompleta.orden.id!,
-        firmaBytes,
-      );
-
-      if (exito && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Entrega Finalizada y Firmada"), backgroundColor: Colors.green));
-        _cargarDetallesCompletos();
-      }
-    }
-  }
-
   void _abrirDialogoEtiquetar() {
-    showDialog(
-        context: context,
-        builder: (ctx) {
-          return AlertDialog(
-            title: const Text("Etiquetar Personal"),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300,
-              child: Consumer<UsuariosProvider>(
-                builder: (context, provider, _) {
-                  // Filtra usuarios activos
-                  final usuarios = provider.usuarios.where((u) => u.estado == 'activo').toList();
-
-                  return ListView.builder(
-                    itemCount: usuarios.length,
-                    itemBuilder: (c, i) {
-                      final u = usuarios[i];
-                      final estaEtiquetado = _ordenCompleta.orden.usuariosEtiquetados.contains(u.uid);
-
-                      return CheckboxListTile(
-                        title: Text(u.nombre),
-                        subtitle: Text(u.rol),
-                        value: estaEtiquetado,
-                        onChanged: (val) async {
-                          Navigator.pop(ctx); // Cerramos primero para evitar conflictos visuales
-                          if (val == true) {
-                            // ✅ FIX: Llama al método que ahora SÍ existe
-                            await context.read<OrdenInternaProvider>().agregarEtiqueta(_ordenCompleta.orden.id!, u.uid);
-                          }
-                          _cargarDetallesCompletos();
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Cerrar"))
-            ],
-          );
-        }
-    );
+    showDialog(context: context, builder: (ctx) => const AlertDialog(title: Text("Próximamente")));
   }
 
   void _aprobarOrden(BuildContext context, OrdenInterna orden) async {
-    final resultado = await showDialog<Map<String, dynamic>>(
+    final itemsConfiguradosMap = await showDialog<Map<String, Map<String, dynamic>>>(
       context: context,
-      builder: (_) => OrdenAprobacionDialog(items: _ordenCompleta.items),
+      builder: (_) => OrdenAprobacionDialog(items: _ordenCompleta.items.map((e) => e.item).toList()),
     );
 
-    if (resultado != null && mounted) {
+    if (itemsConfiguradosMap != null && mounted) {
       final user = context.read<AuthProvider>().usuario;
+      if (user == null) return;
+
       final exito = await context.read<OrdenInternaProvider>().aprobarOrden(
         ordenId: orden.id!,
-        configuracionItems: resultado['configuracionItems'],
-        proveedorId: resultado['proveedorId'],
-        usuarioId: user!.uid,
+        itemsOriginales: _ordenCompleta.items.map((e) => e.item).toList(),
+        logistica: itemsConfiguradosMap,
+        usuarioId: user.uid,
       );
 
       if (exito) _cargarDetallesCompletos();
