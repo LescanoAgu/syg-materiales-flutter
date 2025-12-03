@@ -5,6 +5,7 @@ enum TipoMovimientoAcopio { entrada, salida, reserva, liberacion, traspaso, camb
 class MovimientoAcopioModel extends Equatable {
   final String? id;
   final String productoId;
+  final String? clienteId; // ✅ AGREGADO: Necesario para filtros
   final TipoMovimientoAcopio tipo;
   final double cantidad;
   final String? origenTipo;
@@ -18,12 +19,17 @@ class MovimientoAcopioModel extends Equatable {
   final DateTime? facturaFecha;
   final bool valorizado;
   final double? montoValorizado;
-  final String? usuarioId; // Cambiado a String
+  final String? usuarioId;
   final DateTime createdAt;
+
+  // Campos desnormalizados opcionales
+  final String? productoNombre;
+  final String? clienteNombre;
 
   const MovimientoAcopioModel({
     this.id,
     required this.productoId,
+    this.clienteId, // ✅
     required this.tipo,
     required this.cantidad,
     this.origenTipo,
@@ -39,12 +45,15 @@ class MovimientoAcopioModel extends Equatable {
     this.montoValorizado,
     this.usuarioId,
     required this.createdAt,
+    this.productoNombre,
+    this.clienteNombre,
   });
 
   factory MovimientoAcopioModel.fromMap(Map<String, dynamic> map) {
     return MovimientoAcopioModel(
       id: map['id']?.toString(),
       productoId: map['productoId']?.toString() ?? '',
+      clienteId: map['clienteId']?.toString(), // ✅
       tipo: TipoMovimientoAcopio.values.firstWhere(
               (t) => t.name == map['tipo'], orElse: () => TipoMovimientoAcopio.entrada
       ),
@@ -53,7 +62,7 @@ class MovimientoAcopioModel extends Equatable {
       origenId: map['origenId']?.toString(),
       destinoTipo: map['destinoTipo']?.toString(),
       destinoId: map['destinoId']?.toString(),
-      motivo: map['motivo']?.toString(),
+      motivo: map['motivo']?.toString() ?? map['referencia']?.toString(), // Fallback a referencia
       referencia: map['referencia']?.toString(),
       remitoNumero: map['remitoNumero']?.toString(),
       facturaNumero: map['facturaNumero']?.toString(),
@@ -62,12 +71,27 @@ class MovimientoAcopioModel extends Equatable {
       montoValorizado: (map['montoValorizado'] as num?)?.toDouble(),
       usuarioId: map['usuarioId']?.toString(),
       createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'].toString()) : DateTime.now(),
+      productoNombre: map['productoNombre']?.toString(),
+      clienteNombre: map['clienteNombre']?.toString(),
     );
   }
 
-  // ... toMap y props (omitidos por brevedad)
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'productoId': productoId,
+      'clienteId': clienteId,
+      'tipo': tipo.name,
+      'cantidad': cantidad,
+      'motivo': motivo,
+      'referencia': referencia,
+      'facturaNumero': facturaNumero,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
+
   @override
-  List<Object?> get props => [id];
+  List<Object?> get props => [id, productoId, clienteId, tipo, cantidad, createdAt];
 
   bool get tieneFactura => facturaNumero != null && facturaNumero!.isNotEmpty;
 }

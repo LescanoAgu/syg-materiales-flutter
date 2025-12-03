@@ -29,8 +29,12 @@ class UsuariosRepository {
       await _firestore
           .collection(_collection)
           .doc(usuario.uid)
-          .update(usuario.toMap());
+      // ⚠️ CAMBIO: Usamos toUpdateMap() en lugar de toMap()
+          .update(usuario.toUpdateMap());
+
+      print('✅ Usuario ${usuario.uid} actualizado a rol: ${usuario.rol}, estado: ${usuario.estado}');
     } catch (e) {
+      print('❌ Error repository: $e');
       throw Exception('Error actualizando usuario: $e');
     }
   }

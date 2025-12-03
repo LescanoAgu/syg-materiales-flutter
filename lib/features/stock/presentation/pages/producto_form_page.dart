@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart';
 import '../../data/models/producto_model.dart';
 import '../../data/repositories/stock_repository.dart';
 import '../providers/producto_provider.dart';
@@ -45,7 +44,10 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
 
     // Solo autogenerar si es nuevo
     if (widget.producto == null) {
-      final nuevoCod = await context.read<ProductoProvider>().generarCodigoParaCategoria(val);
+      final nuevoCod = await context
+          .read<ProductoProvider>()
+          .generarCodigoParaCategoria(val);
+      if (!mounted) return;
       setState(() => _codigoCtrl.text = nuevoCod);
     }
   }
@@ -65,8 +67,18 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
               Consumer<ProductoProvider>(
                 builder: (ctx, prov, _) => DropdownButtonFormField<String>(
                   value: _categoriaIdSeleccionada,
-                  decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
-                  items: prov.categorias.map((c) => DropdownMenuItem(value: c.codigo, child: Text(c.nombre))).toList(),
+                  decoration: const InputDecoration(
+                    labelText: 'Categoría',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: prov.categorias
+                      .map(
+                        (c) => DropdownMenuItem(
+                          value: c.codigo,
+                          child: Text(c.nombre),
+                        ),
+                      )
+                      .toList(),
                   onChanged: esEdicion ? null : _onCategoriaChanged,
                   validator: (v) => v == null ? 'Requerido' : null,
                 ),
@@ -74,33 +86,69 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _codigoCtrl,
-                decoration: const InputDecoration(labelText: 'Código', border: OutlineInputBorder(), filled: true, fillColor: Colors.black12),
+                decoration: const InputDecoration(
+                  labelText: 'Código',
+                  border: OutlineInputBorder(),
+                  filled: true,
+                  fillColor: Colors.black12,
+                ),
                 readOnly: true,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nombreCtrl,
-                decoration: const InputDecoration(labelText: 'Nombre', border: OutlineInputBorder()),
+                decoration: const InputDecoration(
+                  labelText: 'Nombre',
+                  border: OutlineInputBorder(),
+                ),
                 validator: (v) => v!.isEmpty ? 'Requerido' : null,
               ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(child: TextFormField(controller: _unidadCtrl, decoration: const InputDecoration(labelText: 'Unidad', border: OutlineInputBorder()))),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _unidadCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Unidad',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
                   const SizedBox(width: 16),
-                  Expanded(child: TextFormField(controller: _precioCtrl, decoration: const InputDecoration(labelText: 'Precio', border: OutlineInputBorder()), keyboardType: TextInputType.number)),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _precioCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Precio',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
                 ],
               ),
               if (!esEdicion) ...[
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _stockInicialCtrl,
-                  decoration: const InputDecoration(labelText: 'Stock Inicial', border: OutlineInputBorder(), prefixIcon: Icon(Icons.inventory_2)),
+                  decoration: const InputDecoration(
+                    labelText: 'Stock Inicial',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.inventory_2),
+                  ),
                   keyboardType: TextInputType.number,
                 ),
               ],
               const SizedBox(height: 32),
-              SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _guardar, child: const Text('GUARDAR'))),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _guardar,
+                  child: const Text('GUARDAR'),
+                ),
+              ),
             ],
           ),
         ),
@@ -125,14 +173,21 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
       // Usamos importarProductos como "upsert" (crear o actualizar)
       await context.read<ProductoProvider>().importarProductos([prod]);
 
+      if (!mounted) return;
+
       if (widget.producto == null && _stockInicialCtrl.text.isNotEmpty) {
         final cant = double.tryParse(_stockInicialCtrl.text) ?? 0;
-        if (cant > 0) await _stockRepo.establecer(productoId: prod.codigo, cantidad: cant);
+        if (cant > 0)
+          await _stockRepo.establecer(productoId: prod.codigo, cantidad: cant);
       }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 }
