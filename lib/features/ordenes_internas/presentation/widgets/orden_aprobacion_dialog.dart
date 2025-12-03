@@ -5,7 +5,7 @@ import '../../../acopios/presentation/providers/acopio_provider.dart';
 import '../../data/models/orden_item_model.dart';
 
 class OrdenAprobacionDialog extends StatefulWidget {
-  final List<OrdenItemDetalle> items; // Recibimos los items
+  final List<OrdenItem> items;
 
   const OrdenAprobacionDialog({super.key, required this.items});
 
@@ -14,137 +14,230 @@ class OrdenAprobacionDialog extends StatefulWidget {
 }
 
 class _OrdenAprobacionDialogState extends State<OrdenAprobacionDialog> {
-  String? _proveedorId;
-  final Map<String, String> _fuentePorItem = {}; // 'stock' o 'proveedor'
+  // Mapa para guardar la configuración: { itemId : { 'origen': enum, 'proveedorId': string? } }
+  final Map<String, Map<String, dynamic>> _configuracion = {};
+
+  // Variable para el dropdown de asignación masiva
+  OrigenProducto? _origenMasivo = OrigenProducto.stockPropio;
 
   @override
   void initState() {
     super.initState();
-    // Inicializar todo en 'stock'
+    // 1. Inicializar todo por defecto a Stock Propio
     for (var item in widget.items) {
-      _fuentePorItem[item.item.id!] = 'stock';
+      _configuracion[item.id] = {
+        'origen': OrigenProducto.stockPropio,
+        'proveedorId': null,
+      };
     }
 
+    // 2. Cargar proveedores para el dropdown
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AcopioProvider>().cargarProveedores();
     });
   }
 
+  // Función para aplicar el cambio a TODOS los items
+  void _aplicarA_Todos(OrigenProducto origen) {
+    setState(() {
+      _origenMasivo = origen;
+      for (var key in _configuracion.keys) {
+        _configuracion[key]!['origen'] = origen;
+        // Si volvemos a stock, limpiamos el proveedor seleccionado
+        if (origen == OrigenProducto.stockPropio) {
+          _configuracion[key]!['proveedorId'] = null;
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Verificar si hay al menos un item marcado como 'proveedor'
-    bool hayItemsExternos = _fuentePorItem.containsValue('proveedor');
-
     return AlertDialog(
-      title: const Text('Aprobar Orden'),
+      title: const Text('Logística de Orden'),
       content: SizedBox(
         width: double.maxFinite,
+        height: 500, // Altura suficiente para la lista
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Definir fuente por producto:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 10),
+            // --- HEADER: ASIGNACIÓN MASIVA ---
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("⚡ Asignación Rápida", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.primary)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButton<OrigenProducto>(
+                          isExpanded: true,
+                          isDense: true,
+                          value: _origenMasivo,
+                          underline: Container(), // Quitar línea fea por defecto
+                          items: const [
+                            DropdownMenuItem(value: OrigenProducto.stockPropio, child: Text('🏭 Todo de Stock S&G')),
+                            DropdownMenuItem(value: OrigenProducto.compraDirecta, child: Text('🚚 Todo Compra Directa')),
+                            DropdownMenuItem(value: OrigenProducto.descuentoAcopio, child: Text('📦 Todo de Acopio')),
+                          ],
+                          onChanged: (v) {
+                            if (v != null) _aplicarA_Todos(v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
 
-            // Lista de items con switch
-            Flexible(
+            const SizedBox(height: 10),
+            const Divider(),
+
+            // --- LISTA DE ITEMS ---
+            Expanded(
               child: ListView.separated(
-                shrinkWrap: true,
                 itemCount: widget.items.length,
                 separatorBuilder: (_,__) => const Divider(height: 1),
                 itemBuilder: (ctx, i) {
                   final item = widget.items[i];
-                  final esStock = _fuentePorItem[item.item.id!] == 'stock';
-
-                  return ListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(item.productoNombre, style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('${item.cantidadFinal} ${item.unidadBase}'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          esStock ? "STOCK" : "PROVEEDOR",
-                          style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: esStock ? AppColors.success : AppColors.secondary
-                          ),
-                        ),
-                        Switch(
-                          value: !esStock, // true = proveedor
-                          activeColor: AppColors.secondary,
-                          inactiveThumbColor: AppColors.success,
-                          inactiveTrackColor: AppColors.success.withOpacity(0.3),
-                          onChanged: (val) {
-                            setState(() {
-                              _fuentePorItem[item.item.id!] = val ? 'proveedor' : 'stock';
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  );
+                  return _buildItemConfig(item);
                 },
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            // Selector de Proveedor (solo si hay items externos)
-            if (hayItemsExternos)
-              Consumer<AcopioProvider>(
-                builder: (context, provider, _) {
-                  return DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: 'Proveedor para items externos',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10),
-                      prefixIcon: Icon(Icons.store),
-                    ),
-                    value: _proveedorId,
-                    items: provider.proveedores
-                        .where((p) => !p.esDepositoSyg)
-                        .map((p) => DropdownMenuItem(value: p.codigo, child: Text(p.nombre)))
-                        .toList(),
-                    onChanged: (val) => setState(() => _proveedorId = val),
-                  );
-                },
-              ),
-
-            if (!hayItemsExternos)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.green[50], borderRadius: BorderRadius.circular(8)),
-                child: const Row(children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 16),
-                  SizedBox(width: 8),
-                  Expanded(child: Text("Todo saldrá del stock interno.", style: TextStyle(fontSize: 12, color: Colors.green)))
-                ]),
-              )
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
         ElevatedButton.icon(
-          icon: const Icon(Icons.check),
-          label: const Text('CONFIRMAR'),
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.success, foregroundColor: Colors.white),
-          onPressed: () {
-            // Validación: Si hay items externos, debe haber proveedor seleccionado
-            if (hayItemsExternos && _proveedorId == null) {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecciona un proveedor para los ítems externos")));
-              return;
-            }
-            Navigator.pop(context, {
-              'configuracionItems': _fuentePorItem,
-              'proveedorId': _proveedorId
-            });
-          },
+          icon: const Icon(Icons.check_circle),
+          label: const Text('APROBAR'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.success,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _guardar,
         ),
       ],
     );
+  }
+
+  Widget _buildItemConfig(OrdenItem item) {
+    final config = _configuracion[item.id]!;
+    final origenActual = config['origen'] as OrigenProducto;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Info del producto
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  item.productoNombre,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '${item.cantidadSolicitada} ${item.unidad}',
+                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black54),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Dropdown Origen Individual
+          DropdownButtonFormField<OrigenProducto>(
+            value: origenActual,
+            decoration: const InputDecoration(
+              isDense: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              border: OutlineInputBorder(),
+              labelText: 'Origen',
+            ),
+            items: const [
+              DropdownMenuItem(value: OrigenProducto.stockPropio, child: Text('Stock S&G')),
+              DropdownMenuItem(value: OrigenProducto.compraDirecta, child: Text('Compra Directa')),
+              DropdownMenuItem(value: OrigenProducto.descuentoAcopio, child: Text('Acopio')),
+            ],
+            onChanged: (val) {
+              if (val == null) return;
+              setState(() {
+                config['origen'] = val;
+                if (val == OrigenProducto.stockPropio) {
+                  config['proveedorId'] = null;
+                }
+              });
+            },
+          ),
+
+          // Dropdown Proveedor (Condicional)
+          if (origenActual != OrigenProducto.stockPropio) ...[
+            const SizedBox(height: 8),
+            Consumer<AcopioProvider>(
+              builder: (context, provider, _) {
+                return DropdownButtonFormField<String>(
+                  value: config['proveedorId'],
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: const OutlineInputBorder(),
+                    labelText: origenActual == OrigenProducto.compraDirecta
+                        ? '¿A quién compramos?'
+                        : '¿En qué depósito está?',
+                    fillColor: Colors.orange.withOpacity(0.1),
+                    filled: true,
+                  ),
+                  items: provider.proveedores
+                      .where((p) => !p.esDepositoSyg) // Filtramos depósito propio
+                      .map((p) => DropdownMenuItem(
+                    value: p.id ?? p.codigo,
+                    child: Text(p.nombre),
+                  ))
+                      .toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      config['proveedorId'] = val;
+                    });
+                  },
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _guardar() {
+    // Validación: Si eligió proveedor/compra, debe seleccionar UN proveedor
+    for (var item in widget.items) {
+      final conf = _configuracion[item.id]!;
+      if (conf['origen'] != OrigenProducto.stockPropio && conf['proveedorId'] == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ Falta seleccionar proveedor para: ${item.productoNombre}'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
+    Navigator.pop(context, _configuracion);
   }
 }

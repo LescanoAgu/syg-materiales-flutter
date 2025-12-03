@@ -17,6 +17,7 @@ import '../../features/usuarios/presentation/pages/usuarios_list_page.dart';
 import '../../features/reportes/presentation/pages/reportes_menu_page.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/acopios/presentation/pages/proveedores_list_page.dart';
+import '../../features/ordenes_internas/presentation/pages/despachos_list_page.dart'; // ✅ IMPORTAR
 
 class AppDrawer extends StatelessWidget {
   final AppSection currentSection;
@@ -53,8 +54,9 @@ class AppDrawer extends StatelessWidget {
                   _buildSectionHeader('GESTIÓN DE PEDIDOS'),
                   _buildMenuItem(context, icon: Icons.list_alt, title: 'Órdenes Internas', onTap: () => _navegar(context, const OrdenesPage())),
                   // Placeholder para futuras funciones
-                  _buildMenuItem(context, icon: Icons.local_shipping, title: 'Despachos', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Próximamente')))),
                   _buildMenuItem(context, icon: Icons.description, title: 'Remitos', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Próximamente')))),
+                  _buildMenuItem(context, icon: Icons.local_shipping, title: 'Área de Despacho', onTap: () => _navegar(context, const DespachosListPage())), // ✅ Ahora navega de verdad'
+                  _buildMenuItem(context, icon: Icons.description, title: 'Remitos Históricos', onTap: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Próximamente')))),
 
                 ] else if (currentSection == AppSection.admin) ...[
                   _buildSectionHeader('ADMINISTRACIÓN'),

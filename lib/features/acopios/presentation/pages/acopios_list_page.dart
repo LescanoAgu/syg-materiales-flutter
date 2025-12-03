@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/widgets/app_drawer.dart';
-import '../../data/models/acopio_model.dart';
+import '../../data/models/billetera_acopio_model.dart';
 import '../providers/acopio_provider.dart';
 import 'acopio_movimiento_page.dart';
 import 'facturas_list_page.dart';
 import 'acopio_traspaso_page.dart';
-import 'acopio_historial_page.dart';
 import 'movimiento_lote_page.dart';
+import 'acopio_detalle_page.dart'; // ✅ Importante para navegar
 
 class AcopiosListPage extends StatefulWidget {
   const AcopiosListPage({super.key});
@@ -23,7 +23,7 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AcopioProvider>().cargarTodo();
     });
@@ -50,7 +50,7 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
             ),
           ),
         ),
-        title: const Text('Acopios'),
+        title: const Text('Billetera de Materiales'),
         actions: [
           IconButton(
             icon: const Icon(Icons.receipt_long),
@@ -68,15 +68,12 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
         ],
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
           indicatorColor: AppColors.textWhite,
           labelColor: AppColors.textWhite,
           unselectedLabelColor: AppColors.textWhite.withOpacity(0.7),
           tabs: const [
             Tab(text: 'Todos'),
             Tab(text: 'Por Cliente'),
-            Tab(text: 'Por Proveedor'),
-            Tab(text: 'Reservas S&G'),
           ],
         ),
       ),
@@ -90,8 +87,6 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
               children: [
                 _buildVistaGeneral(),
                 _buildVistaPorCliente(),
-                _buildVistaPorProveedor(),
-                _buildVistaReservas(),
               ],
             ),
           ),
@@ -141,7 +136,7 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
       child: TextField(
         controller: _searchController,
         decoration: InputDecoration(
-            hintText: 'Buscar...',
+            hintText: 'Buscar cliente o producto...',
             prefixIcon: const Icon(Icons.search),
             suffixIcon: IconButton(
                 icon: const Icon(Icons.clear),
@@ -165,7 +160,7 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            Text('Total: ${prov.totalAcopios}'),
+            Text('Items con Saldo: ${prov.totalAcopios}'),
             Text('Clientes: ${prov.totalClientes}'),
           ],
         ),
@@ -177,36 +172,56 @@ class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProv
     return Consumer<AcopioProvider>(
       builder: (ctx, prov, _) {
         if (prov.isLoading) return const Center(child: CircularProgressIndicator());
-        if (prov.acopios.isEmpty) return const Center(child: Text('No hay acopios'));
+        if (prov.acopios.isEmpty) return const Center(child: Text('No hay saldos positivos'));
+
         return ListView.builder(
           itemCount: prov.acopios.length,
-          itemBuilder: (c, i) => _AcopioCard(acopioDetalle: prov.acopios[i]),
+          itemBuilder: (c, i) => _BilleteraCard(billetera: prov.acopios[i]),
         );
       },
     );
   }
 
-  // Placeholders para las otras vistas para ahorrar espacio y evitar errores
-  Widget _buildVistaPorCliente() => const Center(child: Text("Vista por Cliente"));
-  Widget _buildVistaPorProveedor() => const Center(child: Text("Vista por Proveedor"));
-  Widget _buildVistaReservas() => const Center(child: Text("Reservas"));
+  Widget _buildVistaPorCliente() => const Center(child: Text("Vista Agrupada (Próximamente)"));
 }
 
-class _AcopioCard extends StatelessWidget {
-  final AcopioDetalle acopioDetalle;
-  const _AcopioCard({required this.acopioDetalle});
+class _BilleteraCard extends StatelessWidget {
+  final BilleteraAcopio billetera;
+  const _BilleteraCard({required this.billetera});
 
   @override
   Widget build(BuildContext context) {
     return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       child: ListTile(
-        title: Text(acopioDetalle.productoNombre),
-        subtitle: Text('${acopioDetalle.clienteRazonSocial} - ${acopioDetalle.proveedorNombre}'),
-        trailing: Text('${acopioDetalle.cantidadFormateada} ${acopioDetalle.unidadBase}'),
+        title: Text(billetera.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Cliente: ${billetera.clienteNombre}'),
+            if (billetera.cantidadEnDepositoPropio > 0)
+              Text('En S&G: ${billetera.cantidadEnDepositoPropio}', style: const TextStyle(color: Colors.green, fontSize: 12)),
+            if (billetera.cantidadEnProveedores.isNotEmpty)
+              Text('En Proveedores: ${_sumarProveedores(billetera.cantidadEnProveedores)}', style: const TextStyle(color: Colors.orange, fontSize: 12)),
+          ],
+        ),
+        trailing: Text(
+            '${billetera.saldoTotal}',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.primary)
+        ),
+        isThreeLine: true,
+        // ✅ NAVEGACIÓN AGREGADA
         onTap: () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => AcopioHistorialPage(acopioDetalle: acopioDetalle)));
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AcopioDetallePage(billetera: billetera)),
+          );
         },
       ),
     );
+  }
+
+  double _sumarProveedores(Map<String, double> provs) {
+    return provs.values.fold(0, (sum, val) => sum + val);
   }
 }

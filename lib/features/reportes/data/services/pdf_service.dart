@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart'; // Incluye NetworkAssetBundle
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -7,31 +7,43 @@ import 'package:intl/date_symbol_data_local.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../../stock/data/models/movimiento_stock_model.dart';
 import '../../../ordenes_internas/data/models/orden_interna_model.dart';
-import '../../../ordenes_internas/data/models/orden_item_model.dart'; // Importante para OrdenItemDetalle
+import '../../../ordenes_internas/data/models/orden_item_model.dart';
+import '../../../ordenes_internas/data/models/remito_model.dart';
 
 class PdfService {
 
-  // Carga el logo desde los assets
+  // --- CARGA DE RECURSOS ---
+
   Future<Uint8List> _cargarLogo() async {
     try {
       final byteData = await rootBundle.load('web/icons/Logo_SYG.png');
       return byteData.buffer.asUint8List();
     } catch (e) {
-      print("⚠️ No se pudo cargar el logo: $e");
       return Uint8List(0);
     }
   }
 
-  // Helper de color
+  Future<Uint8List?> _descargarImagen(String? url) async {
+    if (url == null || url.isEmpty) return null;
+    try {
+      final bundle = NetworkAssetBundle(Uri.parse(url));
+      final data = await bundle.load("");
+      return data.buffer.asUint8List();
+    } catch (e) {
+      print("Error descargando imagen para PDF: $e");
+      return null;
+    }
+  }
+
   PdfColor _getColorPorTipo(TipoMovimiento tipo) {
     if (tipo == TipoMovimiento.entrada) return PdfColors.green700;
     if (tipo == TipoMovimiento.salida) return PdfColors.red700;
     return PdfColors.orange700;
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // 1. REPORTE DE STOCK
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   Future<void> generarReporteMovimientosStock({
     required List<MovimientoStock> movimientos,
     DateTime? fechaDesde,
@@ -80,9 +92,9 @@ class PdfService {
     await Printing.sharePdf(bytes: await pdf.save(), filename: 'Reporte_Stock.pdf');
   }
 
-  // ---------------------------------------------------------------------------
-  // 2. ORDEN INTERNA (COMPLETA)
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 2. ORDEN INTERNA
+  // ===========================================================================
   Future<void> generarOrdenInterna(OrdenInternaDetalle ordenDetalle) async {
     await initializeDateFormatting('es_AR', null);
     final pdf = pw.Document();
@@ -119,14 +131,9 @@ class PdfService {
     await Printing.sharePdf(bytes: await pdf.save(), filename: 'Orden_${orden.numero}.pdf');
   }
 
-  // Alias para compatibilidad
-  Future<void> generarRemitoOrden(OrdenInternaDetalle ordenDetalle) async {
-    await generarOrdenInterna(ordenDetalle);
-  }
-
-  // ---------------------------------------------------------------------------
-  // 3. REMITO DE DESPACHO (PARCIAL/FINAL)
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 3. REMITO DE DESPACHO (AL MOMENTO)
+  // ===========================================================================
   Future<void> generarRemitoDespacho({
     required OrdenInternaDetalle ordenDetalle,
     required List<Map<String, dynamic>> itemsDespachados,
@@ -153,7 +160,7 @@ class PdfService {
           pw.SizedBox(height: 20),
           _buildInfoDespacho(ordenDetalle, nombreResponsable),
           pw.SizedBox(height: 20),
-          _buildTablaRemito(itemsDespachados, ordenDetalle),
+          _buildTablaRemitoDinamico(itemsDespachados, ordenDetalle),
           pw.Spacer(),
           _buildFirmasRemito(),
           pw.SizedBox(height: 10),
@@ -165,9 +172,110 @@ class PdfService {
     await Printing.sharePdf(bytes: await pdf.save(), filename: 'Remito_${orden.numero}.pdf');
   }
 
-  // ---------------------------------------------------------------------------
-  // WIDGETS AUXILIARES
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // 4. REMITO HISTÓRICO (CON 5 COLUMNAS Y FIRMAS)
+  // ===========================================================================
+  Future<void> generarRemitoHistorico(Remito remito, OrdenInternaDetalle ordenDetalle) async {
+    await initializeDateFormatting('es_AR', null);
+    final pdf = pw.Document();
+
+    final logoBytes = await _cargarLogo();
+    final imageLogo = logoBytes.isNotEmpty ? pw.MemoryImage(logoBytes) : null;
+
+    // Descargar firmas
+    final firmaAuthBytes = await _descargarImagen(remito.firmaAutorizoUrl);
+    final firmaRecBytes = await _descargarImagen(remito.firmaRecibioUrl);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(30),
+        build: (context) => [
+          _buildHeader(
+              titulo: 'REMITO DE ENTREGA',
+              numero: remito.numeroRemito,
+              fecha: remito.fecha,
+              estado: 'ENTREGADO',
+              logo: imageLogo
+          ),
+          pw.SizedBox(height: 20),
+          _buildInfoDespacho(ordenDetalle, remito.usuarioDespachadorNombre),
+          pw.SizedBox(height: 20),
+
+          // TABLA DE 5 COLUMNAS
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey400),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(3), // Item
+              1: const pw.FlexColumnWidth(1), // Total Pedido
+              2: const pw.FlexColumnWidth(1), // Faltaba
+              3: const pw.FlexColumnWidth(1), // Entrego (Negrita)
+              4: const pw.FlexColumnWidth(1), // Queda
+            },
+            children: [
+              pw.TableRow(
+                decoration: pw.BoxDecoration(color: PdfColors.teal50), // SIN CONST
+                children: [
+                  _th('ITEM / MATERIAL'),
+                  _th('TOTAL\nPEDIDO', align: pw.TextAlign.center),
+                  _th('FALTABA\nENTREGAR', align: pw.TextAlign.center),
+                  _th('ENTREGO\nAHORA', align: pw.TextAlign.center),
+                  _th('SALDO\nRESTANTE', align: pw.TextAlign.center),
+                ],
+              ),
+              ...remito.items.map((item) {
+                final total = item.cantidadSolicitadaTotal;
+                final anterior = item.saldoPendienteAnterior;
+                final entrega = item.cantidad;
+                final saldo = anterior - entrega;
+
+                return pw.TableRow(
+                  verticalAlignment: pw.TableCellVerticalAlignment.middle,
+                  children: [
+                    _td(item.productoNombre, isBold: true),
+                    _td(total > 0 ? ArgFormats.decimal(total) : "-", align: pw.TextAlign.center),
+                    _td(total > 0 ? ArgFormats.decimal(anterior) : "-", align: pw.TextAlign.center),
+
+                    // Columna Entrega
+                    pw.Container(
+                        color: PdfColors.green50,
+                        padding: const pw.EdgeInsets.all(5),
+                        child: pw.Text(
+                            '${ArgFormats.decimal(entrega)} ${item.unidad}',
+                            textAlign: pw.TextAlign.center,
+                            style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)
+                        )
+                    ),
+
+                    _td(total > 0 ? ArgFormats.decimal(saldo) : "-", align: pw.TextAlign.center, color: saldo <= 0 ? PdfColors.green700 : PdfColors.red700),
+                  ],
+                );
+              }).toList(),
+            ],
+          ),
+
+          pw.Spacer(),
+
+          // Firmas reales
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
+            children: [
+              _buildFirmaImagen(firmaAuthBytes, "Autorizó (S&G)"),
+              _buildFirmaImagen(firmaRecBytes, "Recibió Conforme"),
+            ],
+          ),
+          pw.SizedBox(height: 10),
+          _buildFooter(),
+        ],
+      ),
+    );
+
+    await Printing.sharePdf(bytes: await pdf.save(), filename: 'Remito_${remito.numeroRemito}.pdf');
+  }
+
+  // ===========================================================================
+  // WIDGETS AUXILIARES (Privados)
+  // ===========================================================================
 
   pw.Widget _buildHeaderGeneral(String titulo, DateTime? desde, DateTime? hasta, pw.ImageProvider? logo) {
     String periodo = 'Histórico Completo';
@@ -233,7 +341,7 @@ class PdfService {
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey400),
         borderRadius: pw.BorderRadius.circular(5),
-        color: PdfColors.grey50,
+        color: PdfColors.grey50, // SIN CONST
       ),
       child: pw.Row(
         children: [
@@ -274,6 +382,7 @@ class PdfService {
               children: [
                 pw.Text("DESTINO: ${detalle.obraNombre ?? 'A coordinar'}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
                 pw.Text("CLIENTE: ${detalle.clienteRazonSocial}"),
+                if (detalle.orden.titulo != null) pw.Text("REF: ${detalle.orden.titulo}", style: const pw.TextStyle(fontSize: 9)),
               ],
             ),
           ),
@@ -281,7 +390,7 @@ class PdfService {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
-                pw.Text("RESPONSABLE", style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+                pw.Text("RESPONSABLE DESPACHO", style: pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
                 pw.Text(responsable.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
               ],
             ),
@@ -292,7 +401,6 @@ class PdfService {
   }
 
   pw.Widget _buildTablaProductos(List<OrdenItemDetalle> items) {
-    // SIN CONST AQUÍ
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       columnWidths: {
@@ -302,7 +410,7 @@ class PdfService {
       },
       children: [
         pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.teal50),
+          decoration: pw.BoxDecoration(color: PdfColors.teal50), // SIN CONST
           children: [
             _th('DESCRIPCIÓN'),
             _th('CANTIDAD', align: pw.TextAlign.center),
@@ -322,13 +430,12 @@ class PdfService {
     );
   }
 
-  pw.Widget _buildTablaRemito(List<Map<String, dynamic>> itemsDespachados, OrdenInternaDetalle detalle) {
-    // SIN CONST AQUÍ
+  pw.Widget _buildTablaRemitoDinamico(List<Map<String, dynamic>> itemsDespachados, OrdenInternaDetalle detalle) {
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       children: [
         pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.teal50),
+          decoration: pw.BoxDecoration(color: PdfColors.teal50), // SIN CONST
           children: [
             _th('ITEM / MATERIAL'),
             _th('CANTIDAD ENTREGADA', align: pw.TextAlign.center),
@@ -352,12 +459,11 @@ class PdfService {
   }
 
   pw.Widget _buildTablaMovimientos(List<MovimientoStock> movimientos) {
-    // SIN CONST AQUÍ
     return pw.Table(
       border: pw.TableBorder.all(color: PdfColors.grey300),
       children: [
         pw.TableRow(
-          decoration: const pw.BoxDecoration(color: PdfColors.teal50),
+          decoration: pw.BoxDecoration(color: PdfColors.teal50), // SIN CONST
           children: [
             _th('FECHA'),
             _th('TIPO'),
@@ -381,7 +487,10 @@ class PdfService {
   }
 
   pw.Widget _buildObservaciones(String? obs) {
-    if (obs == null || obs.isEmpty) return pw.Container();
+    if (obs == null || obs.trim().isEmpty) {
+      // Si no hay observaciones, no mostramos nada
+      return pw.SizedBox();
+    }
 
     return pw.Container(
       width: double.infinity,
@@ -391,7 +500,7 @@ class PdfService {
         color: PdfColors.yellow50,
       ),
       child: pw.Text(
-        "Observaciones: $obs",
+        'Observaciones: $obs',
         style: pw.TextStyle(
           fontSize: 10,
           fontStyle: pw.FontStyle.italic,
@@ -404,8 +513,8 @@ class PdfService {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
       children: [
-        _buildFirmaBox("Autorizó (S&G)"),
-        _buildFirmaBox("Recibí Conforme (Cliente)"),
+        _buildFirmaBox('Autorizó (S&G)'),
+        _buildFirmaBox('Recibí Conforme (Cliente)'),
       ],
     );
   }
@@ -414,8 +523,8 @@ class PdfService {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
       children: [
-        _buildFirmaBox("Entregué (Chofer/Pañol)"),
-        _buildFirmaBox("Recibí Conforme (Obra)"),
+        _buildFirmaBox('Entregué (Chofer/Pañol)'),
+        _buildFirmaBox('Recibí Conforme (Obra)'),
       ],
     );
   }
@@ -424,9 +533,8 @@ class PdfService {
     return pw.Column(
       children: [
         pw.Container(
-          width: 120,
-          height: 40,
-          decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black))),
+          width: 120, height: 40,
+          decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black))), // SIN CONST
         ),
         pw.SizedBox(height: 4),
         pw.Text(label, style: const pw.TextStyle(fontSize: 8)),
@@ -434,10 +542,26 @@ class PdfService {
     );
   }
 
+  pw.Widget _buildFirmaImagen(Uint8List? bytes, String label) {
+    return pw.Column(
+      children: [
+        pw.Container(
+          width: 140, height: 70,
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)), // SIN CONST
+          child: bytes != null && bytes.isNotEmpty
+              ? pw.Image(pw.MemoryImage(bytes), fit: pw.BoxFit.contain)
+              : pw.Center(child: pw.Text("[Firma No Disponible]", style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey))),
+        ),
+        pw.SizedBox(height: 4),
+        pw.Text(label, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+      ],
+    );
+  }
+
   pw.Widget _buildFooter() {
     return pw.Center(
       child: pw.Text(
-        "Sistema de Gestión S&G - Documento generado automáticamente",
+        'Documento generado por el sistema de gestión de materiales S&G',
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500),
       ),
     );

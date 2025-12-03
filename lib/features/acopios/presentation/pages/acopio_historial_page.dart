@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
-import '../../data/models/acopio_model.dart';
+import '../../data/models/billetera_acopio_model.dart';
 import '../../data/models/movimiento_acopio_model.dart';
-import '../../data/repositories/acopio_repository.dart';
+import '../providers/acopio_provider.dart';
 
 class AcopioHistorialPage extends StatefulWidget {
-  final AcopioDetalle acopioDetalle;
-  const AcopioHistorialPage({super.key, required this.acopioDetalle});
+  final BilleteraAcopio billetera; // ✅ Usamos el nuevo modelo Billetera
+
+  const AcopioHistorialPage({super.key, required this.billetera});
 
   @override
   State<AcopioHistorialPage> createState() => _AcopioHistorialPageState();
 }
 
 class _AcopioHistorialPageState extends State<AcopioHistorialPage> {
-  final AcopioRepository _acopioRepo = AcopioRepository();
   List<MovimientoAcopioModel> _movimientos = [];
   bool _isLoading = true;
 
@@ -26,11 +27,13 @@ class _AcopioHistorialPageState extends State<AcopioHistorialPage> {
 
   Future<void> _cargarHistorial() async {
     setState(() => _isLoading = true);
-    final movs = await _acopioRepo.obtenerHistorialAcopio(
-      productoId: widget.acopioDetalle.acopio.productoId,
-      clienteId: widget.acopioDetalle.acopio.clienteId,
-      proveedorId: widget.acopioDetalle.acopio.proveedorId,
+
+    // ✅ CORRECCIÓN: Llamamos al método sin 'proveedorId', usando el Provider
+    final movs = await context.read<AcopioProvider>().obtenerHistorialAcopio(
+      productoCodigo: widget.billetera.productoId,
+      clienteCodigo: widget.billetera.clienteId,
     );
+
     if (mounted) {
       setState(() {
         _movimientos = movs;
@@ -42,25 +45,38 @@ class _AcopioHistorialPageState extends State<AcopioHistorialPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Historial')),
+      appBar: AppBar(title: const Text('Historial de Movimientos')),
       body: Column(
         children: [
           _buildHeaderAcopio(),
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
+                : _movimientos.isEmpty
+                ? const Center(child: Text("No hay movimientos registrados"))
+                : ListView.separated(
               itemCount: _movimientos.length,
+              separatorBuilder: (_,__) => const Divider(height: 1),
               itemBuilder: (ctx, i) {
                 final m = _movimientos[i];
+                // Lógica visual simple: Entrada (positivo) en verde, Salida (negativo) en rojo
+                final esPositivo = m.cantidad > 0;
+
                 return ListTile(
                   title: Text(m.tipo.name.toUpperCase()),
-                  subtitle: Text(ArgFormats.fechaHora(m.createdAt)),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(ArgFormats.fechaHora(m.createdAt)),
+                      if (m.referencia != null) Text(m.referencia!, style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
                   trailing: Text(
-                    '${m.cantidad}',
+                    '${esPositivo ? '+' : ''}${m.cantidad}',
                     style: TextStyle(
-                        color: m.tipo == TipoMovimientoAcopio.entrada ? Colors.green : Colors.red,
-                        fontWeight: FontWeight.bold
+                        color: esPositivo ? Colors.green : Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16
                     ),
                   ),
                 );
@@ -80,13 +96,13 @@ class _AcopioHistorialPageState extends State<AcopioHistorialPage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            Text(widget.acopioDetalle.productoNombre, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(widget.billetera.productoNombre, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(widget.acopioDetalle.clienteRazonSocial),
-                Text('${widget.acopioDetalle.cantidadFormateada} ${widget.acopioDetalle.unidadBase}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(widget.billetera.clienteNombre),
+                Text('Saldo: ${widget.billetera.saldoTotal}', style: const TextStyle(fontWeight: FontWeight.bold)),
               ],
             )
           ],

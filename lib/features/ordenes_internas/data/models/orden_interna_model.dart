@@ -3,6 +3,7 @@ import 'orden_item_model.dart';
 class OrdenInterna {
   final String? id;
   final String numero;
+  final String? titulo; // ✅ NUEVO: Título descriptivo
   final String clienteId;
   final String obraId;
   final String solicitanteNombre;
@@ -10,34 +11,32 @@ class OrdenInterna {
   final String estado;
   final String prioridad;
 
-  // ✅ CAMPOS NUEVOS REQUERIDOS
   final List<String> usuariosEtiquetados;
   final String? firmaUrl;
   final DateTime? fechaEntregaReal;
-
   final double porcentajeAvance;
   final String? fuente;
   final String? observacionesCliente;
   final double total;
   final DateTime createdAt;
 
+  // Desnormalizados
   final String? clienteRazonSocial;
   final String? obraNombre;
 
   OrdenInterna({
     this.id,
     required this.numero,
+    this.titulo, // ✅
     required this.clienteId,
     required this.obraId,
     required this.solicitanteNombre,
     required this.fechaPedido,
     this.estado = 'solicitado',
     this.prioridad = 'media',
-
     this.usuariosEtiquetados = const [],
     this.firmaUrl,
     this.fechaEntregaReal,
-
     this.porcentajeAvance = 0.0,
     this.fuente,
     this.observacionesCliente,
@@ -51,17 +50,16 @@ class OrdenInterna {
     return OrdenInterna(
       id: map['id']?.toString(),
       numero: map['numero']?.toString() ?? '',
+      titulo: map['titulo']?.toString(), // ✅
       clienteId: map['clienteId']?.toString() ?? '',
       obraId: map['obraId']?.toString() ?? '',
       solicitanteNombre: map['solicitanteNombre']?.toString() ?? '',
       fechaPedido: map['fechaPedido'] != null ? DateTime.parse(map['fechaPedido']) : DateTime.now(),
       estado: map['estado']?.toString() ?? 'solicitado',
       prioridad: map['prioridad']?.toString() ?? 'media',
-
       usuariosEtiquetados: List<String>.from(map['usuariosEtiquetados'] ?? []),
       firmaUrl: map['firmaUrl']?.toString(),
       fechaEntregaReal: map['fechaEntregaReal'] != null ? DateTime.parse(map['fechaEntregaReal']) : null,
-
       porcentajeAvance: (map['porcentajeAvance'] as num?)?.toDouble() ?? 0.0,
       fuente: map['fuente']?.toString(),
       observacionesCliente: map['observacionesCliente']?.toString(),
@@ -75,6 +73,7 @@ class OrdenInterna {
   Map<String, dynamic> toMap() {
     return {
       'numero': numero,
+      'titulo': titulo, // ✅
       'clienteId': clienteId,
       'obraId': obraId,
       'solicitanteNombre': solicitanteNombre,

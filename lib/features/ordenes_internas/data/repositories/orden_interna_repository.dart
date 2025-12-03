@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:typed_data';
 import '../models/orden_interna_model.dart';
 import '../models/orden_item_model.dart';
+import '../models/remito_model.dart';
 import '../../../../features/clientes/data/repositories/cliente_repository.dart';
-import '../../../../core/services/storage_service.dart'; // ✅ Necesario para la firma
+import '../../../../core/services/storage_service.dart';
 
 class OrdenInternaRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -15,6 +16,7 @@ class OrdenInternaRepository {
     required String clienteId,
     required String obraId,
     required String solicitanteNombre,
+    String? titulo,
     String? observacionesCliente,
     required List<Map<String, dynamic>> items,
     String? usuarioCreadorId,
@@ -46,35 +48,30 @@ class OrdenInternaRepository {
         total += st;
 
         final itemRef = ordenRef.collection('items').doc();
-        final item = OrdenItem(
-          id: itemRef.id,
-          ordenId: ordenRef.id,
-          productoId: i['productoId'],
-          cantidadSolicitada: cantidad,
-          cantidadEntregada: 0.0,
-          precioUnitario: precio,
-          subtotal: st,
-          createdAt: DateTime.now(),
-          observaciones: i['observaciones'],
-          estadoItem: 'pendiente',
-        );
 
-        final itemMap = item.toMap();
-        final prod = i['producto'];
-        if (prod != null) {
-          try {
-            itemMap['productoNombre'] = prod.nombre;
-            itemMap['productoCodigo'] = prod.codigo;
-            itemMap['unidadBase'] = prod.unidadBase;
-            itemMap['fuente'] = null;
-          } catch (_) {}
-        }
-        transaction.set(itemRef, itemMap);
+        final itemData = {
+          'id': itemRef.id,
+          'ordenId': ordenRef.id,
+          'productoId': i['productoId'],
+          'productoNombre': i['producto']?.nombre ?? 'Producto',
+          'unidad': i['producto']?.unidadBase ?? 'u',
+          'cantidadSolicitada': cantidad,
+          'cantidadAprobada': 0.0,
+          'cantidadEntregada': 0.0,
+          'precioUnitario': precio,
+          'subtotal': st,
+          'observaciones': i['observaciones'],
+          'estadoItem': 'pendiente',
+          'origen': 'stockPropio',
+          'createdAt': DateTime.now().toIso8601String(),
+        };
+        transaction.set(itemRef, itemData);
       }
 
       final orden = OrdenInterna(
           id: ordenRef.id,
           numero: codigo,
+          titulo: titulo,
           clienteId: clienteId,
           obraId: obraId,
           solicitanteNombre: solicitanteNombre,
@@ -94,218 +91,221 @@ class OrdenInternaRepository {
     });
   }
 
-  // --- APROBAR ORDEN ---
-  Future<void> aprobarOrden({
+  // --- EDITAR ORDEN ---
+  Future<void> editarOrden({
     required String ordenId,
-    required Map<String, String> configuracionItems,
-    String? proveedorId,
-    required String usuarioAprobadorId,
+    required String clienteId,
+    required String obraId,
+    String? titulo,
+    required String prioridad,
+    String? observaciones,
+    required List<Map<String, dynamic>> items,
   }) async {
-    return _firestore.runTransaction((transaction) async {
-      final ordenRef = _firestore.collection(_collection).doc(ordenId);
-      final itemsSnap = await ordenRef.collection('items').get();
+    final batch = _firestore.batch();
+    final ordenRef = _firestore.collection(_collection).doc(ordenId);
 
-      for (var doc in itemsSnap.docs) {
-        final itemData = doc.data();
-        final itemId = doc.id;
-        final fuenteItem = configuracionItems[itemId] ?? 'stock';
+    final itemsViejos = await ordenRef.collection('items').get();
+    for (var doc in itemsViejos.docs) {
+      batch.delete(doc.reference);
+    }
 
-        final productoId = itemData['productoId'];
-        final productoNombre = itemData['productoNombre'] ?? 'Producto';
-        final cantidadSolicitada = (itemData['cantidadSolicitada'] as num).toDouble();
+    double total = 0.0;
+    for (var i in items) {
+      final cantidad = (i['cantidad'] as num).toDouble();
+      final precio = (i['precio'] as num).toDouble();
+      final st = cantidad * precio;
+      total += st;
 
-        if (fuenteItem == 'stock') {
-          final stockRef = _firestore.collection('stock').doc(productoId);
-          final stockDoc = await transaction.get(stockRef);
+      final itemRef = ordenRef.collection('items').doc();
+      final itemData = {
+        'id': itemRef.id,
+        'ordenId': ordenId,
+        'productoId': i['productoId'],
+        'productoNombre': i['producto']?.nombre ?? 'Producto',
+        'unidad': i['producto']?.unidadBase ?? 'u',
+        'cantidadSolicitada': cantidad,
+        'cantidadAprobada': 0.0,
+        'cantidadEntregada': 0.0,
+        'precioUnitario': precio,
+        'subtotal': st,
+        'observaciones': i['observaciones'],
+        'estadoItem': 'pendiente',
+        'origen': 'stockPropio',
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+      batch.set(itemRef, itemData);
+    }
 
-          if (!stockDoc.exists) {
-            throw Exception("El producto $productoNombre no tiene registro de stock.");
-          }
-          final stockDisponible = (stockDoc.data()?['cantidadDisponible'] as num?)?.toDouble() ?? 0.0;
+    final cliente = await _clienteRepo.obtenerPorId(clienteId);
+    final obraDoc = await _firestore.collection('obras').doc(obraId).get();
 
-          if (stockDisponible < cantidadSolicitada) {
-            throw Exception("❌ Stock insuficiente para $productoNombre.");
-          }
-        }
-
-        transaction.update(doc.reference, {
-          'fuente': fuenteItem,
-          'cantidadAprobada': cantidadSolicitada,
-        });
-      }
-
-      transaction.update(ordenRef, {
-        'estado': 'aprobado',
-        'fuente': 'mixto',
-        'proveedorAsignadoId': proveedorId,
-        'aprobadoPorUsuarioId': usuarioAprobadorId,
-        'aprobadoFecha': DateTime.now().toIso8601String(),
-        'updatedAt': DateTime.now().toIso8601String(),
-      });
-    });
-  }
-
-  // --- ASIGNAR RESPONSABLE ---
-  Future<void> asignarResponsable(String ordenId, String usuarioId, String usuarioNombre) async {
-    await _firestore.collection(_collection).doc(ordenId).update({
-      'responsableEntregaId': usuarioId,
-      'responsableEntregaNombre': usuarioNombre,
-      'estado': 'en_curso',
+    batch.update(ordenRef, {
+      'clienteId': clienteId,
+      'obraId': obraId,
+      'clienteRazonSocial': cliente?.razonSocial,
+      'obraNombre': obraDoc.exists ? (obraDoc.data()?['nombre'] as String?) : null,
+      'titulo': titulo,
+      'prioridad': prioridad,
+      'observacionesCliente': observaciones,
+      'total': total,
       'updatedAt': DateTime.now().toIso8601String(),
     });
+
+    await batch.commit();
   }
 
-  // --- REGISTRAR DESPACHO ---
-  Future<void> registrarDespacho({
+  // --- APROBAR ORDEN ---
+  Future<void> aprobarOrdenConLogistica({
     required String ordenId,
-    required String ordenNumero,
-    required String obraId,
+    required List<OrdenItem> itemsConfigurados,
+    required String usuarioAprobadorId,
+  }) async {
+    final batch = _firestore.batch();
+    final ordenRef = _firestore.collection(_collection).doc(ordenId);
+
+    for (var item in itemsConfigurados) {
+      final itemRef = ordenRef.collection('items').doc(item.id);
+      batch.update(itemRef, {
+        'cantidadAprobada': item.cantidadAprobada,
+        'origen': item.origen.name,
+        'proveedorId': item.proveedorId,
+        'precioCompra': item.precioCompra,
+      });
+    }
+
+    batch.update(ordenRef, {
+      'estado': 'aprobado',
+      'aprobadoPorUsuarioId': usuarioAprobadorId,
+      'aprobadoFecha': DateTime.now().toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+
+    await batch.commit();
+  }
+  // --- GENERAR REMITO (Actualizado con Snapshot de Saldos) ---
+  Future<void> generarRemito({
+    required String ordenId,
+    required List<Map<String, dynamic>> itemsDespachados,
+    required Uint8List firmaAutoriza,
+    required Uint8List firmaRecibe,
     required String usuarioId,
     required String usuarioNombre,
-    required List<Map<String, dynamic>> itemsDespachados,
   }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+
+    // 1. Subir firmas
+    final urlAutoriza = await StorageService().subirFirma(firmaAutoriza, 'remito_${ordenId}_${timestamp}_auth');
+    final urlRecibe = await StorageService().subirFirma(firmaRecibe, 'remito_${ordenId}_${timestamp}_rec');
+
+    if (urlAutoriza == null || urlRecibe == null) throw Exception("Error al subir las imágenes de las firmas");
+
+    // 2. Preparar datos previos
+    final ordenRef = _firestore.collection(_collection).doc(ordenId);
+    final remitosSnap = await ordenRef.collection('remitos').count().get();
+    final numRemito = (remitosSnap.count ?? 0) + 1;
+
+    final ordenDoc = await ordenRef.get();
+    if (!ordenDoc.exists) throw Exception("Orden no encontrada");
+
+    final ordenNumero = ordenDoc.data()?['numero'] ?? '???';
+    final codigoRemito = '$ordenNumero-R${numRemito.toString().padLeft(3, '0')}';
+
     return _firestore.runTransaction((transaction) async {
-      final ordenRef = _firestore.collection(_collection).doc(ordenId);
-      final ordenDoc = await transaction.get(ordenRef);
-      if (!ordenDoc.exists) throw Exception("La orden no existe");
+      await transaction.get(ordenRef);
 
-      final dataOrden = ordenDoc.data()!;
-      final estadoActual = dataOrden['estado'];
+      List<ItemRemito> itemsRemitoModel = [];
+      double totalSolicitadoGlobal = 0;
+      double totalEntregadoGlobal = 0;
 
-      if (estadoActual == 'finalizado' || estadoActual == 'cancelado') {
-        throw Exception("No se puede despachar una orden cerrada");
-      }
+      final itemsOrdenSnap = await ordenRef.collection('items').get();
 
-      double totalSolicitadoOrden = 0;
-      double totalEntregadoOrden = 0;
+      for (var doc in itemsOrdenSnap.docs) {
+        final data = doc.data(); // Ya tiene el cast en tu versión corregida
+        final id = doc.id;
 
-      final itemsSnap = await ordenRef.collection('items').get();
-
-      for (var doc in itemsSnap.docs) {
-        final data = doc.data();
-        final fuenteItem = data['fuente'] ?? 'stock';
-
-        double solicitada = (data['cantidadAprobada'] ?? data['cantidadSolicitada'] ?? 0).toDouble();
+        double solicitada = (data['cantidadAprobada'] ?? 0).toDouble();
         double entregadaPrevia = (data['cantidadEntregada'] ?? 0).toDouble();
 
-        final despachoActual = itemsDespachados.firstWhere((e) => e['itemId'] == doc.id, orElse: () => {});
+        // Verificar si se despacha
+        final despachoItem = itemsDespachados.firstWhere(
+                (e) => e['itemId'] == id,
+            orElse: () => <String, dynamic>{}
+        );
 
-        double cantidadADespachar = 0;
-        if (despachoActual.isNotEmpty) {
-          cantidadADespachar = (despachoActual['cantidad'] as num).toDouble();
+        double aDespachar = 0;
+        if (despachoItem.isNotEmpty) {
+          aDespachar = (despachoItem['cantidad'] as num).toDouble();
 
-          if (entregadaPrevia + cantidadADespachar > solicitada) {
+          if (entregadaPrevia + aDespachar > solicitada + 0.01) {
             throw Exception("Exceso de cantidad en ${data['productoNombre']}");
           }
 
-          if (fuenteItem == 'stock') {
-            final stockRef = _firestore.collection('stock').doc(data['productoId']);
-            transaction.update(stockRef, {
-              'cantidadDisponible': FieldValue.increment(-cantidadADespachar),
-              'ultimaActualizacion': DateTime.now().toIso8601String(),
-            });
+          // ✅ AQUÍ ESTÁ LA MAGIA: Guardamos la foto del momento
+          itemsRemitoModel.add(ItemRemito(
+            productoId: data['productoId'] ?? '',
+            productoNombre: data['productoNombre'] ?? 'Producto',
+            cantidad: aDespachar,
+            unidad: data['unidad'] ?? 'u',
+            // Snapshot para el reporte:
+            cantidadSolicitadaTotal: solicitada,
+            saldoPendienteAnterior: solicitada - entregadaPrevia, // Cuánto faltaba antes de este remito
+          ));
 
-            final prodRef = _firestore.collection('productos').doc(data['productoId']);
-            transaction.update(prodRef, {
-              'cantidadDisponible': FieldValue.increment(-cantidadADespachar),
-            });
+          // Descuento Stock
+          if (data['origen'] == 'stockPropio') {
+            final stockRef = _firestore.collection('productos').doc(data['productoId']);
+            final stockDoc = await transaction.get(stockRef);
+            if (stockDoc.exists) {
+              transaction.update(stockRef, {
+                'cantidadDisponible': FieldValue.increment(-aDespachar)
+              });
+            }
           }
 
+          // Actualizar Item (Aquí cambiamos entregadaPrevia, por eso guardamos el snapshot antes)
           transaction.update(doc.reference, {
-            'cantidadEntregada': entregadaPrevia + cantidadADespachar,
-            'estadoItem': (entregadaPrevia + cantidadADespachar >= solicitada) ? 'completado' : 'parcial',
-          });
-
-          final movRef = _firestore.collection('movimientos_stock').doc();
-          transaction.set(movRef, {
-            'productoId': data['productoId'],
-            'productoNombre': data['productoNombre'],
-            'tipo': 'salida',
-            'subtipo': 'orden_interna',
-            'fuente': fuenteItem,
-            'cantidad': cantidadADespachar,
-            'motivo': 'Despacho Orden $ordenNumero ($fuenteItem)',
-            'referenciaId': ordenId,
-            'usuarioId': usuarioId,
-            'usuarioNombre': usuarioNombre,
-            'fecha': DateTime.now().toIso8601String(),
-            'obraId': obraId,
+            'cantidadEntregada': entregadaPrevia + aDespachar,
+            'estadoItem': (entregadaPrevia + aDespachar >= solicitada - 0.01) ? 'completado' : 'parcial',
           });
         }
 
-        totalSolicitadoOrden += solicitada;
-        totalEntregadoOrden += (entregadaPrevia + cantidadADespachar);
+        totalSolicitadoGlobal += solicitada;
+        totalEntregadoGlobal += (entregadaPrevia + aDespachar);
       }
 
-      double nuevoAvance = 0.0;
-      if (totalSolicitadoOrden > 0) {
-        nuevoAvance = (totalEntregadoOrden / totalSolicitadoOrden).clamp(0.0, 1.0);
-      }
+      final remitoRef = ordenRef.collection('remitos').doc();
+      final nuevoRemito = Remito(
+        id: remitoRef.id,
+        ordenId: ordenId,
+        numeroRemito: codigoRemito,
+        fecha: DateTime.now(),
+        items: itemsRemitoModel,
+        firmaAutorizoUrl: urlAutoriza,
+        firmaRecibioUrl: urlRecibe,
+        usuarioDespachadorId: usuarioId,
+        usuarioDespachadorNombre: usuarioNombre,
+      );
+
+      transaction.set(remitoRef, nuevoRemito.toMap());
+
+      double avance = totalSolicitadoGlobal > 0 ? (totalEntregadoGlobal / totalSolicitadoGlobal) : 0;
+      String nuevoEstado = (avance >= 0.99) ? 'entregado' : 'en_curso';
 
       transaction.update(ordenRef, {
-        'porcentajeAvance': nuevoAvance,
+        'porcentajeAvance': avance,
+        'estado': nuevoEstado,
         'updatedAt': DateTime.now().toIso8601String(),
-        'estado': (nuevoAvance >= 1.0) ? 'entregado' : 'en_curso',
+        if (nuevoEstado == 'entregado') 'fechaEntregaReal': DateTime.now().toIso8601String(),
+        if (nuevoEstado == 'entregado') 'firmaUrl': urlRecibe,
       });
     });
   }
 
-  // --- NUEVOS MÉTODOS REQUERIDOS ---
-  Future<List<OrdenInternaDetalle>> getMisDespachos(String userId) async {
-    try {
-      Query query = _firestore.collection(_collection)
-          .where('usuariosEtiquetados', arrayContains: userId)
-          .orderBy('createdAt', descending: true);
-
-      final snap = await query.get();
-      return snap.docs.map((d) {
-        final data = d.data() as Map<String, dynamic>;
-        data['id'] = d.id;
-        return OrdenInternaDetalle(
-          orden: OrdenInterna.fromMap(data),
-          clienteRazonSocial: data['clienteRazonSocial'] ?? '?',
-          obraNombre: data['obraNombre'],
-          items: [],
-        );
-      }).toList();
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<void> etiquetarUsuario(String ordenId, String usuarioId) async {
-    await _firestore.collection(_collection).doc(ordenId).update({
-      'usuariosEtiquetados': FieldValue.arrayUnion([usuarioId])
-    });
-  }
-
-  Future<void> quitarEtiquetaUsuario(String ordenId, String usuarioId) async {
-    await _firestore.collection(_collection).doc(ordenId).update({
-      'usuariosEtiquetados': FieldValue.arrayRemove([usuarioId])
-    });
-  }
-
-  Future<void> finalizarEntregaConFirma({
-    required String ordenId,
-    required Uint8List firmaBytes,
-  }) async {
-    final String nombreArchivo = 'firma_${ordenId}_${DateTime.now().millisecondsSinceEpoch}';
-    final String? urlFirma = await StorageService().subirFirma(firmaBytes, nombreArchivo);
-
-    if (urlFirma == null) throw Exception("Error al subir firma");
-
-    await _firestore.collection(_collection).doc(ordenId).update({
-      'estado': 'entregado',
-      'firmaUrl': urlFirma,
-      'fechaEntregaReal': DateTime.now().toIso8601String(),
-      'porcentajeAvance': 1.0,
-    });
-  }
-
-  // --- LECTURA GENERAL ---
+  // --- LECTURAS ---
   Future<List<OrdenInternaDetalle>> getOrdenes({String? estado}) async {
     Query query = _firestore.collection(_collection).orderBy('createdAt', descending: true);
     if (estado != null) query = query.where('estado', isEqualTo: estado);
+
     final snap = await query.get();
     return snap.docs.map((d) {
       final data = d.data() as Map<String, dynamic>;
@@ -322,32 +322,67 @@ class OrdenInternaRepository {
   Future<OrdenInternaDetalle?> getOrdenPorId(String id) async {
     final doc = await _firestore.collection(_collection).doc(id).get();
     if (!doc.exists) return null;
+
     final data = doc.data()!;
     data['id'] = doc.id;
+
     final itemsSnap = await doc.reference.collection('items').get();
     final items = itemsSnap.docs.map((d) {
       final idata = d.data();
       idata['id'] = d.id;
-      return OrdenItemDetalle(
-        item: OrdenItem.fromMap(idata),
-        productoNombre: idata['productoNombre'] ?? '?',
-        productoCodigo: idata['productoCodigo'] ?? '?',
-        unidadBase: idata['unidadBase'] ?? 'u',
-        categoriaNombre: '',
-      );
+      return OrdenItem.fromMap(idata);
     }).toList();
+
+    final itemsDetalle = items.map((i) => OrdenItemDetalle(item: i)).toList();
+
     return OrdenInternaDetalle(
       orden: OrdenInterna.fromMap(data),
       clienteRazonSocial: data['clienteRazonSocial'] ?? '?',
       obraNombre: data['obraNombre'],
-      items: items,
+      items: itemsDetalle,
     );
   }
 
-  Future<void> eliminar(String id) async {
-    final ref = _firestore.collection(_collection).doc(id);
-    final items = await ref.collection('items').get();
-    for (var doc in items.docs) await doc.reference.delete();
-    await ref.delete();
+  Future<List<OrdenInternaDetalle>> getOrdenesPorCliente(String clienteId) async {
+    try {
+      final snap = await _firestore.collection(_collection)
+          .where('clienteId', isEqualTo: clienteId)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return snap.docs.map((d) {
+        final data = d.data();
+        data['id'] = d.id;
+        return OrdenInternaDetalle(
+          orden: OrdenInterna.fromMap(data),
+          clienteRazonSocial: data['clienteRazonSocial'] ?? '?',
+          obraNombre: data['obraNombre'],
+          items: [],
+        );
+      }).toList();
+    } catch (e) {
+      return [];
+    }
   }
+
+  Future<List<Remito>> obtenerRemitos(String ordenId) async {
+    final snap = await _firestore.collection(_collection).doc(ordenId).collection('remitos').orderBy('fecha', descending: true).get();
+    return snap.docs.map((doc) => Remito.fromMap(doc.data(), doc.id)).toList();
+  }
+
+  Future<void> eliminar(String id) async {
+    await _firestore.collection(_collection).doc(id).delete();
+  }
+
+  Future<void> asignarResponsable(String ordenId, String uid, String nombre) async {
+    await _firestore.collection(_collection).doc(ordenId).update({'responsableEntregaId': uid, 'responsableEntregaNombre': nombre});
+  }
+
+  Future<void> etiquetarUsuario(String ordenId, String uid) async {
+    await _firestore.collection(_collection).doc(ordenId).update({'usuariosEtiquetados': FieldValue.arrayUnion([uid])});
+  }
+
+  Future<void> finalizarEntregaConFirma({required String ordenId, required Uint8List firmaBytes}) async {}
+  Future<List<OrdenInternaDetalle>> getMisDespachos(String userId) async => [];
+  Future<void> registrarDespacho({required String ordenId, required String ordenNumero, required String obraId, required String usuarioId, required String usuarioNombre, required List<Map<String, dynamic>> itemsDespachados}) async { throw UnimplementedError(); }
 }
