@@ -11,9 +11,6 @@ class MovimientoStockProvider extends ChangeNotifier {
   List<MovimientoStock> _movimientos = [];
   String? _errorMessage;
 
-  // Filtros actuales
-  DateTime? _fechaDesde;
-  DateTime? _fechaHasta;
   TipoMovimiento? _tipoFiltro;
   String? _productoFiltroCodigo;
 
@@ -22,11 +19,8 @@ class MovimientoStockProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isLoading => _state == MovimientoStockState.loading || _state == MovimientoStockState.registering;
 
-  // Carga general (Reporte)
   Future<void> cargarMovimientos({DateTime? desde, DateTime? hasta, TipoMovimiento? tipo}) async {
     _state = MovimientoStockState.loading;
-    _fechaDesde = desde;
-    _fechaHasta = hasta;
     _tipoFiltro = tipo;
     _productoFiltroCodigo = null;
     notifyListeners();
@@ -45,7 +39,6 @@ class MovimientoStockProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ CORREGIDO: Ahora acepta el parámetro 'tipo'
   Future<void> cargarMovimientosDeProducto(String productoId, {TipoMovimiento? tipo}) async {
     _state = MovimientoStockState.loading;
     _productoFiltroCodigo = productoId;
@@ -72,8 +65,10 @@ class MovimientoStockProvider extends ChangeNotifier {
     String? motivo,
     String? referencia,
     String? usuarioId,
+    // ✅ Parametros Obra
+    String? obraId,
+    String? obraNombre,
   }) async {
-    // Evitar doble clic
     if (_state == MovimientoStockState.registering) return false;
 
     try {
@@ -88,9 +83,11 @@ class MovimientoStockProvider extends ChangeNotifier {
         motivo: motivo,
         referencia: referencia,
         usuarioId: usuarioId,
+        obraId: obraId,        // ✅ Pasar al repo
+        obraNombre: obraNombre, // ✅ Pasar al repo
       );
 
-      // Recargar según donde estábamos
+      // Recargar lista si estamos viendo el detalle
       if (_productoFiltroCodigo != null) {
         await cargarMovimientosDeProducto(_productoFiltroCodigo!, tipo: _tipoFiltro);
       } else {

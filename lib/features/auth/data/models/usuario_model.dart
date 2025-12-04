@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/constants/app_roles.dart';
 
 class UsuarioModel extends Equatable {
   final String uid;
@@ -7,40 +8,50 @@ class UsuarioModel extends Equatable {
   final String nombre;
   final String organizationId;
   final String rol;
-  final String estado;
-  final Map<String, bool> permisos;
+  final String estado; // 'pendiente', 'activo', 'bloqueado'
+
+  // ✅ ESTE ES EL CAMPO QUE FALTA
+  final Map<String, bool> permisosEspeciales;
 
   const UsuarioModel({
     required this.uid,
     required this.email,
     required this.nombre,
     required this.organizationId,
-    this.rol = 'usuario',
+    this.rol = AppRoles.panolero,
     this.estado = 'pendiente',
-    this.permisos = const {},
+    this.permisosEspeciales = const {},
   });
 
-  bool tienePermiso(String key) {
-    if (rol == 'admin') return true;
-    return permisos[key] == true;
+  // --- LÓGICA DE SEGURIDAD ---
+  bool tienePermiso(String permiso) {
+    if (rol == AppRoles.admin) return true;
+    if (estado != 'activo') return false;
+
+    if (permisosEspeciales.containsKey(permiso)) {
+      return permisosEspeciales[permiso]!;
+    }
+    return AppRoles.tienePermisoBase(rol, permiso);
   }
 
-  // ✅ MÉTODO QUE FALTABA: fromFirestore
+  // --- GETTERS (CRUCIALES) ---
+  bool get esAdmin => rol == AppRoles.admin;
+  bool get esJefeObra => rol == AppRoles.jefeObra;
+  bool get esPanolero => rol == AppRoles.panolero;
+
+  // --- FACTORIES ---
   factory UsuarioModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
-
-    if (data == null) {
-      throw Exception('Documento vacío para usuario ${doc.id}');
-    }
+    if (data == null) throw Exception("Usuario vacío");
 
     return UsuarioModel(
       uid: doc.id,
       email: data['email'] ?? '',
       nombre: data['nombre'] ?? 'Sin Nombre',
       organizationId: data['organizationId'] ?? '',
-      rol: data['rol'] ?? 'usuario',
+      rol: data['rol'] ?? AppRoles.panolero,
       estado: data['estado'] ?? 'pendiente',
-      permisos: Map<String, bool>.from(data['permisos'] ?? {}),
+      permisosEspeciales: Map<String, bool>.from(data['permisos'] ?? {}),
     );
   }
 
@@ -50,9 +61,9 @@ class UsuarioModel extends Equatable {
       email: map['email'] ?? '',
       nombre: map['nombre'] ?? 'Sin Nombre',
       organizationId: map['organizationId'] ?? '',
-      rol: map['rol'] ?? 'usuario',
+      rol: map['rol'] ?? AppRoles.panolero,
       estado: map['estado'] ?? 'pendiente',
-      permisos: Map<String, bool>.from(map['permisos'] ?? {}),
+      permisosEspeciales: Map<String, bool>.from(map['permisos'] ?? {}),
     );
   }
 
@@ -63,8 +74,17 @@ class UsuarioModel extends Equatable {
       'organizationId': organizationId,
       'rol': rol,
       'estado': estado,
-      'permisos': permisos,
-      'createdAt': FieldValue.serverTimestamp(),
+      'permisos': permisosEspeciales,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+  }
+
+  Map<String, dynamic> toUpdateMap() {
+    return {
+      'rol': rol,
+      'estado': estado,
+      'permisos': permisosEspeciales,
+      'updatedAt': FieldValue.serverTimestamp(),
     };
   }
 
@@ -72,7 +92,7 @@ class UsuarioModel extends Equatable {
     String? nombre,
     String? rol,
     String? estado,
-    Map<String, bool>? permisos,
+    Map<String, bool>? permisosEspeciales,
   }) {
     return UsuarioModel(
       uid: uid,
@@ -81,10 +101,10 @@ class UsuarioModel extends Equatable {
       nombre: nombre ?? this.nombre,
       rol: rol ?? this.rol,
       estado: estado ?? this.estado,
-      permisos: permisos ?? this.permisos,
+      permisosEspeciales: permisosEspeciales ?? this.permisosEspeciales,
     );
   }
 
   @override
-  List<Object?> get props => [uid, organizationId, estado, permisos, rol];
+  List<Object?> get props => [uid, organizationId, estado, rol, permisosEspeciales];
 }

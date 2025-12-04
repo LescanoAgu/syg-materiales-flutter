@@ -6,12 +6,15 @@ class MovimientoStockRepository {
 
   Future<MovimientoStock> registrarMovimiento({
     required String productoId,
-    required String productoNombre, // ✅ NUEVO
+    required String productoNombre,
     required TipoMovimiento tipo,
     required double cantidad,
     String? motivo,
     String? referencia,
     String? usuarioId,
+    // ✅ NUEVOS PARAMETROS
+    String? obraId,
+    String? obraNombre,
   }) async {
 
     final stockRef = _firestore.collection('stock').doc(productoId);
@@ -21,7 +24,6 @@ class MovimientoStockRepository {
       final stockDoc = await transaction.get(stockRef);
       double stockActual = 0;
 
-      // Si no existe el stock, lo inicializamos
       if (stockDoc.exists) {
         stockActual = (stockDoc.data()?['cantidadDisponible'] as num?)?.toDouble() ?? 0.0;
       }
@@ -29,7 +31,7 @@ class MovimientoStockRepository {
       double nuevoStock = stockActual;
       if (tipo == TipoMovimiento.entrada) nuevoStock += cantidad;
       if (tipo == TipoMovimiento.salida) nuevoStock -= cantidad;
-      if (tipo == TipoMovimiento.ajuste) nuevoStock = cantidad;
+      if (tipo == TipoMovimiento.ajuste) nuevoStock = cantidad; // Ajuste fija el valor
 
       // Actualizar Stock
       transaction.set(stockRef, {
@@ -43,11 +45,11 @@ class MovimientoStockRepository {
         'cantidadDisponible': nuevoStock
       });
 
-      // Crear Movimiento con NOMBRE
+      // Crear Movimiento
       final mov = MovimientoStock(
         id: movRef.id,
         productoId: productoId,
-        productoNombre: productoNombre, // Guardamos el nombre
+        productoNombre: productoNombre,
         tipo: tipo,
         cantidad: cantidad,
         cantidadAnterior: stockActual,
@@ -56,6 +58,8 @@ class MovimientoStockRepository {
         referencia: referencia,
         usuarioId: usuarioId,
         createdAt: DateTime.now(),
+        obraId: obraId,      // ✅ Guardar
+        obraNombre: obraNombre, // ✅ Guardar
       );
 
       transaction.set(movRef, mov.toMap());
@@ -63,7 +67,6 @@ class MovimientoStockRepository {
     });
   }
 
-  // ... (el resto del archivo obtenerMovimientos sigue igual)
   Future<List<MovimientoStock>> obtenerMovimientos({
     String? productoId,
     DateTime? desde,
@@ -74,23 +77,17 @@ class MovimientoStockRepository {
 
     if (productoId != null) query = query.where('productoId', isEqualTo: productoId);
     if (tipo != null) query = query.where('tipo', isEqualTo: tipo.name);
-
-    // Filtro de fechas básico
     if (desde != null) {
       query = query.where('createdAt', isGreaterThanOrEqualTo: desde.toIso8601String());
     }
-    // Nota: 'hasta' requiere lógica compleja en string, lo ideal es filtrar en memoria si son pocos datos
-    // o usar Timestamp de Firestore. Por simplicidad, filtramos en memoria lo que falte.
 
-    final snapshot = await query.limit(100).get(); // Aumentamos límite
-
+    final snapshot = await query.limit(100).get();
     var lista = snapshot.docs.map((d) {
       final data = d.data() as Map<String, dynamic>;
       data['id'] = d.id;
       return MovimientoStock.fromMap(data);
     }).toList();
 
-    // Filtro memoria para 'hasta' si hace falta
     if (hasta != null) {
       lista = lista.where((m) => m.createdAt.isBefore(hasta.add(const Duration(days: 1)))).toList();
     }

@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/cliente_model.dart';
 import '../providers/cliente_provider.dart';
 import 'cliente_form_page.dart';
 
 class ClientesListPage extends StatefulWidget {
-  const ClientesListPage({super.key});
+  // ✅ CORRECCIÓN
+  final bool esNavegacionPrincipal;
+  const ClientesListPage({super.key, this.esNavegacionPrincipal = false});
+
   @override
   State<ClientesListPage> createState() => _ClientesListPageState();
 }
@@ -26,6 +28,9 @@ class _ClientesListPageState extends State<ClientesListPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Si es principal, solo devolvemos el body
+    if (widget.esNavegacionPrincipal) return _buildBody();
+
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
@@ -42,37 +47,41 @@ class _ClientesListPageState extends State<ClientesListPage> {
         icon: const Icon(Icons.add),
         label: const Text('Nuevo Cliente'),
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Buscar cliente...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true, fillColor: Colors.white,
-              ),
-              onChanged: (v) => context.read<ClienteProvider>().buscarClientes(v),
-            ),
-          ),
-          Expanded(
-            child: Consumer<ClienteProvider>(
-              builder: (ctx, provider, _) {
-                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-                if (provider.clientes.isEmpty) return const Center(child: Text('Sin clientes'));
+      body: _buildBody(),
+    );
+  }
 
-                return ListView.builder(
-                  itemCount: provider.clientes.length,
-                  padding: const EdgeInsets.only(bottom: 80),
-                  itemBuilder: (ctx, i) => _buildCard(provider.clientes[i]),
-                );
-              },
+  Widget _buildBody() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Buscar cliente...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              filled: true, fillColor: Colors.white,
             ),
+            onChanged: (v) => context.read<ClienteProvider>().buscarClientes(v),
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: Consumer<ClienteProvider>(
+            builder: (ctx, provider, _) {
+              if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+              if (provider.clientes.isEmpty) return const Center(child: Text('Sin clientes'));
+
+              return ListView.builder(
+                itemCount: provider.clientes.length,
+                padding: const EdgeInsets.only(bottom: 80),
+                itemBuilder: (ctx, i) => _buildCard(provider.clientes[i]),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -82,7 +91,7 @@ class _ClientesListPageState extends State<ClientesListPage> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: AppColors.primary.withOpacity(0.1),
-          child: Text(c.razonSocial[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+          child: Text(c.razonSocial.isNotEmpty ? c.razonSocial[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
         ),
         title: Text(c.razonSocial, style: const TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('${c.codigo} • ${c.cuitFormateado}'),
