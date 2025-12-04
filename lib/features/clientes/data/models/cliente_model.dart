@@ -1,60 +1,55 @@
-/// Modelo de datos para Cliente
-class ClienteModel {
-  final String? id;
+import 'package:equatable/equatable.dart';
+
+class ClienteModel extends Equatable {
+  final String id; // Ahora es String no nullable (usamos '' si es nuevo)
   final String codigo;
   final String razonSocial;
   final String? cuit;
   final String? condicionIva;
-  final String? condicionPago;
   final String? telefono;
   final String? email;
   final String? direccion;
   final String? localidad;
-  final String? provincia;
-  final String? codigoPostal;
   final String? observaciones;
-  final String estado;
-  final String? createdAt;
-  final String? updatedAt;
+  final bool activo;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
 
-  ClienteModel({
-    this.id,
+  const ClienteModel({
+    required this.id,
     required this.codigo,
     required this.razonSocial,
     this.cuit,
     this.condicionIva,
-    this.condicionPago,
     this.telefono,
     this.email,
     this.direccion,
     this.localidad,
-    this.provincia,
-    this.codigoPostal,
     this.observaciones,
-    this.estado = 'activo',
-    this.createdAt,
+    this.activo = true,
+    required this.createdAt,
     this.updatedAt,
   });
 
-  factory ClienteModel.fromMap(Map<String, dynamic> map) {
+  factory ClienteModel.fromMap(Map<String, dynamic> map, String docId) {
     return ClienteModel(
-      // CORRECCIÓN: Casting seguro para evitar error de Object? a String?
-      id: map['id']?.toString(),
-      codigo: map['codigo']?.toString() ?? '',
-      razonSocial: map['razonSocial']?.toString() ?? '',
-      cuit: map['cuit']?.toString(),
-      condicionIva: map['condicionIva']?.toString(),
-      condicionPago: map['condicionPago']?.toString(),
-      telefono: map['telefono']?.toString(),
-      email: map['email']?.toString(),
-      direccion: map['direccion']?.toString(),
-      localidad: map['localidad']?.toString(),
-      provincia: map['provincia']?.toString(),
-      codigoPostal: map['codigoPostal']?.toString(),
-      observaciones: map['observaciones']?.toString(),
-      estado: map['estado']?.toString() ?? 'activo',
-      createdAt: map['createdAt']?.toString(),
-      updatedAt: map['updatedAt']?.toString(),
+      id: docId,
+      codigo: map['codigo'] ?? '',
+      razonSocial: map['razonSocial'] ?? '',
+      cuit: map['cuit'],
+      condicionIva: map['condicionIva'],
+      telefono: map['telefono'],
+      email: map['email'],
+      direccion: map['direccion'],
+      localidad: map['localidad'],
+      observaciones: map['observaciones'],
+      activo: map['activo'] ?? true,
+      createdAt: map['createdAt'] != null
+          ? DateTime.parse(map['createdAt'])
+          : DateTime.now(),
+      updatedAt: map['updatedAt'] != null
+          ? DateTime.parse(map['updatedAt'])
+          : null,
     );
   }
 
@@ -64,31 +59,54 @@ class ClienteModel {
       'razonSocial': razonSocial,
       'cuit': cuit,
       'condicionIva': condicionIva,
-      'condicionPago': condicionPago,
       'telefono': telefono,
       'email': email,
       'direccion': direccion,
       'localidad': localidad,
-      'provincia': provincia,
-      'codigoPostal': codigoPostal,
       'observaciones': observaciones,
-      'estado': estado,
-      'createdAt': createdAt,
-      'updatedAt': updatedAt,
+      'activo': activo,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
     };
   }
 
-  bool get isActivo => estado == 'activo';
-  String get displayName => razonSocial;
+  ClienteModel copyWith({
+    String? id,
+    String? codigo,
+    String? razonSocial,
+    String? cuit,
+    String? condicionIva,
+    String? telefono,
+    String? email,
+    String? direccion,
+    String? localidad,
+    String? observaciones,
+    bool? activo,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return ClienteModel(
+      id: id ?? this.id,
+      codigo: codigo ?? this.codigo,
+      razonSocial: razonSocial ?? this.razonSocial,
+      cuit: cuit ?? this.cuit,
+      condicionIva: condicionIva ?? this.condicionIva,
+      telefono: telefono ?? this.telefono,
+      email: email ?? this.email,
+      direccion: direccion ?? this.direccion,
+      localidad: localidad ?? this.localidad,
+      observaciones: observaciones ?? this.observaciones,
+      activo: activo ?? this.activo,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
   String get cuitFormateado {
     if (cuit == null || cuit!.length != 11) return cuit ?? '-';
     return '${cuit!.substring(0, 2)}-${cuit!.substring(2, 10)}-${cuit!.substring(10)}';
   }
 
-  String get direccionCompleta {
-    List<String> partes = [];
-    if (direccion != null && direccion!.isNotEmpty) partes.add(direccion!);
-    if (localidad != null && localidad!.isNotEmpty) partes.add(localidad!);
-    return partes.isEmpty ? '-' : partes.join(', ');
-  }
+  @override
+  List<Object?> get props => [id, codigo, razonSocial, cuit, activo, createdAt];
 }
