@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_roles.dart';
 import '../../../../features/auth/data/models/usuario_model.dart';
 import '../providers/usuarios_provider.dart';
 
@@ -22,8 +23,8 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
     super.initState();
     _rolSeleccionado = widget.usuario.rol;
     _estadoSeleccionado = widget.usuario.estado;
-    // Copia de seguridad de los permisos para editar
-    _permisosTemp = Map.from(widget.usuario.permisos);
+    // ✅ AHORA SÍ EXISTE ESTE CAMPO
+    _permisosTemp = Map.from(widget.usuario.permisosEspeciales);
   }
 
   @override
@@ -33,7 +34,7 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _guardarCambios,
         icon: const Icon(Icons.save),
-        label: const Text('GUARDAR CAMBIOS'),
+        label: const Text('GUARDAR'),
         backgroundColor: AppColors.primary,
       ),
       body: SingleChildScrollView(
@@ -41,7 +42,6 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ESTADO Y ROL
             _buildSectionTitle('Estado y Rol'),
             Card(
               child: Padding(
@@ -49,7 +49,7 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
                 child: Column(
                   children: [
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Estado de la cuenta'),
+                      decoration: const InputDecoration(labelText: 'Estado', border: OutlineInputBorder()),
                       value: _estadoSeleccionado,
                       items: const [
                         DropdownMenuItem(value: 'pendiente', child: Text('⏳ Pendiente')),
@@ -60,15 +60,20 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Rol Base'),
+                      decoration: const InputDecoration(labelText: 'Rol', border: OutlineInputBorder()),
                       value: _rolSeleccionado,
-                      items: const [
-                        DropdownMenuItem(value: 'admin', child: Text('🛡️ Administrador')),
-                        DropdownMenuItem(value: 'pañolero', child: Text('📦 Pañolero')),
-                        DropdownMenuItem(value: 'jefe_obra', child: Text('👷 Jefe de Obra')),
-                        DropdownMenuItem(value: 'usuario', child: Text('👤 Usuario Básico')),
+                      items: [
+                        _buildRoleItem(AppRoles.admin),
+                        _buildRoleItem(AppRoles.jefeObra),
+                        _buildRoleItem(AppRoles.panolero),
+                        _buildRoleItem(AppRoles.observador),
                       ],
-                      onChanged: (v) => setState(() => _rolSeleccionado = v!),
+                      onChanged: (v) {
+                        setState(() {
+                          _rolSeleccionado = v!;
+                          _permisosTemp.clear();
+                        });
+                      },
                     ),
                   ],
                 ),
@@ -77,29 +82,49 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
 
             const SizedBox(height: 24),
 
-            // PERMISOS ESPECÍFICOS
-            _buildSectionTitle('Permisos Específicos'),
-            const Text('Define qué puede ver o hacer este usuario.', style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 8),
+            if (_rolSeleccionado != AppRoles.admin) ...[
+              _buildSectionTitle('Ajuste Fino de Permisos'),
+              const Text('Modifica permisos específicos fuera del rol base.', style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 8),
 
-            _buildSwitch('ver_precios', 'Ver Precios', 'Permite ver costos en el catálogo y órdenes.'),
-            _buildSwitch('crear_orden', 'Crear Órdenes', 'Puede generar nuevas solicitudes de material.'),
-            _buildSwitch('gestionar_stock', 'Ajustar Stock', 'Puede registrar entradas, salidas y ajustes.'),
-            _buildSwitch('aprobar_usuarios', 'Gestionar Usuarios', 'Puede aprobar nuevos registros (Admin).'),
-            _buildSwitch('ver_reportes', 'Ver Reportes', 'Acceso a estadísticas y descargas PDF.'),
+              _buildSwitch(AppRoles.verPrecios, 'Ver Precios', 'Ver costos en catálogo'),
+              _buildSwitch(AppRoles.crearOrden, 'Crear Órdenes', 'Solicitar materiales'),
+              _buildSwitch(AppRoles.aprobarOrden, 'Aprobar Órdenes', 'Autorizar salidas'),
+              _buildSwitch(AppRoles.gestionarStock, 'Gestionar Stock', 'Ajustes, entradas y salidas'),
+              _buildSwitch(AppRoles.verReportes, 'Ver Reportes', 'Estadísticas y PDF'),
+            ],
           ],
         ),
       ),
     );
   }
 
+  DropdownMenuItem<String> _buildRoleItem(String rolKey) {
+    return DropdownMenuItem(
+      value: rolKey,
+      child: Text(AppRoles.labels[rolKey] ?? rolKey),
+    );
+  }
+
   Widget _buildSwitch(String key, String titulo, String subtitulo) {
+    final tienePorRol = AppRoles.tienePermisoBase(_rolSeleccionado, key);
+    final valorActual = _permisosTemp.containsKey(key) ? _permisosTemp[key]! : tienePorRol;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
+      elevation: 0,
+      color: tienePorRol ? Colors.grey[50] : Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
       child: SwitchListTile(
         title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subtitulo, style: const TextStyle(fontSize: 12)),
-        value: _permisosTemp[key] ?? false,
+        subtitle: Text(
+          tienePorRol ? '$subtitulo (Incluido en Rol)' : subtitulo,
+          style: TextStyle(fontSize: 12, color: tienePorRol ? AppColors.primary : Colors.grey),
+        ),
+        value: valorActual,
         activeColor: AppColors.primary,
         onChanged: (val) {
           setState(() {
@@ -120,18 +145,18 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
   Future<void> _guardarCambios() async {
     final usuarioActualizado = widget.usuario.copyWith(
       estado: _estadoSeleccionado,
-      rol: _rolSeleccionado, // Usamos 'rol' (corregido según tu modelo)
-      permisos: _permisosTemp,
+      rol: _rolSeleccionado,
+      permisosEspeciales: _permisosTemp, // ✅ PARAMETRO CORREGIDO
     );
 
     final exito = await context.read<UsuariosProvider>().guardarCambiosUsuario(usuarioActualizado);
 
     if (mounted) {
       if (exito) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Usuario actualizado'), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Guardado'), backgroundColor: AppColors.success));
         Navigator.pop(context);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Error al guardar'), backgroundColor: AppColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Error'), backgroundColor: AppColors.error));
       }
     }
   }
