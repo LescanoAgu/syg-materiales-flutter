@@ -5,9 +5,9 @@ import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/cliente_model.dart';
 import '../providers/cliente_provider.dart';
 import 'cliente_form_page.dart';
+import 'cliente_detalle_page.dart'; // ✅ Importamos la nueva ficha
 
 class ClientesListPage extends StatefulWidget {
-  // ✅ CORRECCIÓN
   final bool esNavegacionPrincipal;
   const ClientesListPage({super.key, this.esNavegacionPrincipal = false});
 
@@ -28,13 +28,13 @@ class _ClientesListPageState extends State<ClientesListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Si es principal, solo devolvemos el body
+    // Si es navegación principal (desde Home), solo mostramos el contenido
     if (widget.esNavegacionPrincipal) return _buildBody();
 
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text('Clientes'),
+        title: const Text('Directorio de Clientes'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -44,8 +44,9 @@ class _ClientesListPageState extends State<ClientesListPage> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _mostrarFormulario(context),
-        icon: const Icon(Icons.add),
+        icon: const Icon(Icons.person_add),
         label: const Text('Nuevo Cliente'),
+        backgroundColor: AppColors.primary,
       ),
       body: _buildBody(),
     );
@@ -54,29 +55,53 @@ class _ClientesListPageState extends State<ClientesListPage> {
   Widget _buildBody() {
     return Column(
       children: [
-        Padding(
+        // Buscador
+        Container(
           padding: const EdgeInsets.all(16),
+          color: AppColors.primary.withOpacity(0.05),
           child: TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: 'Buscar cliente...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true, fillColor: Colors.white,
+              hintText: 'Buscar por nombre, código o CUIT...',
+              prefixIcon: const Icon(Icons.search, color: AppColors.primary),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: () {
+                  _searchController.clear();
+                  context.read<ClienteProvider>().buscarClientes('');
+                },
+              ),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              filled: true,
+              fillColor: Colors.white,
             ),
             onChanged: (v) => context.read<ClienteProvider>().buscarClientes(v),
           ),
         ),
+
+        // Lista
         Expanded(
           child: Consumer<ClienteProvider>(
             builder: (ctx, provider, _) {
               if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-              if (provider.clientes.isEmpty) return const Center(child: Text('Sin clientes'));
+              if (provider.clientes.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.person_off, size: 64, color: Colors.grey[300]),
+                      const SizedBox(height: 16),
+                      const Text('No se encontraron clientes', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                );
+              }
 
-              return ListView.builder(
+              return ListView.separated(
                 itemCount: provider.clientes.length,
-                padding: const EdgeInsets.only(bottom: 80),
-                itemBuilder: (ctx, i) => _buildCard(provider.clientes[i]),
+                padding: const EdgeInsets.only(bottom: 80, top: 8),
+                separatorBuilder: (_,__) => const Divider(height: 1, indent: 70),
+                itemBuilder: (ctx, i) => _buildClienteTile(provider.clientes[i]),
               );
             },
           ),
@@ -85,50 +110,56 @@ class _ClientesListPageState extends State<ClientesListPage> {
     );
   }
 
-  Widget _buildCard(ClienteModel c) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppColors.primary.withOpacity(0.1),
-          child: Text(c.razonSocial.isNotEmpty ? c.razonSocial[0].toUpperCase() : '?', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-        ),
-        title: Text(c.razonSocial, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('${c.codigo} • ${c.cuitFormateado}'),
-        onTap: () => _mostrarFormulario(context, cliente: c),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete, color: Colors.red),
-          onPressed: () => _confirmarBorrado(c),
+  Widget _buildClienteTile(ClienteModel c) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: CircleAvatar(
+        radius: 24,
+        backgroundColor: AppColors.secondary.withOpacity(0.1),
+        child: Text(
+          c.razonSocial.isNotEmpty ? c.razonSocial[0].toUpperCase() : '?',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.secondary, fontSize: 18),
         ),
       ),
-    );
-  }
-
-  void _confirmarBorrado(ClienteModel c) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('¿Eliminar Cliente?'),
-        content: Text('Se borrará ${c.razonSocial} permanentemente.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            onPressed: () {
-              context.read<ClienteProvider>().eliminarCliente(c.id ?? c.codigo);
-              Navigator.pop(ctx);
-            },
-            child: const Text('ELIMINAR'),
+      title: Text(c.razonSocial, style: const TextStyle(fontWeight: FontWeight.bold)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                child: Text(c.codigo, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              Text(c.cuitFormateado, style: const TextStyle(fontSize: 12)),
+            ],
           ),
+          if (c.direccion != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(c.direccion!, style: TextStyle(fontSize: 12, color: Colors.grey[600]), overflow: TextOverflow.ellipsis),
+            ),
         ],
       ),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
+      onTap: () => _navegarFicha(context, c),
     );
   }
 
-  void _mostrarFormulario(BuildContext context, {ClienteModel? cliente}) {
+  void _navegarFicha(BuildContext context, ClienteModel c) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ClienteFormPage(cliente: cliente)),
+      MaterialPageRoute(builder: (_) => ClienteDetallePage(cliente: c)),
+    ).then((_) => context.read<ClienteProvider>().cargarClientes());
+  }
+
+  void _mostrarFormulario(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ClienteFormPage()),
     ).then((_) => context.read<ClienteProvider>().cargarClientes());
   }
 }

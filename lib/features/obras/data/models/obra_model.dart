@@ -1,79 +1,102 @@
-class ObraModel {
-  final String? id;
+import 'package:equatable/equatable.dart';
+
+class ObraModel extends Equatable {
+  final String id; // ID de Firestore (no nullable)
   final String codigo;
-  final String clienteId;
   final String nombre;
-  final String direccion;
-  final String? horariosDescarga;
-  final String? contactoObra;
-  final String? telefonoObra;
-  final String? maestroObraNombre;
-  final String? maestroObraTelefono;
-  final String estado;
-  final String? createdAt;
 
-  // Campos desnormalizados
-  final String? clienteRazonSocial;
-  final String? clienteCodigo;
+  // Vinculación
+  final String clienteId;
+  final String clienteRazonSocial;
+  final String? clienteCodigo; // ✅ Campo necesario
 
-  ObraModel({
-    this.id,
+  final String? direccion;
+  final String? localidad;
+
+  // Contacto (Reemplaza a los campos sueltos antiguos)
+  final String? nombreContacto;
+  final String? telefonoContacto;
+
+  // Ubicación
+  final double? latitud;
+  final double? longitud;
+
+  // Estado y Fechas
+  final String estado; // 'activa', 'finalizada', 'pausada'
+  final DateTime fechaInicio;
+  final DateTime? fechaFinEstimada;
+
+  const ObraModel({
+    required this.id,
     required this.codigo,
-    required this.clienteId,
     required this.nombre,
-    required this.direccion,
-    this.horariosDescarga,
-    this.contactoObra,
-    this.telefonoObra,
-    this.maestroObraNombre,
-    this.maestroObraTelefono,
+    required this.clienteId,
+    required this.clienteRazonSocial,
+    this.clienteCodigo,
+    this.direccion,
+    this.localidad,
+    this.nombreContacto,
+    this.telefonoContacto,
+    this.latitud,
+    this.longitud,
     this.estado = 'activa',
-    this.createdAt,
-    this.clienteRazonSocial, // Inicializado aquí
-    this.clienteCodigo,      // Inicializado aquí
+    required this.fechaInicio,
+    this.fechaFinEstimada,
   });
 
-  factory ObraModel.fromMap(Map<String, dynamic> map) {
+  factory ObraModel.fromMap(Map<String, dynamic> map, String docId) {
     return ObraModel(
-      id: map['id']?.toString(),
-      codigo: map['codigo']?.toString() ?? '',
-      clienteId: map['clienteId']?.toString() ?? '',
-      nombre: map['nombre']?.toString() ?? '',
-      direccion: map['direccion']?.toString() ?? '',
-      horariosDescarga: map['horariosDescarga']?.toString(),
-      contactoObra: map['contactoObra']?.toString(),
-      telefonoObra: map['telefonoObra']?.toString(),
-      maestroObraNombre: map['maestroObraNombre']?.toString(),
-      maestroObraTelefono: map['maestroObraTelefono']?.toString(),
-      estado: map['estado']?.toString() ?? 'activa',
-      createdAt: map['createdAt']?.toString(),
-      clienteRazonSocial: map['clienteRazonSocial']?.toString(),
-      clienteCodigo: map['clienteCodigo']?.toString(),
+      id: docId,
+      codigo: map['codigo'] ?? '',
+      nombre: map['nombre'] ?? '',
+      clienteId: map['clienteId'] ?? '',
+      clienteRazonSocial: map['clienteRazonSocial'] ?? '',
+      clienteCodigo: map['clienteCodigo'],
+      direccion: map['direccion'],
+      localidad: map['localidad'],
+      // Soporte para datos viejos si existen
+      nombreContacto: map['nombreContacto'] ?? map['maestroObraNombre'],
+      telefonoContacto: map['telefonoContacto'] ?? map['maestroObraTelefono'],
+      latitud: (map['latitud'] as num?)?.toDouble(),
+      longitud: (map['longitud'] as num?)?.toDouble(),
+      estado: map['estado'] ?? 'activa',
+      fechaInicio: map['fechaInicio'] != null
+          ? DateTime.parse(map['fechaInicio'])
+          : DateTime.now(),
+      fechaFinEstimada: map['fechaFinEstimada'] != null
+          ? DateTime.parse(map['fechaFinEstimada'])
+          : null,
     );
   }
-
-  // Método necesario para evitar el error 'argument_type_not_assignable' en ObraConCliente
-  // Básicamente, si usas ObraModel como ObraConCliente en la UI
-  String get nombreCompleto => '$nombre - ${clienteRazonSocial ?? "Sin cliente"}';
 
   Map<String, dynamic> toMap() {
     return {
       'codigo': codigo,
-      'clienteId': clienteId,
       'nombre': nombre,
-      'direccion': direccion,
-      'horariosDescarga': horariosDescarga,
-      'contactoObra': contactoObra,
-      'telefonoObra': telefonoObra,
-      'maestroObraNombre': maestroObraNombre,
-      'maestroObraTelefono': maestroObraTelefono,
-      'estado': estado,
-      'createdAt': createdAt,
+      'clienteId': clienteId,
       'clienteRazonSocial': clienteRazonSocial,
       'clienteCodigo': clienteCodigo,
+      'direccion': direccion,
+      'localidad': localidad,
+      'nombreContacto': nombreContacto,
+      'telefonoContacto': telefonoContacto,
+      'latitud': latitud,
+      'longitud': longitud,
+      'estado': estado,
+      'fechaInicio': fechaInicio.toIso8601String(),
+      'fechaFinEstimada': fechaFinEstimada?.toIso8601String(),
     };
   }
-}
 
-// Alias para compatibilidad con código viejo que espera esta clase
-typedef ObraConCliente = ObraModel;
+  // Getters de compatibilidad (evitan errores en FormPage viejo si no se actualiza)
+  String? get maestroObraNombre => nombreContacto;
+  String? get maestroObraTelefono => telefonoContacto;
+  String? get contactoObra => nombreContacto;
+  String? get telefonoObra => telefonoContacto;
+
+  // Getter fake para compatibilidad
+  DateTime get createdAt => fechaInicio;
+
+  @override
+  List<Object?> get props => [id, codigo, nombre, clienteId, estado];
+}
