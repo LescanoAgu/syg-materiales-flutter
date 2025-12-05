@@ -1,8 +1,11 @@
+// UBICACIÓN: lib/features/ordenes_internas/presentation/pages/orden_despacho_page.dart
+
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:signature/signature.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_text_styles.dart';
 import '../../data/models/orden_interna_model.dart';
 import '../providers/orden_interna_provider.dart';
 import '../../../../features/auth/presentation/providers/auth_provider.dart';
@@ -19,22 +22,18 @@ class OrdenDespachoPage extends StatefulWidget {
 class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
   final Map<String, TextEditingController> _controllers = {};
 
+  // Controladores de firma
   final SignatureController _firmaAutorizaCtrl = SignatureController(
-      penStrokeWidth: 3,
-      penColor: Colors.black,
-      exportBackgroundColor: Colors.white
-  );
+      penStrokeWidth: 3, penColor: Colors.black, exportBackgroundColor: Colors.white);
   final SignatureController _firmaRecibeCtrl = SignatureController(
-      penStrokeWidth: 3,
-      penColor: Colors.black,
-      exportBackgroundColor: Colors.white
-  );
+      penStrokeWidth: 3, penColor: Colors.black, exportBackgroundColor: Colors.white);
 
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
+    // Inicializamos controladores solo para items pendientes
     for (var itemDetalle in widget.ordenDetalle.items) {
       if (!itemDetalle.estaCompleto) {
         _controllers[itemDetalle.item.id] = TextEditingController();
@@ -53,105 +52,69 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Generar Remito de Entrega')),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(title: const Text('Generar Remito')),
       body: _isSubmitting
-          ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(height: 20), Text("Generando Remito y Firmas...")]))
+          ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(height: 20), Text("Generando Remito Digital...")]))
           : SingleChildScrollView(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildBigHeader(), // ✅ HEADER GIGANTE NUEVO
-
+            _buildHeaderInfo(),
+            const SizedBox(height: 16),
+            _buildListaItems(),
+            const SizedBox(height: 24),
+            _buildSeccionFirmas(),
+            const SizedBox(height: 30),
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Seleccionar Materiales a Entregar", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  const SizedBox(height: 10),
-                  _buildListaItems(),
-                  const SizedBox(height: 30),
-                  const Divider(thickness: 2),
-                  const Text("Firmas Requeridas", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  const SizedBox(height: 10),
-                  _buildSeccionFirmas(),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.check_circle, size: 28),
-                      label: const Text("CONFIRMAR Y GENERAR REMITO", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green[700],
-                          foregroundColor: Colors.white,
-                          elevation: 5
-                      ),
-                      onPressed: _procesarDespacho,
-                    ),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.check_circle, size: 28),
+                  label: const Text("CONFIRMAR ENTREGA", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.success,
+                      foregroundColor: Colors.white,
+                      elevation: 4
                   ),
-                  const SizedBox(height: 40),
-                ],
+                  onPressed: _procesarDespacho,
+                ),
               ),
             ),
+            const SizedBox(height: 40),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildBigHeader() {
+  Widget _buildHeaderInfo() {
+    final orden = widget.ordenDetalle.orden;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
-        border: const Border(bottom: BorderSide(color: AppColors.primary, width: 2)),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.black12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("CLIENTE", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-          Text(
-            widget.ordenDetalle.clienteRazonSocial.toUpperCase(),
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
-          ),
-          const SizedBox(height: 12),
-
-          const Text("OBRA / DESTINO", style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-          Text(
-            widget.ordenDetalle.obraNombre?.toUpperCase() ?? "SIN OBRA",
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.black87),
-          ),
-          const SizedBox(height: 16),
-
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text("RESPONSABLE", style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                    Text(widget.ordenDetalle.orden.solicitanteNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
+              Text("DESTINO", style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.bold)),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.primary),
-                ),
-                child: Column(
-                  children: [
-                    const Text("ORDEN INTERNA", style: TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.bold)),
-                    Text(widget.ordenDetalle.orden.numero, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  ],
-                ),
-              )
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                child: Text(orden.numero, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
+              ),
             ],
-          )
+          ),
+          const SizedBox(height: 4),
+          Text(widget.ordenDetalle.obraNombre ?? "Sin obra", style: AppTextStyles.h2),
+          Text(widget.ordenDetalle.clienteRazonSocial, style: const TextStyle(fontSize: 14, color: Colors.grey)),
         ],
       ),
     );
@@ -160,79 +123,101 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
   Widget _buildListaItems() {
     final pendientes = widget.ordenDetalle.items.where((i) => !i.estaCompleto).toList();
 
-    if (pendientes.isEmpty) return const Padding(
-      padding: EdgeInsets.all(20),
-      child: Center(child: Text("¡Todo entregado! No hay items pendientes.")),
-    );
+    if (pendientes.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(30),
+        child: Center(child: Text("✅ Orden Completada. No hay items pendientes.")),
+      );
+    }
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: pendientes.length,
-      separatorBuilder: (_,__) => const Divider(),
-      itemBuilder: (ctx, i) {
-        final d = pendientes[i];
-        final pendiente = d.cantidadFinal - d.item.cantidadEntregada;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Materiales a entregar hoy", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: pendientes.length,
+            separatorBuilder: (_,__) => const SizedBox(height: 10),
+            itemBuilder: (ctx, i) {
+              final d = pendientes[i];
+              final pendiente = d.cantidadFinal - d.item.cantidadEntregada;
+              final controller = _controllers[d.item.id];
 
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(d.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
-                          child: Text(d.item.origen.name.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(width: 8),
-                        Text("Faltan: ${pendiente.toStringAsFixed(1)} ${d.unidadBase}", style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-                      ],
-                    )
-                  ],
+              return Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey.shade300)
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 1,
-                child: TextField(
-                  controller: _controllers[d.item.id],
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  decoration: const InputDecoration(
-                      labelText: 'Cant.',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 12)
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      // Info Item
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(d.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text("Faltan entregar: ${pendiente.toStringAsFixed(1)} ${d.unidadBase}",
+                                style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12)),
+                            Text("Origen: ${d.item.origen.name}", style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                          ],
+                        ),
+                      ),
+
+                      // Input Cantidad
+                      SizedBox(
+                        width: 70,
+                        child: TextField(
+                          controller: controller,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          textAlign: TextAlign.center,
+                          decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                            hintText: '0',
+                          ),
+                        ),
+                      ),
+
+                      // Botón "Todo"
+                      IconButton(
+                        icon: const Icon(Icons.all_inclusive, color: AppColors.primary),
+                        tooltip: 'Entregar Todo',
+                        onPressed: () => controller?.text = pendiente.toString(),
+                      )
+                    ],
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.all_inclusive, color: AppColors.primary),
-                tooltip: 'Entregar Todo',
-                onPressed: () => _controllers[d.item.id]!.text = pendiente.toString(),
-              )
-            ],
+              );
+            },
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
   Widget _buildSeccionFirmas() {
-    return Column(
-      children: [
-        _buildPadFirma("1. Autoriza Salida (Pañol/S&G)", _firmaAutorizaCtrl),
-        const SizedBox(height: 20),
-        _buildPadFirma("2. Recibe Conforme (Cliente/Flete)", _firmaRecibeCtrl),
-      ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("Firmas Requeridas", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const SizedBox(height: 10),
+          _buildPadFirma("1. Autoriza Salida (S&G)", _firmaAutorizaCtrl),
+          const SizedBox(height: 16),
+          _buildPadFirma("2. Recibe Conforme (Cliente/Flete)", _firmaRecibeCtrl),
+        ],
+      ),
     );
   }
 
@@ -240,35 +225,31 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(titulo, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        const SizedBox(height: 5),
+        Text(titulo, style: const TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
         Container(
           decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey),
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 5)]
+            border: Border.all(color: Colors.grey.shade400),
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
           ),
+          clipBehavior: Clip.antiAlias,
           child: Stack(
             children: [
               Signature(
                 controller: ctrl,
-                height: 160,
+                height: 120,
                 backgroundColor: Colors.white,
               ),
               Positioned(
-                right: 5,
-                top: 5,
+                right: 4,
+                top: 4,
                 child: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  icon: const Icon(Icons.clear, color: Colors.red, size: 20),
                   onPressed: () => ctrl.clear(),
                   tooltip: 'Borrar firma',
                 ),
               ),
-              const Positioned(
-                bottom: 5,
-                left: 5,
-                child: Text("Firme dentro del recuadro", style: TextStyle(color: Colors.grey, fontSize: 10)),
-              )
             ],
           ),
         ),
@@ -277,7 +258,7 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
   }
 
   Future<void> _procesarDespacho() async {
-    // 1. Validar cantidades
+    // 1. Recolectar datos
     final itemsAEnviar = <Map<String, dynamic>>[];
     bool hayItems = false;
 
@@ -289,18 +270,18 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
       }
     });
 
+    // 2. Validaciones
     if (!hayItems) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("❌ Ingresa al menos una cantidad a despachar")));
       return;
     }
 
-    // 2. Validar Firmas
     if (_firmaAutorizaCtrl.isEmpty || _firmaRecibeCtrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("❌ Ambas firmas son obligatorias para el remito")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("❌ Ambas firmas son obligatorias")));
       return;
     }
 
-    // 3. Procesar
+    // 3. Enviar
     setState(() => _isSubmitting = true);
 
     try {
@@ -310,7 +291,7 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
       final firmaAutorizaBytes = await _firmaAutorizaCtrl.toPngBytes();
       final firmaRecibeBytes = await _firmaRecibeCtrl.toPngBytes();
 
-      if (firmaAutorizaBytes == null || firmaRecibeBytes == null) throw Exception("Error procesando firmas");
+      if (firmaAutorizaBytes == null || firmaRecibeBytes == null) throw Exception("Error al procesar imágenes de firma");
 
       final exito = await context.read<OrdenInternaProvider>().generarRemito(
         ordenId: widget.ordenDetalle.orden.id!,
@@ -325,7 +306,7 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
         Navigator.pop(context, true); // Volver con éxito
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text("✅ Remito generado y guardado correctamente"),
+              content: Text("✅ Remito generado y stock descontado"),
               backgroundColor: Colors.green,
               duration: Duration(seconds: 3),
             )
@@ -333,17 +314,11 @@ class _OrdenDespachoPageState extends State<OrdenDespachoPage> {
       } else {
         if (mounted) {
           final errorMsg = context.read<OrdenInternaProvider>().errorMessage;
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text("Error: ${errorMsg ?? 'Desconocido'}"), backgroundColor: Colors.red)
-          );
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: ${errorMsg ?? 'Desconocido'}"), backgroundColor: Colors.red));
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Excepción UI: $e"), backgroundColor: Colors.red)
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

@@ -12,8 +12,6 @@ class ClienteProvider extends ChangeNotifier {
   List<ClienteModel> get clientes => _clientes;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  int get totalClientes => _clientes.length;
-  bool get hayMasPaginas => false; // Simplificado
 
   Future<void> cargarClientes({bool soloActivos = true}) async {
     _isLoading = true;
@@ -29,11 +27,8 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> cargarMasClientes() async {}
-
   Future<void> buscarClientes(String termino) async {
     if (termino.isEmpty) return cargarClientes();
-    // Filtro local simple
     _clientes = _clientes.where((c) =>
     c.razonSocial.toLowerCase().contains(termino.toLowerCase()) ||
         c.codigo.toLowerCase().contains(termino.toLowerCase()) ||
@@ -42,11 +37,12 @@ class ClienteProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> crearCliente(ClienteModel cliente) async {
+  // Unificamos crear/actualizar en guardar
+  Future<bool> guardarCliente(ClienteModel cliente) async {
     _isLoading = true;
     notifyListeners();
     try {
-      await _repository.crear(cliente);
+      await _repository.guardar(cliente);
       await cargarClientes();
       return true;
     } catch (e) {
@@ -58,26 +54,14 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> actualizarCliente(ClienteModel cliente) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      await _repository.actualizar(cliente);
-      await cargarClientes();
-      return true;
-    } catch (e) {
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  // Mantenemos los métodos viejos como alias para no romper otras pantallas si las hay
+  Future<bool> crearCliente(ClienteModel c) => guardarCliente(c);
+  Future<bool> actualizarCliente(ClienteModel c) => guardarCliente(c);
 
-  // ✅ NUEVO: Eliminar
   Future<bool> eliminarCliente(String id) async {
     try {
       await _repository.eliminar(id);
-      _clientes.removeWhere((c) => c.id == id || c.codigo == id);
+      _clientes.removeWhere((c) => c.id == id);
       notifyListeners();
       return true;
     } catch (e) {

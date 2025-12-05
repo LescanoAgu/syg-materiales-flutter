@@ -29,49 +29,35 @@ class ObraProvider extends ChangeNotifier {
 
   Future<void> buscarObras(String t) async {
     if (t.isEmpty) return cargarObras();
-    // Filtro local
+    // Filtro local simple
     _obras = _obras.where((o) => o.nombre.toLowerCase().contains(t.toLowerCase())).toList();
     notifyListeners();
   }
 
-  Future<bool> crearObra(ObraModel obra) async {
+  // ✅ Método unificado
+  Future<bool> guardarObra(ObraModel obra) async {
     try {
-      await _repository.crear(obra);
+      await _repository.guardar(obra);
       await cargarObras();
       return true;
     } catch (e) { return false; }
   }
 
-  Future<bool> actualizarObra(ObraModel obra) async {
-    try {
-      await _repository.actualizar(obra);
-      await cargarObras();
-      return true;
-    } catch (e) { return false; }
-  }
+  // Alias para mantener compatibilidad con pantallas no actualizadas (si las hubiera)
+  Future<bool> crearObra(ObraModel o) => guardarObra(o);
+  Future<bool> actualizarObra(ObraModel o) => guardarObra(o);
 
-  // ✅ NUEVO: Eliminar
   Future<bool> eliminarObra(String id) async {
     try {
       await _repository.eliminar(id);
-      _obras.removeWhere((o) => o.id == id || o.codigo == id);
+      _obras.removeWhere((o) => o.id == id);
       notifyListeners();
       return true;
     } catch (e) { return false; }
   }
 
   String generarNuevoCodigo() {
-    if (_obras.isEmpty) return 'OB-001';
-    try {
-      int max = 0;
-      for(var o in _obras) {
-        final parts = o.codigo.split('-');
-        if (parts.length>1) {
-          final n = int.tryParse(parts[1]) ?? 0;
-          if(n > max) max = n;
-        }
-      }
-      return 'OB-${(max+1).toString().padLeft(3, '0')}';
-    } catch (_) { return 'OB-${(_obras.length+1).toString().padLeft(3,'0')}'; }
+    // Generador simple basado en tiempo para evitar colisiones rápidas
+    return 'OB-${(DateTime.now().millisecondsSinceEpoch % 10000).toString()}';
   }
 }

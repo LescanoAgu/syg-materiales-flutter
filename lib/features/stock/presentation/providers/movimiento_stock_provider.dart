@@ -65,6 +65,9 @@ class MovimientoStockProvider extends ChangeNotifier {
     String? motivo,
     String? referencia,
     String? usuarioId,
+    // ✅ Parametros Obra
+    String? obraId,
+    String? obraNombre,
   }) async {
     if (_state == MovimientoStockState.registering) return false;
 
@@ -80,8 +83,11 @@ class MovimientoStockProvider extends ChangeNotifier {
         motivo: motivo,
         referencia: referencia,
         usuarioId: usuarioId,
+        obraId: obraId,        // ✅ Pasar al repo
+        obraNombre: obraNombre, // ✅ Pasar al repo
       );
 
+      // Recargar lista si estamos viendo el detalle
       if (_productoFiltroCodigo != null) {
         await cargarMovimientosDeProducto(_productoFiltroCodigo!, tipo: _tipoFiltro);
       } else {
