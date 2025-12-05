@@ -128,7 +128,11 @@ class PdfService {
       ),
     );
 
-    await Printing.sharePdf(bytes: await pdf.save(), filename: 'Orden_${orden.numero}.pdf');
+    // ✅ CAMBIO APLICADO: Nombre dinámico (OI-001 | CLIENTE - OBRA.pdf)
+    final obraNombre = ordenDetalle.obraNombre ?? 'Sin Obra';
+    final nombreArchivo = '${orden.numero} | ${ordenDetalle.clienteRazonSocial} - $obraNombre.pdf';
+
+    await Printing.sharePdf(bytes: await pdf.save(), filename: nombreArchivo);
   }
 
   // ===========================================================================

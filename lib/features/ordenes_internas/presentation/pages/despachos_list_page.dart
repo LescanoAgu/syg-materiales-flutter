@@ -5,10 +5,11 @@ import '../../../../core/widgets/app_drawer.dart';
 import '../../data/models/orden_interna_model.dart';
 import '../providers/orden_interna_provider.dart';
 import 'orden_despacho_page.dart';
-import '../../../../core/widgets/main_layout.dart';
 
 class DespachosListPage extends StatefulWidget {
-  const DespachosListPage({super.key});
+  final bool esNavegacionPrincipal;
+  const DespachosListPage({super.key, this.esNavegacionPrincipal = false});
+
   @override
   State<DespachosListPage> createState() => _DespachosListPageState();
 }
@@ -24,37 +25,53 @@ class _DespachosListPageState extends State<DespachosListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      drawer: const AppDrawer(currentSection: AppSection.ordenes),
-      appBar: AppBar(
-        title: const Text('Área de Despacho'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<OrdenInternaProvider>().cargarOrdenes(),
-          )
-        ],
-      ),
-      body: Consumer<OrdenInternaProvider>(
-        builder: (context, provider, _) {
-          if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+    final bool mostrarAppBar = !widget.esNavegacionPrincipal;
 
-          final despachosPendientes = provider.ordenes.where((d) {
-            final e = d.orden.estado;
-            return e == 'aprobado' || e == 'en_curso';
-          }).toList();
+    Widget content = Consumer<OrdenInternaProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
-          if (despachosPendientes.isEmpty) return _buildEmptyState();
+        // Filtramos lo que requiere acción logística
+        final despachosPendientes = provider.ordenes.where((d) {
+          final e = d.orden.estado;
+          return e == 'aprobado' || e == 'en_curso';
+        }).toList();
 
-          return ListView.builder(
+        if (despachosPendientes.isEmpty) return _buildEmptyState();
+
+        return RefreshIndicator(
+          onRefresh: () => context.read<OrdenInternaProvider>().cargarOrdenes(),
+          child: ListView.separated(
             padding: const EdgeInsets.all(16),
             itemCount: despachosPendientes.length,
+            separatorBuilder: (_,__) => const SizedBox(height: 12),
             itemBuilder: (ctx, i) => _buildDespachoCard(despachosPendientes[i]),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
+
+    if (mostrarAppBar) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        drawer: const AppDrawer(),
+        appBar: AppBar(
+          title: const Text('Área de Despacho'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () => context.read<OrdenInternaProvider>().cargarOrdenes(),
+            )
+          ],
+        ),
+        body: content,
+      );
+    } else {
+      return Container(
+        color: AppColors.background,
+        child: content,
+      );
+    }
   }
 
   Widget _buildEmptyState() {
@@ -62,9 +79,11 @@ class _DespachosListPageState extends State<DespachosListPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.local_shipping_outlined, size: 80, color: Colors.grey[400]),
+          Icon(Icons.check_circle_outline, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 16),
-          Text("No hay órdenes pendientes de despacho", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+          Text("¡Todo despachado!", style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          const Text("No hay órdenes pendientes de entrega.", style: TextStyle(color: Colors.grey)),
         ],
       ),
     );
@@ -72,58 +91,75 @@ class _DespachosListPageState extends State<DespachosListPage> {
 
   Widget _buildDespachoCard(OrdenInternaDetalle resumen) {
     final orden = resumen.orden;
+    final esUrgente = orden.prioridad == 'urgente';
+    final esParcial = orden.estado == 'en_curso';
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: esUrgente ? Colors.red.withOpacity(0.5) : Colors.transparent),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => _navegarADespacho(resumen.orden.id!), // ✅ LLAMADA CORREGIDA
+        onTap: () => _navegarADespacho(orden.id!),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // TÍTULO (Si existe) o Cliente
-              if (orden.titulo != null && orden.titulo!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(orden.titulo!, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                ),
-
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(resumen.clienteRazonSocial, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text(resumen.obraNombre ?? "Sin Obra", style: const TextStyle(fontSize: 14, color: Colors.black54)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.primary),
-                    ),
-                    child: Text(orden.numero, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                  ),
-                ],
-              ),
-              const Divider(),
+              // Header: Estado y Prioridad
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("Resp: ${orden.solicitanteNombre}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  const Row(children: [
-                    Icon(Icons.touch_app, size: 16, color: Colors.blue),
-                    SizedBox(width: 4),
-                    Text("Tocar para despachar", style: TextStyle(fontSize: 12, color: Colors.blue, fontWeight: FontWeight.bold))
-                  ])
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: esParcial ? Colors.blue[50] : Colors.green[50],
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: esParcial ? Colors.blue : Colors.green),
+                    ),
+                    child: Text(
+                      esParcial ? "PARCIAL / EN CURSO" : "NUEVO PARA ARMAR",
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: esParcial ? Colors.blue[800] : Colors.green[800]
+                      ),
+                    ),
+                  ),
+                  if (esUrgente)
+                    Row(
+                      children: const [
+                        Icon(Icons.warning, color: Colors.red, size: 16),
+                        SizedBox(width: 4),
+                        Text("URGENTE", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Título y Obra
+              Text(
+                resumen.obraNombre?.toUpperCase() ?? "SIN OBRA",
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 4),
+              Text("Cliente: ${resumen.clienteRazonSocial}"),
+
+              const Divider(height: 20),
+
+              // Footer: Resumen Items
+              Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined, size: 18, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Text("${resumen.cantidadProductos} items pedidos"),
+                  const Spacer(),
+                  const Text("Tocar para despachar", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_forward, size: 16, color: AppColors.primary),
                 ],
               ),
             ],
@@ -134,21 +170,25 @@ class _DespachosListPageState extends State<DespachosListPage> {
   }
 
   Future<void> _navegarADespacho(String ordenId) async {
-    // ✅ CLAVE: Cargar el detalle completo (items) antes de navegar
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+    showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator())
+    );
 
     final provider = context.read<OrdenInternaProvider>();
     final detalleCompleto = await provider.cargarDetalleOrden(ordenId);
 
     if (mounted) {
       Navigator.pop(context); // Cerrar loading
+
       if (detalleCompleto != null) {
         Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => OrdenDespachoPage(ordenDetalle: detalleCompleto)),
         ).then((_) => provider.cargarOrdenes());
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error cargando detalles de la orden")));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error cargando orden"), backgroundColor: Colors.red));
       }
     }
   }

@@ -1,91 +1,113 @@
 import 'package:equatable/equatable.dart';
 
-class AcopioModel extends Equatable {
-  final String? id;
+class AcopioItem extends Equatable {
   final String productoId;
-  final String clienteId;
-  final String proveedorId;
-  final double cantidadDisponible;
-  final String estado;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
+  final String productoNombre;
+  final double cantidadOriginal; // Lo que se compró en la factura
+  final double cantidadRestante; // Lo que queda por retirar
 
-  const AcopioModel({
-    this.id,
+  const AcopioItem({
     required this.productoId,
-    required this.clienteId,
-    required this.proveedorId,
-    required this.cantidadDisponible,
-    this.estado = 'activo',
-    required this.createdAt,
-    this.updatedAt,
+    required this.productoNombre,
+    required this.cantidadOriginal,
+    required this.cantidadRestante,
   });
 
-  factory AcopioModel.fromMap(Map<String, dynamic> map) {
-    return AcopioModel(
-      id: map['id']?.toString(),
+  factory AcopioItem.fromMap(Map<String, dynamic> map) {
+    return AcopioItem(
       productoId: map['productoId']?.toString() ?? '',
-      clienteId: map['clienteId']?.toString() ?? '',
-      proveedorId: map['proveedorId']?.toString() ?? '',
-      cantidadDisponible: (map['cantidadDisponible'] as num?)?.toDouble() ?? 0.0,
-      estado: map['estado']?.toString() ?? 'activo',
-      createdAt: map['createdAt'] != null ? DateTime.parse(map['createdAt'].toString()) : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? DateTime.parse(map['updatedAt'].toString()) : null,
+      productoNombre: map['productoNombre']?.toString() ?? '',
+      cantidadOriginal: (map['cantidadOriginal'] as num?)?.toDouble() ?? 0.0,
+      cantidadRestante: (map['cantidadRestante'] as num?)?.toDouble() ?? 0.0,
     );
   }
 
-  Map<String, dynamic> toMap() => {}; // Implementar si necesario
+  Map<String, dynamic> toMap() {
+    return {
+      'productoId': productoId,
+      'productoNombre': productoNombre,
+      'cantidadOriginal': cantidadOriginal,
+      'cantidadRestante': cantidadRestante,
+    };
+  }
 
   @override
-  List<Object?> get props => [id, productoId];
+  List<Object?> get props => [productoId, cantidadOriginal, cantidadRestante];
 }
 
-class AcopioDetalle extends Equatable {
-  final AcopioModel acopio;
-  final String productoCodigo;
-  final String productoNombre;
-  final String unidadBase;
-  final String categoriaNombre;
+class AcopioModel extends Equatable {
+  final String id;
+  final String numeroFactura; // Ej: "0001-00004523"
+  final String etiqueta;      // Ej: "MATERIALES LOSA 1"
+
+  final String clienteId;
   final String clienteRazonSocial;
+
+  final String proveedorId;
   final String proveedorNombre;
-  final String proveedorTipo;
 
-  // Campos opcionales que faltaban en la definición anterior
-  final String clienteCodigo;
-  final String proveedorCodigo;
+  final DateTime fechaCompra;
+  final List<AcopioItem> items;
+  final bool activo; // True mientras quede saldo en algún item
 
-  const AcopioDetalle({
-    required this.acopio,
-    required this.productoCodigo,
-    required this.productoNombre,
-    required this.unidadBase,
-    required this.categoriaNombre,
+  const AcopioModel({
+    required this.id,
+    required this.numeroFactura,
+    required this.etiqueta,
+    required this.clienteId,
     required this.clienteRazonSocial,
+    required this.proveedorId,
     required this.proveedorNombre,
-    required this.proveedorTipo,
-    this.clienteCodigo = '',
-    this.proveedorCodigo = '',
+    required this.fechaCompra,
+    required this.items,
+    this.activo = true,
   });
 
-  factory AcopioDetalle.fromMap(Map<String, dynamic> map) {
-    return AcopioDetalle(
-      acopio: AcopioModel.fromMap(map),
-      productoCodigo: map['productoCodigo']?.toString() ?? '',
-      productoNombre: map['productoNombre']?.toString() ?? '',
-      unidadBase: map['unidadBase']?.toString() ?? '',
-      categoriaNombre: map['categoriaNombre']?.toString() ?? '',
-      clienteRazonSocial: map['clienteRazonSocial']?.toString() ?? '',
-      proveedorNombre: map['proveedorNombre']?.toString() ?? '',
-      proveedorTipo: map['proveedorTipo']?.toString() ?? 'proveedor',
-      // Recuperamos códigos si existen desnormalizados
-      clienteCodigo: map['clienteCodigo']?.toString() ?? '',
-      proveedorCodigo: map['proveedorCodigo']?.toString() ?? '',
+  factory AcopioModel.fromMap(Map<String, dynamic> map, String docId) {
+    return AcopioModel(
+      id: docId,
+      numeroFactura: map['numeroFactura'] ?? '',
+      etiqueta: map['etiqueta'] ?? '',
+      clienteId: map['clienteId'] ?? '',
+      clienteRazonSocial: map['clienteRazonSocial'] ?? '',
+      proveedorId: map['proveedorId'] ?? '',
+      proveedorNombre: map['proveedorNombre'] ?? '',
+      fechaCompra: map['fechaCompra'] != null
+          ? DateTime.parse(map['fechaCompra'])
+          : DateTime.now(),
+      items: (map['items'] as List<dynamic>?)
+          ?.map((x) => AcopioItem.fromMap(x))
+          .toList() ?? [],
+      activo: map['activo'] ?? true,
     );
   }
 
-  @override
-  List<Object?> get props => [acopio];
+  Map<String, dynamic> toMap() {
+    return {
+      'numeroFactura': numeroFactura,
+      'etiqueta': etiqueta,
+      'clienteId': clienteId,
+      'clienteRazonSocial': clienteRazonSocial,
+      'proveedorId': proveedorId,
+      'proveedorNombre': proveedorNombre,
+      'fechaCompra': fechaCompra.toIso8601String(),
+      'items': items.map((x) => x.toMap()).toList(),
+      'activo': activo,
+    };
+  }
 
-  bool get esDepositoSyg => proveedorTipo == 'deposito_syg';
-  String get cantidadFormateada => acopio.cantidadDisponible.toStringAsFixed(2);
+  // Helper visual para barras de progreso (0.0 a 1.0)
+  double get porcentajeConsumido {
+    double totalOrig = 0;
+    double totalRest = 0;
+    for (var i in items) {
+      totalOrig += i.cantidadOriginal;
+      totalRest += i.cantidadRestante;
+    }
+    if (totalOrig == 0) return 1.0;
+    return 1.0 - (totalRest / totalOrig);
+  }
+
+  @override
+  List<Object?> get props => [id, numeroFactura, items, activo];
 }

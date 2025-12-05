@@ -1,227 +1,188 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/utils/formatters.dart';
 import '../../../../core/widgets/app_drawer.dart';
-import '../../data/models/billetera_acopio_model.dart';
+import '../../data/models/acopio_model.dart';
 import '../providers/acopio_provider.dart';
-import 'acopio_movimiento_page.dart';
-import 'facturas_list_page.dart';
-import 'acopio_traspaso_page.dart';
-import 'movimiento_lote_page.dart';
-import 'acopio_detalle_page.dart'; // ✅ Importante para navegar
+import 'acopio_form_page.dart';
 
 class AcopiosListPage extends StatefulWidget {
   const AcopiosListPage({super.key});
+
   @override
   State<AcopiosListPage> createState() => _AcopiosListPageState();
 }
 
-class _AcopiosListPageState extends State<AcopiosListPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final TextEditingController _searchController = TextEditingController();
+class _AcopiosListPageState extends State<AcopiosListPage> {
+  final TextEditingController _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AcopioProvider>().cargarTodo();
+      context.read<AcopioProvider>().cargarDatos();
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    _searchController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       drawer: const AppDrawer(),
       appBar: AppBar(
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColors.primary, AppColors.primaryDark],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-        ),
-        title: const Text('Billetera de Materiales'),
+        title: const Text('Acopios Activos'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.receipt_long),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const FacturasListPage()),
-              ).then((_) => context.read<AcopioProvider>().cargarTodo());
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => context.read<AcopioProvider>().refrescar(),
-          ),
+            onPressed: () => context.read<AcopioProvider>().cargarDatos(),
+          )
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: AppColors.textWhite,
-          labelColor: AppColors.textWhite,
-          unselectedLabelColor: AppColors.textWhite.withOpacity(0.7),
-          tabs: const [
-            Tab(text: 'Todos'),
-            Tab(text: 'Por Cliente'),
-          ],
-        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AcopioFormPage()),
+        ).then((_) => context.read<AcopioProvider>().cargarDatos()),
+        icon: const Icon(Icons.add_shopping_cart),
+        label: const Text('NUEVA FACTURA'),
+        backgroundColor: AppColors.primary,
       ),
       body: Column(
         children: [
-          _buildSearchBar(),
-          _buildEstadisticas(),
+          // Buscador
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchCtrl,
+              decoration: InputDecoration(
+                hintText: 'Buscar por Cliente, Obra o Factura...',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+              onChanged: (v) => setState(() {}), // Refresca para aplicar el filtro del provider
+            ),
+          ),
+
+          // Lista de Tarjetas
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildVistaGeneral(),
-                _buildVistaPorCliente(),
-              ],
+            child: Consumer<AcopioProvider>(
+              builder: (context, provider, _) {
+                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
+
+                final lista = provider.buscar(_searchCtrl.text);
+
+                if (lista.isEmpty) return const Center(child: Text("No hay acopios registrados"));
+
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                  itemCount: lista.length,
+                  separatorBuilder: (_,__) => const SizedBox(height: 12),
+                  itemBuilder: (ctx, i) => _buildAcopioCard(lista[i]),
+                );
+              },
             ),
           ),
         ],
       ),
-      floatingActionButton: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          FloatingActionButton(
-            heroTag: 'traspaso',
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AcopioTraspasoPage()))
-                  .then((_) => context.read<AcopioProvider>().cargarTodo());
-            },
-            backgroundColor: AppColors.warning,
-            child: const Icon(Icons.swap_horiz),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton(
-            heroTag: 'lote',
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const MovimientoLotePage()))
-                  .then((_) => context.read<AcopioProvider>().cargarTodo());
-            },
-            backgroundColor: AppColors.secondary,
-            child: const Icon(Icons.playlist_add),
-          ),
-          const SizedBox(height: 12),
-          FloatingActionButton.extended(
-            heroTag: 'movimiento',
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const AcopioMovimientoPage()))
-                  .then((_) => context.read<AcopioProvider>().cargarTodo());
-            },
-            icon: const Icon(Icons.add),
-            label: const Text('MOVIMIENTO'),
-            backgroundColor: AppColors.primary,
-          ),
-        ],
-      ),
     );
   }
 
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: TextField(
-        controller: _searchController,
-        decoration: InputDecoration(
-            hintText: 'Buscar cliente o producto...',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () {
-                  _searchController.clear();
-                  context.read<AcopioProvider>().limpiarFiltros();
-                }
-            ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))
-        ),
-        onChanged: (v) => context.read<AcopioProvider>().buscarPorProducto(v),
-      ),
-    );
-  }
+  Widget _buildAcopioCard(AcopioModel acopio) {
+    final progreso = acopio.porcentajeConsumido;
 
-  Widget _buildEstadisticas() {
-    return Consumer<AcopioProvider>(
-      builder: (ctx, prov, _) => Container(
-        padding: const EdgeInsets.all(8),
-        color: Colors.grey[100],
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Text('Items con Saldo: ${prov.totalAcopios}'),
-            Text('Clientes: ${prov.totalClientes}'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVistaGeneral() {
-    return Consumer<AcopioProvider>(
-      builder: (ctx, prov, _) {
-        if (prov.isLoading) return const Center(child: CircularProgressIndicator());
-        if (prov.acopios.isEmpty) return const Center(child: Text('No hay saldos positivos'));
-
-        return ListView.builder(
-          itemCount: prov.acopios.length,
-          itemBuilder: (c, i) => _BilleteraCard(billetera: prov.acopios[i]),
-        );
-      },
-    );
-  }
-
-  Widget _buildVistaPorCliente() => const Center(child: Text("Vista Agrupada (Próximamente)"));
-}
-
-class _BilleteraCard extends StatelessWidget {
-  final BilleteraAcopio billetera;
-  const _BilleteraCard({required this.billetera});
-
-  @override
-  Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: ListTile(
-        title: Text(billetera.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Column(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Cliente: ${billetera.clienteNombre}'),
-            if (billetera.cantidadEnDepositoPropio > 0)
-              Text('En S&G: ${billetera.cantidadEnDepositoPropio}', style: const TextStyle(color: Colors.green, fontSize: 12)),
-            if (billetera.cantidadEnProveedores.isNotEmpty)
-              Text('En Proveedores: ${_sumarProveedores(billetera.cantidadEnProveedores)}', style: const TextStyle(color: Colors.orange, fontSize: 12)),
+            // Header: Etiqueta y Factura
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    acopio.etiqueta.toUpperCase(),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(6)),
+                  child: Text(acopio.numeroFactura, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // Cliente y Proveedor
+            Row(
+              children: [
+                const Icon(Icons.person, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Expanded(child: Text(acopio.clienteRazonSocial, style: const TextStyle(fontWeight: FontWeight.w500))),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(Icons.store, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(acopio.proveedorNombre, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                const Spacer(),
+                Text(ArgFormats.fecha(acopio.fechaCompra), style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+              ],
+            ),
+
+            const Divider(height: 24),
+
+            // Resumen de Items
+            ...acopio.items.take(3).map((item) => Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(item.productoNombre, style: const TextStyle(fontSize: 13)),
+                  Text(
+                    '${item.cantidadRestante.toStringAsFixed(1)} / ${item.cantidadOriginal.toStringAsFixed(1)}',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: item.cantidadRestante > 0 ? Colors.black : Colors.grey),
+                  ),
+                ],
+              ),
+            )),
+
+            if (acopio.items.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text("+ ${acopio.items.length - 3} materiales más...", style: const TextStyle(fontSize: 12, color: Colors.blue)),
+              ),
+
+            const SizedBox(height: 12),
+
+            // Barra de progreso
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progreso,
+                backgroundColor: Colors.grey[200],
+                valueColor: AlwaysStoppedAnimation(progreso == 1.0 ? Colors.green : Colors.orange),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text("${(progreso * 100).toInt()}% Retirado", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ),
           ],
         ),
-        trailing: Text(
-            '${billetera.saldoTotal}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.primary)
-        ),
-        isThreeLine: true,
-        // ✅ NAVEGACIÓN AGREGADA
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => AcopioDetallePage(billetera: billetera)),
-          );
-        },
       ),
     );
-  }
-
-  double _sumarProveedores(Map<String, double> provs) {
-    return provs.values.fold(0, (sum, val) => sum + val);
   }
 }
