@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/utils/formatters.dart';
 import '../../data/models/proveedor_model.dart';
-import '../../data/models/movimiento_acopio_model.dart';
+import '../../data/models/acopio_model.dart'; // ✅ Usamos el nuevo modelo
 import '../providers/acopio_provider.dart';
 import 'proveedor_form_page.dart';
 
@@ -18,28 +18,21 @@ class ProveedorDetallePage extends StatefulWidget {
 
 class _ProveedorDetallePageState extends State<ProveedorDetallePage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  List<MovimientoAcopioModel> _movimientos = [];
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _cargarHistorial();
+    // Cargamos los acopios para poder filtrar los de este proveedor
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AcopioProvider>().cargarDatos();
+    });
   }
 
-  Future<void> _cargarHistorial() async {
-    setState(() => _isLoading = true);
-    // Usamos el ID o el Código como identificador
-    final id = widget.proveedor.id ?? widget.proveedor.codigo;
-    final movs = await context.read<AcopioProvider>().obtenerMovimientosProveedor(id);
-
-    if (mounted) {
-      setState(() {
-        _movimientos = movs;
-        _isLoading = false;
-      });
-    }
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -55,7 +48,7 @@ class _ProveedorDetallePageState extends State<ProveedorDetallePage> with Single
           unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(text: 'Información'),
-            Tab(text: 'Historial de Retiros'),
+            Tab(text: 'Compras Realizadas'),
           ],
         ),
         actions: [
@@ -64,7 +57,7 @@ class _ProveedorDetallePageState extends State<ProveedorDetallePage> with Single
             onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => ProveedorFormPage(proveedor: widget.proveedor))
-            ).then((_) => setState((){})), // Recargar simple
+            ).then((_) => setState((){})),
           )
         ],
       ),
@@ -113,39 +106,39 @@ class _ProveedorDetallePageState extends State<ProveedorDetallePage> with Single
   }
 
   Widget _buildHistorialTab() {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    // Filtramos los acopios donde este proveedor sea el origen
+    return Consumer<AcopioProvider>(
+      builder: (context, provider, _) {
+        if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
-    if (_movimientos.isEmpty) {
-      return const Center(child: Text("No hay movimientos registrados para este proveedor"));
-    }
+        // Buscamos acopios vinculados a este proveedor (por ID o código)
+        final compras = provider.acopios.where((a) =>
+        a.proveedorId == widget.proveedor.id ||
+            a.proveedorId == widget.proveedor.codigo
+        ).toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _movimientos.length,
-      itemBuilder: (context, index) {
-        final m = _movimientos[index];
-        final esSalida = m.cantidad < 0; // En lógica de billetera, negativo suele ser consumo/salida
+        if (compras.isEmpty) {
+          return const Center(child: Text("No hay compras registradas a este proveedor"));
+        }
 
-        return Card(
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: esSalida ? Colors.orange[100] : Colors.green[100],
-              child: Icon(esSalida ? Icons.arrow_upward : Icons.arrow_downward,
-                  color: esSalida ? Colors.orange : Colors.green),
-            ),
-            title: Text(m.productoId), // O productoNombre si el modelo lo tiene lleno
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(ArgFormats.fechaHora(m.createdAt)),
-                if (m.referencia != null) Text("Ref: ${m.referencia}", style: const TextStyle(fontSize: 12)),
-              ],
-            ),
-            trailing: Text(
-              '${m.cantidad.abs()}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ),
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: compras.length,
+          itemBuilder: (context, index) {
+            final acopio = compras[index];
+            return Card(
+              child: ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.blueGrey,
+                  child: Icon(Icons.receipt, color: Colors.white),
+                ),
+                title: Text(acopio.etiqueta),
+                subtitle: Text("Factura: ${acopio.numeroFactura}\n${ArgFormats.fecha(acopio.fechaCompra)}"),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                // Aquí se podría navegar al detalle de la factura si lo deseamos
+              ),
+            );
+          },
         );
       },
     );

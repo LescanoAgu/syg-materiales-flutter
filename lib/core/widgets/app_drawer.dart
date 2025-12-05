@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../constants/app_colors.dart';
 import '../constants/app_text_styles.dart';
 import '../constants/app_roles.dart';
-import '../enums/app_section.dart'; // ✅ Importamos el Enum
+import '../enums/app_section.dart';
 
 // Features
 import '../../features/stock/presentation/pages/catalogo_page.dart';
@@ -11,7 +11,7 @@ import '../../features/stock/presentation/pages/stock_page.dart';
 import '../../features/stock/presentation/pages/movimiento_historial_page.dart';
 import '../../features/acopios/presentation/pages/acopios_list_page.dart';
 import '../../features/ordenes_internas/presentation/pages/ordenes_page.dart';
-import '../../features/ordenes_internas/presentation/pages/despachos_list_page.dart';
+import '../../features/ordenes_internas/presentation/pages/despachos_list_page.dart'; // ✅ Importa la página, no la define
 import '../../features/ordenes_internas/presentation/pages/remitos_list_page.dart';
 import '../../features/clientes/presentation/pages/clientes_list_page.dart';
 import '../../features/obras/presentation/pages/obras_list_page.dart';
@@ -33,7 +33,6 @@ class AppDrawer extends StatelessWidget {
     final authProvider = context.watch<AuthProvider>();
     final usuario = authProvider.usuario;
 
-    // ✅ Ahora que UsuarioModel está arreglado, esto funcionará
     final bool esAdmin = usuario?.esAdmin ?? false;
     final bool puedeVerReportes = usuario?.tienePermiso(AppRoles.verReportes) ?? false;
     final bool puedeDespachar = usuario?.tienePermiso(AppRoles.gestionarStock) ?? false;
@@ -50,7 +49,6 @@ class AppDrawer extends StatelessWidget {
                 if (currentSection == AppSection.stock) ...[
                   _buildSectionHeader('STOCK & MATERIALES'),
                   _buildMenuItem(context, icon: Icons.inventory, title: 'Stock Actual', onTap: () => _navegar(context, const StockPage())),
-                  _buildMenuItem(context, icon: Icons.search, title: 'Consultar Disp.', onTap: () => _navegar(context, const StockPage())), // Redirige a StockPage (Super Stock)
                   _buildMenuItem(context, icon: Icons.history, title: 'Movimientos', onTap: () => _navegar(context, const MovimientoHistorialPage())),
                   _buildMenuItem(context, icon: Icons.warehouse, title: 'Acopios', onTap: () => _navegar(context, const AcopiosListPage())),
 
@@ -145,7 +143,7 @@ class AppDrawer extends StatelessWidget {
   Widget _buildFooter() {
     return Container(
       padding: const EdgeInsets.all(16),
-      child: const Text('v1.3.0 - S&G Materiales', style: TextStyle(color: Colors.grey, fontSize: 12)),
+      child: const Text('v1.4.0 - S&G Materiales', style: TextStyle(color: Colors.grey, fontSize: 12)),
     );
   }
 }

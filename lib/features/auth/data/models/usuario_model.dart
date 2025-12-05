@@ -8,9 +8,7 @@ class UsuarioModel extends Equatable {
   final String nombre;
   final String organizationId;
   final String rol;
-  final String estado; // 'pendiente', 'activo', 'bloqueado'
-
-  // ✅ ESTE ES EL CAMPO QUE FALTA
+  final String estado;
   final Map<String, bool> permisosEspeciales;
 
   const UsuarioModel({
@@ -23,27 +21,23 @@ class UsuarioModel extends Equatable {
     this.permisosEspeciales = const {},
   });
 
-  // --- LÓGICA DE SEGURIDAD ---
   bool tienePermiso(String permiso) {
     if (rol == AppRoles.admin) return true;
     if (estado != 'activo') return false;
-
     if (permisosEspeciales.containsKey(permiso)) {
       return permisosEspeciales[permiso]!;
     }
     return AppRoles.tienePermisoBase(rol, permiso);
   }
 
-  // --- GETTERS (CRUCIALES) ---
+  // ✅ GETTERS NECESARIOS
   bool get esAdmin => rol == AppRoles.admin;
   bool get esJefeObra => rol == AppRoles.jefeObra;
   bool get esPanolero => rol == AppRoles.panolero;
 
-  // --- FACTORIES ---
   factory UsuarioModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>?;
     if (data == null) throw Exception("Usuario vacío");
-
     return UsuarioModel(
       uid: doc.id,
       email: data['email'] ?? '',

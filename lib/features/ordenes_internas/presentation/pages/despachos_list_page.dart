@@ -9,7 +9,7 @@ import '../providers/orden_interna_provider.dart';
 import 'orden_despacho_page.dart';
 
 class DespachosListPage extends StatefulWidget {
-  final bool esNavegacionPrincipal; // Para saber si mostrar AppBar/Drawer
+  final bool esNavegacionPrincipal;
   const DespachosListPage({super.key, this.esNavegacionPrincipal = false});
 
   @override
@@ -27,7 +27,6 @@ class _DespachosListPageState extends State<DespachosListPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Si está embebida en el Home del Pañolero, no usamos Scaffold completo
     final bool mostrarAppBar = !widget.esNavegacionPrincipal;
 
     Widget content = Consumer<OrdenInternaProvider>(
@@ -173,7 +172,6 @@ class _DespachosListPageState extends State<DespachosListPage> {
   }
 
   Future<void> _navegarADespacho(String ordenId) async {
-    // Feedback visual de carga
     showDialog(
         context: context,
         barrierDismissible: false,

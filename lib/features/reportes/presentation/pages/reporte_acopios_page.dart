@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart'; // ✅ IMPORT FALTANTE
+import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../acopios/presentation/providers/acopio_provider.dart'; // ✅ IMPORT FALTANTE
+import '../../../../core/utils/formatters.dart';
+import '../../../acopios/presentation/providers/acopio_provider.dart';
 import '../../data/services/excel_service.dart';
 
 class ReporteAcopiosPage extends StatefulWidget {
@@ -13,47 +14,35 @@ class ReporteAcopiosPage extends StatefulWidget {
 
 class _ReporteAcopiosPageState extends State<ReporteAcopiosPage> {
   final ExcelService _excelService = ExcelService();
-  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _cargarAcopios();
-  }
-
-  Future<void> _cargarAcopios() async {
-    setState(() => _isLoading = true);
-    // Usamos el provider para garantizar que la data esté cargada
-    await context.read<AcopioProvider>().cargarTodo();
-    setState(() => _isLoading = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AcopioProvider>().cargarDatos();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Usamos consumer para escuchar cambios
     return Consumer<AcopioProvider>(
       builder: (context, provider, _) {
-        final acopios = provider.acopios; // Lista de BilleteraAcopio
+        final acopios = provider.acopios;
 
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text('Reporte de Acopios'),
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(
-                gradient: AppColors.primaryGradient,
-              ),
-            ),
+            title: const Text('Reporte de Acopios (Facturas)'),
             actions: [
               IconButton(
-                icon: const Icon(Icons.table_chart),
-                // Deshabilitado temporalmente hasta actualizar el ExcelService
-                onPressed: null,
-                tooltip: 'Exportar Excel (Próximamente)',
+                icon: const Icon(Icons.download),
+                // Conectamos el nuevo método de Excel
+                onPressed: () => _excelService.generarReporteAcopios(acopios: acopios),
+                tooltip: 'Exportar Excel',
               ),
             ],
           ),
-          body: _isLoading
+          body: provider.isLoading
               ? const Center(child: CircularProgressIndicator())
               : acopios.isEmpty
               ? _buildEmptyState()
@@ -61,16 +50,37 @@ class _ReporteAcopiosPageState extends State<ReporteAcopiosPage> {
             padding: const EdgeInsets.all(16),
             itemCount: acopios.length,
             itemBuilder: (context, index) {
-              final b = acopios[index];
+              final a = acopios[index];
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  title: Text(b.clienteNombre),
-                  subtitle: Text(b.productoNombre),
-                  trailing: Text(
-                    '${b.saldoTotal}',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+                child: ExpansionTile(
+                  title: Text(a.etiqueta, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text("${a.clienteRazonSocial} • Fact: ${a.numeroFactura}"),
+                  trailing: Text(ArgFormats.fecha(a.fechaCompra)),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Materiales con saldo pendiente:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                          const SizedBox(height: 8),
+                          ...a.items.where((i) => i.cantidadRestante > 0).map((item) =>
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(item.productoNombre),
+                                    Text("${item.cantidadRestante.toStringAsFixed(1)} restantes", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              )
+                          ),
+                        ],
+                      ),
+                    )
+                  ],
                 ),
               );
             },
@@ -81,15 +91,6 @@ class _ReporteAcopiosPageState extends State<ReporteAcopiosPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.inbox, size: 80, color: AppColors.textLight),
-          const SizedBox(height: 16),
-          const Text('No hay acopios registrados'),
-        ],
-      ),
-    );
+    return const Center(child: Text('No hay acopios registrados'));
   }
 }

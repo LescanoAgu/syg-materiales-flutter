@@ -4,9 +4,11 @@ import '../../data/repositories/orden_interna_repository.dart';
 import '../../data/models/orden_interna_model.dart';
 import '../../data/models/orden_item_model.dart';
 import '../../data/models/remito_model.dart';
+import '../../../acopios/data/repositories/acopio_repository.dart'; // ✅ Importamos repo de acopios
 
 class OrdenInternaProvider extends ChangeNotifier {
   final OrdenInternaRepository _repository = OrdenInternaRepository();
+  final AcopioRepository _acopioRepo = AcopioRepository(); // ✅ Instancia
 
   List<OrdenInternaDetalle> _ordenes = [];
   bool _isLoading = false;
@@ -56,12 +58,13 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
-  // ✅ CREAR CON TÍTULO
+  // --- MÉTODOS DE ESCRITURA ---
+
   Future<bool> crearOrden({
     required String clienteId,
     required String obraId,
     required String solicitanteNombre,
-    String? titulo, // ✅ AGREGADO
+    String? titulo,
     required List<Map<String, dynamic>> items,
     String? observaciones,
     String prioridad = 'media',
@@ -72,7 +75,7 @@ class OrdenInternaProvider extends ChangeNotifier {
           clienteId: clienteId,
           obraId: obraId,
           solicitanteNombre: solicitanteNombre,
-          titulo: titulo, // ✅
+          titulo: titulo,
           items: items,
           observacionesCliente: observaciones,
           prioridad: prioridad
@@ -88,13 +91,12 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
-  // ✅ EDITAR CON TÍTULO
   Future<bool> editarOrden({
     required String ordenId,
     required String clienteId,
     required String obraId,
     required String prioridad,
-    String? titulo, // ✅ AGREGADO
+    String? titulo,
     String? observaciones,
     required List<Map<String, dynamic>> items,
   }) async {
@@ -104,7 +106,7 @@ class OrdenInternaProvider extends ChangeNotifier {
         ordenId: ordenId,
         clienteId: clienteId,
         obraId: obraId,
-        titulo: titulo, // ✅
+        titulo: titulo,
         prioridad: prioridad,
         observaciones: observaciones,
         items: items,
@@ -157,9 +159,10 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
+  // ✅ GENERAR REMITO INTELIGENTE (Con descuento de Acopios)
   Future<bool> generarRemito({
     required String ordenId,
-    required List<Map<String, dynamic>> items,
+    required List<Map<String, dynamic>> items, // {itemId, cantidad, acopioId?}
     required Uint8List firmaAutoriza,
     required Uint8List firmaRecibe,
     required String usuarioId,
@@ -167,6 +170,29 @@ class OrdenInternaProvider extends ChangeNotifier {
   }) async {
     _isLoading = true; notifyListeners();
     try {
+      // 1. Procesar Descuentos de Acopio (Si corresponde)
+      // Agrupamos por Acopio ID para hacer descuentos en lote
+      Map<String, Map<String, double>> descuentosPorAcopio = {};
+
+      for (var item in items) {
+        if (item.containsKey('acopioId') && item['acopioId'] != null) {
+          final acopioId = item['acopioId'] as String;
+          final prodId = item['productoId'] as String; // Necesitamos pasar esto desde la UI
+          final cant = (item['cantidad'] as num).toDouble();
+
+          if (!descuentosPorAcopio.containsKey(acopioId)) {
+            descuentosPorAcopio[acopioId] = {};
+          }
+          descuentosPorAcopio[acopioId]![prodId] = cant;
+        }
+      }
+
+      // Ejecutamos los descuentos en la colección de Acopios
+      for (var entry in descuentosPorAcopio.entries) {
+        await _acopioRepo.consumirDeAcopio(entry.key, entry.value);
+      }
+
+      // 2. Generar el Remito y actualizar Orden (Stock propio se descuenta en el repo)
       await _repository.generarRemito(
         ordenId: ordenId,
         itemsDespachados: items,
@@ -175,6 +201,7 @@ class OrdenInternaProvider extends ChangeNotifier {
         usuarioId: usuarioId,
         usuarioNombre: usuarioNombre,
       );
+
       await cargarOrdenes();
       return true;
     } catch (e) {
@@ -200,7 +227,4 @@ class OrdenInternaProvider extends ChangeNotifier {
       return true;
     } catch (e) { return false; }
   }
-
-  Future<bool> confirmarEntrega(String ordenId, Uint8List firma) async => false;
-  Future<bool> registrarDespacho({required String ordenId, required String ordenNumero, required String obraId, required String usuarioId, required String usuarioNombre, required List<Map<String, dynamic>> items}) async => false;
 }

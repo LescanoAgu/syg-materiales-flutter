@@ -299,6 +299,8 @@ class _CatalogoPageState extends State<CatalogoPage> {
   void _procesarImportacion(BuildContext context, String texto) async {
     if (texto.isEmpty) return;
     final provider = context.read<ProductoProvider>();
+
+    // Aseguramos que las categorías estén cargadas para no duplicar
     if (provider.categorias.isEmpty) await provider.cargarCategorias();
 
     Set<String> categoriasNuevasDetectadas = {};
@@ -309,7 +311,8 @@ class _CatalogoPageState extends State<CatalogoPage> {
       for (var i = 0; i < lineas.length; i++) {
         final linea = lineas[i].trim();
         if (linea.isEmpty) continue;
-        if (i == 0 && (linea.toLowerCase().contains('codigo'))) continue;
+        // Ignorar cabecera si existe
+        if (i == 0 && (linea.toLowerCase().contains('codigo') || linea.toLowerCase().contains('precio'))) continue;
 
         final partes = linea.split(';');
         if (partes.length >= 2) {
@@ -319,31 +322,54 @@ class _CatalogoPageState extends State<CatalogoPage> {
           String catNombre = 'General';
           String unidad = 'u';
 
-          if(partes.length > 2) precio = double.tryParse(_limpiarDato(partes[2]).replaceAll(r'$','').replaceAll('.','').replaceAll(',','.')) ?? 0;
-          if(partes.length > 3) catNombre = _limpiarDato(partes[3]);
-          if(partes.length > 4) unidad = _limpiarDato(partes[4]);
+          if (partes.length > 2) precio = double.tryParse(_limpiarDato(partes[2]).replaceAll(r'$','').replaceAll('.','').replaceAll(',','.')) ?? 0;
+          if (partes.length > 3) catNombre = _limpiarDato(partes[3]);
+          if (partes.length > 4) unidad = _limpiarDato(partes[4]);
 
-          String catId = catNombre.length >= 3 ? catNombre.substring(0, 3).toUpperCase() : catNombre.toUpperCase();
+          // 🔥 LÓGICA INTELIGENTE (AQUÍ ESTÁ EL CAMBIO)
+          // 1. Intentamos deducir el ID de la categoría desde el código del producto (Ej: "OG-001" -> "OG")
+          String catId;
+          if (codigo.contains('-')) {
+            catId = codigo.split('-').first.toUpperCase();
+          } else {
+            // 2. Si no tiene guión (Ej: "LADRILLO"), usamos las 3 primeras letras del nombre de la categoría (Ej: "OBR")
+            catId = catNombre.length >= 3 ? catNombre.substring(0, 3).toUpperCase() : catNombre.toUpperCase();
+          }
 
-          bool existeCat = provider.categorias.any((c) => c.codigo == catId);
-          if (!existeCat && !categoriasNuevasDetectadas.contains(catNombre)) {
+          // Verificamos si ya existe esa categoría (en el provider o en las nuevas detectadas en este loop)
+          bool existeCatEnProvider = provider.categorias.any((c) => c.codigo == catId);
+          bool existeCatEnLote = categoriasNuevasDetectadas.contains(catId);
+
+          if (!existeCatEnProvider && !existeCatEnLote) {
+            // Creamos la categoría con el ID correcto (Ej: "OG" con nombre "Obra General")
             await provider.crearCategoria(catNombre, catId);
-            categoriasNuevasDetectadas.add(catNombre);
+            categoriasNuevasDetectadas.add(catId);
           }
 
           listaAImportar.add(ProductoModel(
-              id: codigo, codigo: codigo, nombre: nombre, precioSinIva: precio,
-              categoriaId: catId, categoriaNombre: catNombre, unidadBase: unidad, cantidadDisponible: 0
+              id: codigo,
+              codigo: codigo,
+              nombre: nombre,
+              precioSinIva: precio,
+              categoriaId: catId, // Asignamos "OG", "A", etc.
+              categoriaNombre: catNombre,
+              unidadBase: unidad,
+              cantidadDisponible: 0
           ));
         }
       }
 
       if (listaAImportar.isNotEmpty) {
         await provider.importarProductos(listaAImportar);
-        if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ ${listaAImportar.length} productos importados')));
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ ${listaAImportar.length} productos importados con éxito')));
+        }
       }
     } catch (e) {
-      print(e);
+      print("Error importando: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
+      }
     }
   }
 }
