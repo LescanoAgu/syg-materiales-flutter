@@ -5,7 +5,7 @@ enum TipoMovimiento { entrada, salida, ajuste }
 class MovimientoStock extends Equatable {
   final String? id;
   final String productoId;
-  final String productoNombre; // ✅ NUEVO: Guardamos el nombre
+  final String productoNombre;
   final TipoMovimiento tipo;
   final double cantidad;
   final double cantidadAnterior;
@@ -15,10 +15,14 @@ class MovimientoStock extends Equatable {
   final String? usuarioId;
   final DateTime createdAt;
 
+  // ✅ NUEVOS CAMPOS: Vinculación con Obra
+  final String? obraId;
+  final String? obraNombre;
+
   const MovimientoStock({
     this.id,
     required this.productoId,
-    this.productoNombre = '', // Default vacío para compatibilidad
+    this.productoNombre = '',
     required this.tipo,
     required this.cantidad,
     this.cantidadAnterior = 0,
@@ -27,13 +31,15 @@ class MovimientoStock extends Equatable {
     this.referencia,
     this.usuarioId,
     required this.createdAt,
+    this.obraId,
+    this.obraNombre,
   });
 
   factory MovimientoStock.fromMap(Map<String, dynamic> map) {
     return MovimientoStock(
       id: map['id']?.toString(),
       productoId: map['productoId']?.toString() ?? '',
-      productoNombre: map['productoNombre']?.toString() ?? 'Producto sin nombre', // Recuperamos nombre
+      productoNombre: map['productoNombre']?.toString() ?? 'Producto sin nombre',
       tipo: TipoMovimiento.values.firstWhere(
             (e) => e.name == (map['tipo'] ?? 'entrada'),
         orElse: () => TipoMovimiento.entrada,
@@ -47,13 +53,15 @@ class MovimientoStock extends Equatable {
       createdAt: map['createdAt'] != null
           ? DateTime.parse(map['createdAt'].toString())
           : DateTime.now(),
+      obraId: map['obraId']?.toString(),
+      obraNombre: map['obraNombre']?.toString(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'productoId': productoId,
-      'productoNombre': productoNombre, // Guardamos nombre
+      'productoNombre': productoNombre,
       'tipo': tipo.name,
       'cantidad': cantidad,
       'cantidadAnterior': cantidadAnterior,
@@ -62,9 +70,11 @@ class MovimientoStock extends Equatable {
       'referencia': referencia,
       'usuarioId': usuarioId,
       'createdAt': createdAt.toIso8601String(),
+      'obraId': obraId,
+      'obraNombre': obraNombre,
     };
   }
 
   @override
-  List<Object?> get props => [id, productoId, tipo, cantidad, createdAt];
+  List<Object?> get props => [id, productoId, tipo, cantidad, createdAt, obraId];
 }

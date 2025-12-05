@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_roles.dart'; // ✅ Importamos los roles
 import '../../data/models/orden_interna_model.dart';
 import '../../data/models/orden_item_model.dart';
 import '../providers/orden_interna_provider.dart';
@@ -11,7 +12,7 @@ import '../../../../features/usuarios/presentation/providers/usuarios_provider.d
 
 // Widgets y Páginas
 import '../widgets/orden_aprobacion_dialog.dart';
-import '../widgets/remitos_historicos_dialog.dart'; // ✅ IMPORTANTE
+import '../widgets/remitos_historicos_dialog.dart';
 import 'orden_despacho_page.dart';
 
 class OrdenDetallePage extends StatefulWidget {
@@ -59,14 +60,18 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
     final orden = _ordenCompleta.orden;
     final color = _getEstadoColor(orden.estado);
     final usuario = context.watch<AuthProvider>().usuario;
-    final puedeAprobar = usuario?.rol == 'admin' || usuario?.rol == 'gerente';
+
+    // ✅ CAMBIO CLAVE: Usamos el sistema de permisos.
+    // Como quitaste 'aprobarOrden' del rol Jefe de Obra en AppRoles,
+    // esta variable será TRUE solo para Admin (o quien tenga permiso especial).
+    final puedeAprobar = usuario?.tienePermiso(AppRoles.aprobarOrden) ?? false;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text('Orden ${orden.numero}'),
         actions: [
-          // ✅ BOTÓN DE HISTORIAL DE REMITOS
+          // Historial de remitos solo si ya hay movimiento
           if (orden.estado == 'en_curso' || orden.estado == 'entregado')
             IconButton(
               icon: const Icon(Icons.history_edu),
@@ -94,7 +99,6 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
         ],
       ),
 
-      // Solo lectura/aprobación aquí. Despacho en la otra pantalla.
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -159,6 +163,8 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
               ],
             ),
           ),
+
+          // ✅ EL BOTÓN SOLO APARECE SI TIENE EL PERMISO
           if (orden.estado == 'solicitado' && puedeAprobar)
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
