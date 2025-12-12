@@ -19,7 +19,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _debounce;
-  bool _verPrecios = true; // Esto podría venir de AuthProvider.usuario.tienePermiso('ver_precios')
+  bool _verPrecios = true;
 
   @override
   void initState() {
@@ -80,7 +80,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
       ),
       body: Column(
         children: [
-          // 1. Buscador
+          // Buscador
           Container(
             padding: const EdgeInsets.all(16),
             color: Colors.white,
@@ -90,16 +90,12 @@ class _CatalogoPageState extends State<CatalogoPage> {
                 hintText: 'Buscar material...',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    context.read<ProductoProvider>().buscarProductos('');
-                  },
-                )
+                    ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                  _searchController.clear();
+                  context.read<ProductoProvider>().buscarProductos('');
+                })
                     : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
                 filled: true,
                 fillColor: AppColors.backgroundGray,
               ),
@@ -107,7 +103,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
             ),
           ),
 
-          // 2. Categorías
+          // Categorías
           SizedBox(
             height: 60,
             child: Consumer<ProductoProvider>(
@@ -144,14 +140,13 @@ class _CatalogoPageState extends State<CatalogoPage> {
             ),
           ),
 
-          // 3. Lista
+          // Lista
           Expanded(
             child: Consumer<ProductoProvider>(
               builder: (ctx, provider, _) {
                 if (provider.isLoading && provider.productos.isEmpty) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 if (provider.productos.isEmpty) {
                   return const Center(child: Text('No hay productos en el catálogo.'));
                 }
@@ -161,9 +156,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
                   padding: const EdgeInsets.all(16),
                   itemCount: provider.productos.length + (provider.isLoadingMore ? 1 : 0),
                   itemBuilder: (ctx, i) {
-                    if (i == provider.productos.length) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                    if (i == provider.productos.length) return const Center(child: CircularProgressIndicator());
                     return _buildCatalogItem(context, provider.productos[i]);
                   },
                 );
@@ -192,7 +185,6 @@ class _CatalogoPageState extends State<CatalogoPage> {
           padding: const EdgeInsets.all(12.0),
           child: Row(
             children: [
-              // Foto o Placeholder
               Container(
                 width: 60,
                 height: 60,
@@ -202,13 +194,12 @@ class _CatalogoPageState extends State<CatalogoPage> {
                 ),
                 child: Center(
                   child: Text(
-                    p.nombre.isNotEmpty ? p.nombre.substring(0, 2).toUpperCase() : 'MAT',
+                    p.codigo.contains('-') ? p.codigo.split('-').first : p.codigo.substring(0, 1),
                     style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
               const SizedBox(width: 16),
-              // Info
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,19 +214,14 @@ class _CatalogoPageState extends State<CatalogoPage> {
                   ],
                 ),
               ),
-              // Precio (Si tiene permiso)
               if (_verPrecios)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      p.precioSinIva != null ? '\$${p.precioSinIva}' : '-',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
-                    ),
+                    Text(p.precioSinIva != null ? '\$${p.precioSinIva}' : '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
                     Text('x ${p.unidadBase}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   ],
                 ),
-              // Botón menú rápido
               PopupMenuButton<String>(
                 icon: const Icon(Icons.more_vert, color: Colors.grey),
                 onSelected: (v) {
@@ -254,7 +240,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
     );
   }
 
-  // --- IMPORTACIÓN DE EXCEL ---
+  // --- IMPORTACIÓN INTELIGENTE ---
   void _mostrarDialogoImportacion(BuildContext context) {
     final controller = TextEditingController();
     showDialog(
@@ -264,15 +250,10 @@ class _CatalogoPageState extends State<CatalogoPage> {
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Copia y pega desde Excel (Formato: COD; NOMBRE; PRECIO; CAT; UNIDAD)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const Text('Pega las filas del CSV (COD;NOMBRE;PRECIO;CAT;UNIDAD)', style: TextStyle(fontSize: 12, color: Colors.grey)),
               const SizedBox(height: 10),
-              TextField(
-                controller: controller,
-                maxLines: 8,
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Datos...', filled: true),
-              ),
+              TextField(controller: controller, maxLines: 8, decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'A001;Caño...')),
             ],
           ),
         ),
@@ -299,11 +280,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
   void _procesarImportacion(BuildContext context, String texto) async {
     if (texto.isEmpty) return;
     final provider = context.read<ProductoProvider>();
-
-    // Aseguramos que las categorías estén cargadas para no duplicar
     if (provider.categorias.isEmpty) await provider.cargarCategorias();
 
-    Set<String> categoriasNuevasDetectadas = {};
+    Set<String> categoriasProcesadas = {};
     List<ProductoModel> listaAImportar = [];
 
     try {
@@ -311,47 +290,39 @@ class _CatalogoPageState extends State<CatalogoPage> {
       for (var i = 0; i < lineas.length; i++) {
         final linea = lineas[i].trim();
         if (linea.isEmpty) continue;
-        // Ignorar cabecera si existe
-        if (i == 0 && (linea.toLowerCase().contains('codigo') || linea.toLowerCase().contains('precio'))) continue;
+        if (i == 0 && (linea.toLowerCase().contains('codigo'))) continue;
 
         final partes = linea.split(';');
         if (partes.length >= 2) {
-          String codigo = _limpiarDato(partes[0]);
+          String codigoRaw = _limpiarDato(partes[0]);
           String nombre = _limpiarDato(partes[1]);
           double precio = 0;
           String catNombre = 'General';
           String unidad = 'u';
 
-          if (partes.length > 2) precio = double.tryParse(_limpiarDato(partes[2]).replaceAll(r'$','').replaceAll('.','').replaceAll(',','.')) ?? 0;
-          if (partes.length > 3) catNombre = _limpiarDato(partes[3]);
-          if (partes.length > 4) unidad = _limpiarDato(partes[4]);
+          if(partes.length > 2) precio = double.tryParse(_limpiarDato(partes[2]).replaceAll(r'$','').replaceAll('.','').replaceAll(',','.')) ?? 0;
+          if(partes.length > 3) catNombre = _limpiarDato(partes[3]);
+          if(partes.length > 4) unidad = _limpiarDato(partes[4]);
 
-          // 🔥 LÓGICA INTELIGENTE (AQUÍ ESTÁ EL CAMBIO)
-          // 1. Intentamos deducir el ID de la categoría desde el código del producto (Ej: "OG-001" -> "OG")
-          String catId;
-          if (codigo.contains('-')) {
-            catId = codigo.split('-').first.toUpperCase();
-          } else {
-            // 2. Si no tiene guión (Ej: "LADRILLO"), usamos las 3 primeras letras del nombre de la categoría (Ej: "OBR")
-            catId = catNombre.length >= 3 ? catNombre.substring(0, 3).toUpperCase() : catNombre.toUpperCase();
-          }
+          // Detectamos el prefijo (Letras del código)
+          String prefijoDetectado = codigoRaw.replaceAll(RegExp(r'[0-9\-]'), '').toUpperCase();
+          if (prefijoDetectado.isEmpty) prefijoDetectado = catNombre.substring(0, 1).toUpperCase();
 
-          // Verificamos si ya existe esa categoría (en el provider o en las nuevas detectadas en este loop)
-          bool existeCatEnProvider = provider.categorias.any((c) => c.codigo == catId);
-          bool existeCatEnLote = categoriasNuevasDetectadas.contains(catId);
+          String catId = catNombre.length >= 3 ? catNombre.substring(0, 3).toUpperCase() : catNombre.toUpperCase();
 
-          if (!existeCatEnProvider && !existeCatEnLote) {
-            // Creamos la categoría con el ID correcto (Ej: "OG" con nombre "Obra General")
-            await provider.crearCategoria(catNombre, catId);
-            categoriasNuevasDetectadas.add(catId);
+          bool existeCat = provider.categorias.any((c) => c.codigo == catId);
+          if (!existeCat && !categoriasProcesadas.contains(catId)) {
+            // ✅ CORRECCIÓN: Ahora pasamos los 3 argumentos requeridos
+            await provider.crearCategoria(catNombre, catId, prefijoDetectado);
+            categoriasProcesadas.add(catId);
           }
 
           listaAImportar.add(ProductoModel(
-              id: codigo,
-              codigo: codigo,
+              id: codigoRaw,
+              codigo: codigoRaw,
               nombre: nombre,
               precioSinIva: precio,
-              categoriaId: catId, // Asignamos "OG", "A", etc.
+              categoriaId: catId,
               categoriaNombre: catNombre,
               unidadBase: unidad,
               cantidadDisponible: 0
@@ -361,15 +332,10 @@ class _CatalogoPageState extends State<CatalogoPage> {
 
       if (listaAImportar.isNotEmpty) {
         await provider.importarProductos(listaAImportar);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ ${listaAImportar.length} productos importados con éxito')));
-        }
+        if(context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ ${listaAImportar.length} productos importados')));
       }
     } catch (e) {
-      print("Error importando: $e");
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: $e'), backgroundColor: Colors.red));
-      }
+      print("Error importación: $e");
     }
   }
 }

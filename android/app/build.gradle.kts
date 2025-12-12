@@ -1,10 +1,9 @@
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
-    id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -13,29 +12,13 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
-        // ✅ ESTAS 3 LÍNEAS SON LA SOLUCIÓN
         isCoreLibraryDesugaringEnabled = true
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
-    }
-
-    flavorDimensions += listOf("env")
-
-    productFlavors {
-        create("prod") {
-            dimension = "env"
-            resValue("string", "app_name", "S&G Materiales")
-        }
-
-        create("dev") {
-            dimension = "env"
-            applicationIdSuffix = ".dev"
-            resValue("string", "app_name", "S&G Dev")
-        }
+        jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
     defaultConfig {
@@ -44,8 +27,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        // ✅ IMPORTANTE: Habilitar multidex si no está
         multiDexEnabled = true
     }
 
@@ -54,13 +35,27 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    flavorDimensions += listOf("env")
+    productFlavors {
+        create("prod") {
+            dimension = "env"
+            resValue("string", "app_name", "S&G Materiales")
+        }
+        create("dev") {
+            dimension = "env"
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "S&G Dev")
+        }
+    }
 }
 
 flutter {
     source = "../.."
 }
 
-// ✅ AGREGAR ESTE BLOQUE AL FINAL
 dependencies {
+    implementation("androidx.multidex:multidex:2.0.1")
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

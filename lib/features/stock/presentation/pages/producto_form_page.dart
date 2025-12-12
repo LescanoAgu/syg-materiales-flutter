@@ -44,9 +44,8 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
 
     // Solo autogenerar si es nuevo
     if (widget.producto == null) {
-      final nuevoCod = await context
-          .read<ProductoProvider>()
-          .generarCodigoParaCategoria(val);
+      // ✅ MAGIA AQUÍ: generará A-001 basado en el prefijo de la categoría
+      final nuevoCod = await context.read<ProductoProvider>().generarCodigoParaCategoria(val);
       if (!mounted) return;
       setState(() => _codigoCtrl.text = nuevoCod);
     }
@@ -67,18 +66,11 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
               Consumer<ProductoProvider>(
                 builder: (ctx, prov, _) => DropdownButtonFormField<String>(
                   value: _categoriaIdSeleccionada,
-                  decoration: const InputDecoration(
-                    labelText: 'Categoría',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: prov.categorias
-                      .map(
-                        (c) => DropdownMenuItem(
-                          value: c.codigo,
-                          child: Text(c.nombre),
-                        ),
-                      )
-                      .toList(),
+                  decoration: const InputDecoration(labelText: 'Categoría', border: OutlineInputBorder()),
+                  items: prov.categorias.map((c) => DropdownMenuItem(
+                    value: c.codigo,
+                    child: Text("${c.nombre} (${c.prefijo})"), // Mostramos prefijo para confirmar
+                  )).toList(),
                   onChanged: esEdicion ? null : _onCategoriaChanged,
                   validator: (v) => v == null ? 'Requerido' : null,
                 ),
@@ -89,18 +81,14 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
                 decoration: const InputDecoration(
                   labelText: 'Código',
                   border: OutlineInputBorder(),
-                  filled: true,
-                  fillColor: Colors.black12,
+                  filled: true, fillColor: Colors.black12,
                 ),
-                readOnly: true,
+                readOnly: true, // Siempre automático para evitar errores
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nombreCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nombre',
-                  border: OutlineInputBorder(),
-                ),
+                decoration: const InputDecoration(labelText: 'Nombre', border: OutlineInputBorder()),
                 validator: (v) => v!.isEmpty ? 'Requerido' : null,
               ),
               const SizedBox(height: 16),
@@ -109,20 +97,14 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
                   Expanded(
                     child: TextFormField(
                       controller: _unidadCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Unidad',
-                        border: OutlineInputBorder(),
-                      ),
+                      decoration: const InputDecoration(labelText: 'Unidad', border: OutlineInputBorder()),
                     ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: TextFormField(
                       controller: _precioCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Precio',
-                        border: OutlineInputBorder(),
-                      ),
+                      decoration: const InputDecoration(labelText: 'Precio', border: OutlineInputBorder()),
                       keyboardType: TextInputType.number,
                     ),
                   ),
@@ -170,24 +152,18 @@ class _ProductoFormPageState extends State<ProductoFormPage> {
     );
 
     try {
-      // Usamos importarProductos como "upsert" (crear o actualizar)
       await context.read<ProductoProvider>().importarProductos([prod]);
 
       if (!mounted) return;
 
       if (widget.producto == null && _stockInicialCtrl.text.isNotEmpty) {
         final cant = double.tryParse(_stockInicialCtrl.text) ?? 0;
-        if (cant > 0)
-          await _stockRepo.establecer(productoId: prod.codigo, cantidad: cant);
+        if (cant > 0) await _stockRepo.establecer(productoId: prod.codigo, cantidad: cant);
       }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 }

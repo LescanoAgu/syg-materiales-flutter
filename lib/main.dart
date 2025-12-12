@@ -1,29 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
+import 'firebase_options.dart'; // Asegúrate de que este archivo exista (generado por flutterfire)
 import 'app.dart';
 import 'features/auth/presentation/pages/auth_gate.dart';
 import 'core/services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  Widget initialScreen = const AuthGate();
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Inicializar Notificaciones
+    // Inicializar Notificaciones (opcional, no bloquea la app si falla)
     try {
       await NotificationService().init();
     } catch (e) {
-      print("⚠️ Error push notifications: $e");
+      debugPrint("⚠️ Error push notifications: $e");
     }
 
   } catch (e) {
-    print("❌ Error fatal: $e");
+    debugPrint("❌ Error fatal Firebase: $e");
   }
 
-  runApp(SyGMaterialesApp(home: initialScreen));
+  // ✅ Aquí definimos la pantalla de inicio
+  runApp(const SyGMaterialesApp(home: AuthGate()));
 }

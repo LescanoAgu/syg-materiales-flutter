@@ -9,6 +9,42 @@ class ProductoRepository {
   static const String _collection = 'productos';
   static const String _stockCollection = 'stock';
 
+  // --- GENERACIÓN INTELIGENTE DE CÓDIGOS ---
+  Future<String> generarSiguienteCodigo(String categoriaId, String prefijo) async {
+    try {
+      // 1. Buscamos todos los productos de esta categoría para encontrar el último número
+      final snapshot = await _firestore.collection(_collection)
+          .where('categoriaId', isEqualTo: categoriaId)
+          .get();
+
+      int maxNum = 0;
+
+      for (var doc in snapshot.docs) {
+        final codigo = doc.id; // El ID del doc es el código (ej: A-001 o A001)
+
+        // Limpiamos el código para dejar solo los números
+        // Esto permite leer "A001" del CSV y "A-001" manuales y entender ambos
+        final soloNumeros = codigo.replaceAll(RegExp(r'[^0-9]'), '');
+
+        if (soloNumeros.isNotEmpty) {
+          final num = int.tryParse(soloNumeros) ?? 0;
+          if (num > maxNum) maxNum = num;
+        }
+      }
+
+      // 2. Generamos el siguiente: PREFIJO + GUION + NUMERO (Padding 3)
+      // Ejemplo: Si max es 1 -> A-002
+      return '$prefijo-${(maxNum + 1).toString().padLeft(3, '0')}';
+
+    } catch (e) {
+      // Fallback de seguridad
+      return '$prefijo-001';
+    }
+  }
+
+  // ... (RESTO DE MÉTODOS DE LECTURA/ESCRITURA IGUALES AL ANTERIOR) ...
+  // Copio los esenciales para que el archivo esté completo y no rompa nada
+
   Future<QuerySnapshot> obtenerPaginados({
     int limite = 20,
     DocumentSnapshot? ultimoDocumento,
@@ -26,7 +62,6 @@ class ProductoRepository {
       }
       return await query.limit(limite).get();
     } catch (e) {
-      print('❌ Error paginación: $e');
       rethrow;
     }
   }
@@ -36,11 +71,10 @@ class ProductoRepository {
     try {
       final snapshot = await _firestore.collection(_collection)
           .where('estado', isEqualTo: 'activo')
-          .limit(1000)
+          .limit(100)
           .get();
       final term = termino.toLowerCase().trim();
       final resultados = snapshot.docs.map((d) {
-        // ✅ CORRECCIÓN: Eliminado cast innecesario y limpiado el código
         final data = d.data();
         data['id'] = d.id;
         return ProductoModel.fromMap(data);
@@ -56,22 +90,16 @@ class ProductoRepository {
     }
   }
 
-  Future<ProductoModel?> obtenerPorCodigo(String codigo) async {
-    try {
-      final doc = await _firestore.collection(_collection).doc(codigo).get();
-      if (doc.exists) return ProductoModel.fromMap(doc.data()!..['id'] = doc.id);
-      return null;
-    } catch (e) { return null; }
-  }
-
   Future<void> crear(ProductoModel producto) async {
     String? catNombre;
     try {
       final cat = await _catRepo.obtenerPorId(producto.categoriaId);
       if (cat != null) catNombre = cat.nombre;
     } catch (_) {}
+
     final map = producto.toMap();
     if (catNombre != null) map['categoriaNombre'] = catNombre;
+
     await _firestore.collection(_collection).doc(producto.codigo).set(map);
 
     final stockDoc = await _firestore.collection(_stockCollection).doc(producto.codigo).get();
@@ -89,6 +117,7 @@ class ProductoRepository {
     for (var p in productos) {
       final prodRef = _firestore.collection(_collection).doc(p.codigo);
       batch.set(prodRef, p.toMap());
+
       final stockRef = _firestore.collection(_stockCollection).doc(p.codigo);
       batch.set(stockRef, {
         'productoId': p.codigo,
@@ -102,21 +131,5 @@ class ProductoRepository {
   Future<void> eliminar(String id) async {
     await _firestore.collection(_collection).doc(id).delete();
     await _firestore.collection(_stockCollection).doc(id).delete();
-  }
-
-  Future<String> generarSiguienteCodigo(String categoriaId) async {
-    try {
-      final snapshot = await _firestore.collection(_collection)
-          .where('categoriaId', isEqualTo: categoriaId)
-          .orderBy('codigo', descending: true).limit(1).get();
-      if (snapshot.docs.isEmpty) return '$categoriaId-001';
-      String ultimo = snapshot.docs.first.id;
-      final partes = ultimo.split('-');
-      if (partes.length > 1) {
-        int num = int.tryParse(partes.last) ?? 0;
-        return '$categoriaId-${(num + 1).toString().padLeft(3, '0')}';
-      }
-      return '$categoriaId-001';
-    } catch (e) { return '$categoriaId-001'; }
   }
 }

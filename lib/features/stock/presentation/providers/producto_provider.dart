@@ -18,11 +18,9 @@ class ProductoProvider extends ChangeNotifier {
   bool _isLoadingMore = false;
   String? _errorMessage;
 
-  // Filtros y Orden
+  // Filtros
   OrdenamientoCatalogo _ordenActual = OrdenamientoCatalogo.codigo;
   String? _categoriaFiltroId;
-
-  // Paginación
   DocumentSnapshot? _ultimoDocumento;
   bool _hayMas = true;
 
@@ -32,17 +30,15 @@ class ProductoProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   String? get errorMessage => _errorMessage;
-  OrdenamientoCatalogo get ordenActual => _ordenActual;
   String? get categoriaFiltroId => _categoriaFiltroId;
 
-  // --- CARGA INICIAL Y RECARGA ---
+  // --- CARGA ---
   Future<void> cargarProductos({bool recargar = false}) async {
     if (recargar) {
       _ultimoDocumento = null;
       _productos = [];
       _hayMas = true;
     }
-
     if (_isLoading) return;
     _isLoading = true;
     notifyListeners();
@@ -53,22 +49,17 @@ class ProductoProvider extends ChangeNotifier {
         ordenarPor: _mapearOrdenamiento(),
         filtroCategoriaId: _categoriaFiltroId,
       );
-
       _procesarSnapshot(snapshot);
-
     } catch (e) {
       _errorMessage = e.toString();
-      print("Error cargando productos: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // --- SCROLL INFINITO ---
   Future<void> cargarMasProductos() async {
     if (_isLoadingMore || !_hayMas || _isLoading) return;
-
     _isLoadingMore = true;
     notifyListeners();
 
@@ -79,9 +70,7 @@ class ProductoProvider extends ChangeNotifier {
         ordenarPor: _mapearOrdenamiento(),
         filtroCategoriaId: _categoriaFiltroId,
       );
-
       _procesarSnapshot(snapshot);
-
     } catch (e) {
       print("Error cargando más: $e");
     } finally {
@@ -95,23 +84,17 @@ class ProductoProvider extends ChangeNotifier {
       _hayMas = false;
       return;
     }
-
     _ultimoDocumento = snapshot.docs.last;
-
     final nuevos = snapshot.docs.map((doc) {
       final data = doc.data() as Map<String, dynamic>;
       data['id'] = doc.id;
       return ProductoModel.fromMap(data);
     }).toList();
-
     _productos.addAll(nuevos);
-
-    if (snapshot.docs.length < 20) {
-      _hayMas = false;
-    }
+    if (snapshot.docs.length < 20) _hayMas = false;
   }
 
-  // --- CATEGORÍAS ---
+  // --- CATEGORÍAS (Con Prefijo) ---
   Future<void> cargarCategorias() async {
     try {
       _categorias = await _catRepo.obtenerTodas();
@@ -125,13 +108,15 @@ class ProductoProvider extends ChangeNotifier {
     cargarProductos(recargar: true);
   }
 
-  Future<void> crearCategoria(String nombre, String codigo) async {
+  // ✅ CREAR CATEGORÍA CON PREFIJO
+  Future<void> crearCategoria(String nombre, String codigo, String prefijo) async {
     try {
       if (_categorias.any((c) => c.codigo == codigo)) return;
 
       final nuevaCat = CategoriaModel(
         codigo: codigo,
         nombre: nombre,
+        prefijo: prefijo, // ✅ Guardamos el prefijo
         orden: 99,
         createdAt: DateTime.now().toIso8601String(),
       );
@@ -144,13 +129,12 @@ class ProductoProvider extends ChangeNotifier {
     }
   }
 
-  // --- BÚSQUEDA ---
+  // --- BÚSQUEDA Y GESTIÓN ---
   Future<void> buscarProductos(String query) async {
     if (query.isEmpty) {
       cargarProductos(recargar: true);
       return;
     }
-
     _isLoading = true;
     notifyListeners();
     try {
@@ -160,7 +144,6 @@ class ProductoProvider extends ChangeNotifier {
     finally { _isLoading = false; notifyListeners(); }
   }
 
-  // --- GESTIÓN ---
   Future<bool> importarProductos(List<ProductoModel> lista) async {
     try {
       await _repository.importarMasivos(lista);
@@ -175,38 +158,22 @@ class ProductoProvider extends ChangeNotifier {
       _productos.removeWhere((p) => p.id == id || p.codigo == id);
       notifyListeners();
       return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    }
-  }
-
-  void cambiarOrden(OrdenamientoCatalogo orden) {
-    _ordenActual = orden;
-    cargarProductos(recargar: true);
-  }
-
-  String _mapearOrdenamiento() {
-    switch (_ordenActual) {
-      case OrdenamientoCatalogo.nombreAZ: return 'nombre';
-      case OrdenamientoCatalogo.nombreZA: return 'nombre';
-      case OrdenamientoCatalogo.codigo: return 'codigo';
-      case OrdenamientoCatalogo.categoria: return 'categoriaId';
-    }
+    } catch (e) { return false; }
   }
 
   Future<String> generarCodigoParaCategoria(String catId) async {
-    return await _repository.generarSiguienteCodigo(catId);
+    // Buscamos la categoría para obtener su prefijo real
+    final cat = _categorias.firstWhere((c) => c.codigo == catId, orElse: () => CategoriaModel(codigo: '', nombre: '', orden: 0));
+
+    // Si la categoría tiene prefijo (ej: "A"), lo usamos. Si no, usamos una letra por defecto o el ID.
+    String prefijo = cat.prefijo.isNotEmpty ? cat.prefijo : catId.substring(0, 1).toUpperCase();
+
+    return await _repository.generarSiguienteCodigo(catId, prefijo);
   }
 
-  // ✅ FIX: Ahora usamos la búsqueda flexible del repo sin forzar mayúsculas
-  Future<List<ProductoModel>> buscarParaDelegate(String query) async {
-    if (query.isEmpty) return [];
-    try {
-      return await _repository.buscar(query);
-    } catch (e) {
-      print("Error búsqueda delegate: $e");
-      return [];
-    }
+  Future<List<ProductoModel>> buscarParaDelegate(String query) async => await _repository.buscar(query);
+
+  String _mapearOrdenamiento() {
+    return _ordenActual == OrdenamientoCatalogo.codigo ? 'codigo' : 'nombre';
   }
 }
