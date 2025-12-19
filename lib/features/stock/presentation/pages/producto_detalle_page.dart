@@ -1,85 +1,88 @@
 import 'package:flutter/material.dart';
+import '../../../../core/constants/app_colors.dart';
 import '../../data/models/producto_model.dart';
-import 'movimiento_historial_page.dart'; // ✅ Importamos la página de historial
+import 'movimiento_historial_page.dart';
+import 'producto_form_page.dart';
 
 class ProductoDetallePage extends StatelessWidget {
-  final ProductoModel producto; // Usamos el alias o el nombre directo
+  final ProductoModel producto;
   const ProductoDetallePage({super.key, required this.producto});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(producto.nombre)),
+      appBar: AppBar(
+        title: Text(producto.codigo),
+        backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () {
+              Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => ProductoFormPage(producto: producto))
+              );
+            },
+          )
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Tarjeta de Info Principal
             Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  child: Text(producto.unidadBase[0].toUpperCase()),
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Text(producto.nombre, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                    const SizedBox(height: 8),
+                    Chip(label: Text(producto.categoriaNombre ?? 'Sin Categoría')),
+                    const Divider(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _statItem("Stock Actual", producto.cantidadFormateada, Colors.black),
+                        const SizedBox(width: 40),
+                        _statItem("Unidad", producto.unidadBase, Colors.grey),
+                      ],
+                    ),
+                  ],
                 ),
-                title: Text(producto.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: Text(producto.codigo),
               ),
             ),
-            const SizedBox(height: 20),
 
-            // Info de Stock
-            const Text("Estado Actual", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _buildInfoBox("Stock Físico", "${producto.cantidadDisponible}", Colors.blue),
-                const SizedBox(width: 10),
-                _buildInfoBox("Unidad", producto.unidadBase, Colors.grey),
-              ],
-            ),
+            const SizedBox(height: 24),
 
-            const Spacer(),
-
-            // Botón de Historial Conectado
             SizedBox(
               width: double.infinity,
               height: 50,
               child: ElevatedButton.icon(
                 icon: const Icon(Icons.history),
-                label: const Text("VER HISTORIAL DE MOVIMIENTOS"),
+                label: const Text("VER HISTORIAL COMPLETO"),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary),
                 onPressed: () {
                   Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => MovimientoHistorialPage(productoId: producto.codigo)
-                    ),
+                      context,
+                      MaterialPageRoute(builder: (_) => MovimientoHistorialPage(productoId: producto.codigo))
                   );
                 },
               ),
             ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoBox(String label, String valor, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.5)),
-        ),
-        child: Column(
-          children: [
-            Text(valor, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
-            Text(label, style: TextStyle(fontSize: 12, color: color)),
-          ],
-        ),
-      ),
+  Widget _statItem(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: const TextStyle(color: Colors.grey)),
+      ],
     );
   }
 }

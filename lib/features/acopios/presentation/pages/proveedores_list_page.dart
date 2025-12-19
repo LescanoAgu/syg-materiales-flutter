@@ -24,70 +24,42 @@ class _ProveedoresListPageState extends State<ProveedoresListPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.esNavegacionPrincipal) return _buildBody();
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Proveedores')),
-      body: _buildBody(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ProveedorFormPage()),
-        ),
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
+      appBar: widget.esNavegacionPrincipal ? null : AppBar(title: const Text('Proveedores'), backgroundColor: AppColors.primary),
+      body: Consumer<AcopioProvider>(
+        builder: (ctx, prov, _) {
+          if (prov.isLoading) return const Center(child: CircularProgressIndicator());
+          if (prov.proveedores.isEmpty) return const Center(child: Text("No hay proveedores registrados"));
 
-  Widget _buildBody() {
-    return Consumer<AcopioProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading)
-          return const Center(child: CircularProgressIndicator());
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: provider.proveedores.length,
-          itemBuilder: (ctx, i) {
-            final p = provider.proveedores[i];
-            return Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: p.esDepositoSyg
-                      ? AppColors.primary
-                      : Colors.grey[300],
-                  child: Icon(
-                    p.esDepositoSyg ? Icons.warehouse : Icons.store,
-                    color: p.esDepositoSyg ? Colors.white : Colors.grey[700],
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: prov.proveedores.length,
+            separatorBuilder: (_,__) => const SizedBox(height: 8),
+            itemBuilder: (ctx, i) {
+              final p = prov.proveedores[i];
+              return Card(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: p.esDepositoSyg ? AppColors.primary : Colors.grey[300],
+                    child: Icon(p.esDepositoSyg ? Icons.warehouse : Icons.store, color: p.esDepositoSyg ? Colors.white : Colors.grey[700]),
                   ),
+                  title: Text(p.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text(p.direccion ?? 'Sin dirección'),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProveedorDetallePage(proveedor: p))),
+                  trailing: !p.esDepositoSyg
+                      ? IconButton(icon: const Icon(Icons.edit), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ProveedorFormPage(proveedor: p))))
+                      : null,
                 ),
-                title: Text(
-                  p.nombre,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(p.direccion ?? 'Sin dirección'),
-                onTap: () {
-                  // ✅ Navegación al detalle
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => ProveedorDetallePage(proveedor: p)),
-                  );
-                },                trailing: !p.esDepositoSyg
-                    ? IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.blue),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ProveedorFormPage(proveedor: p),
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-            );
-          },
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        backgroundColor: AppColors.primary,
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProveedorFormPage())),
+      ),
     );
   }
 }

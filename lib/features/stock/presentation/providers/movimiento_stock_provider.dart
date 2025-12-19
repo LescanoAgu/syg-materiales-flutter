@@ -27,9 +27,7 @@ class MovimientoStockProvider extends ChangeNotifier {
 
     try {
       _movimientos = await _repository.obtenerMovimientos(
-        desde: desde,
-        hasta: hasta,
-        tipo: tipo,
+        desde: desde, hasta: hasta, tipo: tipo,
       );
       _state = MovimientoStockState.loaded;
     } catch (e) {
@@ -44,15 +42,15 @@ class MovimientoStockProvider extends ChangeNotifier {
     _productoFiltroCodigo = productoId;
     _tipoFiltro = tipo;
     notifyListeners();
+
     try {
       _movimientos = await _repository.obtenerMovimientos(
-        productoId: productoId,
-        tipo: tipo,
+          productoId: productoId, tipo: tipo
       );
       _state = MovimientoStockState.loaded;
     } catch (e) {
       _state = MovimientoStockState.error;
-      print("Error cargando historial producto: $e");
+      debugPrint("Error cargando historial: $e");
     }
     notifyListeners();
   }
@@ -65,7 +63,6 @@ class MovimientoStockProvider extends ChangeNotifier {
     String? motivo,
     String? referencia,
     String? usuarioId,
-    // ✅ Parametros Obra
     String? obraId,
     String? obraNombre,
   }) async {
@@ -83,19 +80,17 @@ class MovimientoStockProvider extends ChangeNotifier {
         motivo: motivo,
         referencia: referencia,
         usuarioId: usuarioId,
-        obraId: obraId,        // ✅ Pasar al repo
-        obraNombre: obraNombre, // ✅ Pasar al repo
+        obraId: obraId,
+        obraNombre: obraNombre,
       );
 
-      // Recargar lista si estamos viendo el detalle
+      // Recarga inteligente
       if (_productoFiltroCodigo != null) {
         await cargarMovimientosDeProducto(_productoFiltroCodigo!, tipo: _tipoFiltro);
       } else {
         await cargarMovimientos(tipo: _tipoFiltro);
       }
 
-      _state = MovimientoStockState.loaded;
-      notifyListeners();
       return true;
     } catch (e) {
       _state = MovimientoStockState.error;

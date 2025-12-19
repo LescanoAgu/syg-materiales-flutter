@@ -5,7 +5,6 @@ import '../../../../features/auth/presentation/providers/auth_provider.dart';
 import '../../../../features/auth/data/models/usuario_model.dart';
 import '../providers/usuarios_provider.dart';
 import 'usuario_detalle_page.dart';
-import '../../../stock/presentation/pages/stock_page.dart'; // ✅ Importar Home
 
 class UsuariosListPage extends StatefulWidget {
   const UsuariosListPage({super.key});
@@ -34,33 +33,25 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gestión de Equipo'),
-        // ✅ BOTÓN ATRÁS AGREGADO
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const StockPage()),
-          ),
-        ),
+        backgroundColor: AppColors.primary,
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
           tabs: const [
-            Tab(text: 'PENDIENTES', icon: Icon(Icons.notifications_active)),
-            Tab(text: 'EQUIPO ACTIVO', icon: Icon(Icons.group)),
+            Tab(text: 'ACTIVOS'),
+            Tab(text: 'SOLICITUDES'),
           ],
         ),
       ),
       body: Consumer<UsuariosProvider>(
-        // ... (resto del código igual)
         builder: (context, provider, _) {
           if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildLista(provider.pendientes, esPendiente: true),
-              _buildLista(provider.activos),
+              _buildListaUsuarios(provider.activos, esPendiente: false),
+              _buildListaUsuarios(provider.pendientes, esPendiente: true),
             ],
           );
         },
@@ -68,8 +59,7 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
     );
   }
 
-  // ... (método _buildLista igual)
-  Widget _buildLista(List<UsuarioModel> usuarios, {bool esPendiente = false}) {
+  Widget _buildListaUsuarios(List<UsuarioModel> usuarios, {bool esPendiente = false}) {
     if (usuarios.isEmpty) {
       return Center(
         child: Column(
@@ -91,13 +81,22 @@ class _UsuariosListPageState extends State<UsuariosListPage> with SingleTickerPr
         final u = usuarios[index];
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: esPendiente ? Colors.orange.withOpacity(0.2) : AppColors.primary.withOpacity(0.2),
-            child: Text(u.nombre.isNotEmpty ? u.nombre[0].toUpperCase() : '?'),
+            // ✅ Fix deprecated
+            backgroundColor: esPendiente
+                ? Colors.orange.withValues(alpha: 0.2)
+                : AppColors.primary.withValues(alpha: 0.2),
+            child: Text(
+              u.nombre.isNotEmpty ? u.nombre[0].toUpperCase() : '?',
+              style: TextStyle(
+                  color: esPendiente ? Colors.orange : AppColors.primary,
+                  fontWeight: FontWeight.bold
+              ),
+            ),
           ),
           title: Text(u.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text('${u.email}\nRol: ${u.rol.toUpperCase()}'),
           isThreeLine: true,
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
           onTap: () {
             Navigator.push(
                 context,

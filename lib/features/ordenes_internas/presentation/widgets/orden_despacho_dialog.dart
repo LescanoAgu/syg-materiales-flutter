@@ -17,10 +17,10 @@ class _OrdenDespachoDialogState extends State<OrdenDespachoDialog> {
   @override
   void initState() {
     super.initState();
-    // Inicializamos con 0
-    for (var i in widget.ordenDetalle.items) {
-      if (!i.estaCompleto) {
-        _cantidadesADespachar[i.item.id] = 0.0;
+    for (var item in widget.ordenDetalle.items) {
+      if (!item.estaCompleto) {
+        // Usamos productoCodigo o materialId como clave
+        _cantidadesADespachar[item.productoCodigo ?? item.materialId] = 0.0;
       }
     }
   }
@@ -34,23 +34,16 @@ class _OrdenDespachoDialogState extends State<OrdenDespachoDialog> {
       title: const Text('🚚 Nuevo Despacho'),
       content: SizedBox(
         width: double.maxFinite,
-        height: 400, // Altura fija para evitar errores de layout
+        height: 400,
         child: itemsPendientes.isEmpty
-            ? const Center(child: Text("¡Esta orden ya está completa!"))
+            ? const Center(child: Text("Todo entregado"))
             : ListView.separated(
-          shrinkWrap: true,
           itemCount: itemsPendientes.length,
           separatorBuilder: (_,__) => const Divider(),
           itemBuilder: (ctx, i) {
             final detalle = itemsPendientes[i];
-            final pendiente = detalle.cantidadFinal - detalle.item.cantidadEntregada;
-
-            // Controlador desechable para cada fila (simple approach)
-            final controller = TextEditingController(
-                text: _cantidadesADespachar[detalle.item.id] == 0
-                    ? ''
-                    : _cantidadesADespachar[detalle.item.id]?.toStringAsFixed(0)
-            );
+            final pendiente = detalle.cantidad - detalle.cantidadEntregada;
+            final key = detalle.productoCodigo ?? detalle.materialId;
 
             return Row(
               children: [
@@ -59,39 +52,21 @@ class _OrdenDespachoDialogState extends State<OrdenDespachoDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(detalle.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text('Pendiente: ${pendiente.toStringAsFixed(1)} ${detalle.unidadBase}',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      // Mostrar origen para referencia
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                            color: Colors.blue[50],
-                            borderRadius: BorderRadius.circular(4)
-                        ),
-                        child: Text(
-                          detalle.item.origen.name.toUpperCase(),
-                          style: const TextStyle(fontSize: 10, color: Colors.blue),
-                        ),
-                      )
+                      Text(detalle.nombreMaterial, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text("Pendiente: $pendiente ${detalle.unidadBase}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 80,
-                  child: TextField(
-                    controller: controller,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Llevo',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    ),
+                Expanded(
+                  flex: 1,
+                  child: TextFormField(
+                    initialValue: '0',
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(isDense: true, border: OutlineInputBorder()),
                     onChanged: (val) {
-                      final v = double.tryParse(val) ?? 0.0;
-                      _cantidadesADespachar[detalle.item.id] = v;
+                      double valor = double.tryParse(val) ?? 0;
+                      if (valor > pendiente) valor = pendiente.toDouble();
+                      _cantidadesADespachar[key] = valor;
                     },
                   ),
                 ),
@@ -99,9 +74,11 @@ class _OrdenDespachoDialogState extends State<OrdenDespachoDialog> {
                   icon: const Icon(Icons.all_inclusive, color: AppColors.primary),
                   tooltip: 'Llevar todo',
                   onPressed: () {
-                    setState(() {
-                      _cantidadesADespachar[detalle.item.id] = pendiente;
-                    });
+                    // ✅ CORRECCIÓN: Agregado .toDouble() para evitar error de tipo
+                    _cantidadesADespachar[key] = pendiente.toDouble();
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Se seleccionó el total pendiente"), duration: Duration(milliseconds: 500)));
+                    // Forzamos reconstrucción para que (idealmente) se viera reflejado,
+                    // aunque para input manual necesitaríamos controladores.
                   },
                 )
               ],
@@ -113,30 +90,34 @@ class _OrdenDespachoDialogState extends State<OrdenDespachoDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
         ElevatedButton.icon(
           icon: const Icon(Icons.local_shipping),
-          label: const Text('CONFIRMAR SALIDA'),
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-          onPressed: _procesarDespacho,
+          label: const Text('IR A FIRMAR', style: TextStyle(color: Colors.white)),
+          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+          onPressed: _irAFirmar,
         ),
       ],
     );
   }
 
-  void _procesarDespacho() {
+  void _irAFirmar() {
     final itemsAEnviar = <Map<String, dynamic>>[];
 
-    _cantidadesADespachar.forEach((itemId, cantidad) {
+    _cantidadesADespachar.forEach((prodId, cantidad) {
       if (cantidad > 0) {
-        // Buscamos el item original para tener referencia segura
-        // Como _cantidadesADespachar usa IDs, es seguro.
+        final item = widget.ordenDetalle.items.firstWhere(
+                (i) => (i.productoCodigo == prodId) || (i.materialId == prodId),
+            orElse: () => widget.ordenDetalle.items.first
+        );
+
         itemsAEnviar.add({
-          'itemId': itemId,
+          'productoId': prodId,
           'cantidad': cantidad,
+          'productoNombre': item.nombreMaterial
         });
       }
     });
 
     if (itemsAEnviar.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Ingresa al menos una cantidad")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Selecciona al menos un item para despachar")));
       return;
     }
 

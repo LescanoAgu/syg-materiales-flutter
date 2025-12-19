@@ -1,64 +1,154 @@
-import 'package:flutter/material.dart';
 import 'dart:typed_data';
-import '../../data/repositories/orden_interna_repository.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+
 import '../../data/models/orden_interna_model.dart';
-import '../../data/models/orden_item_model.dart';
 import '../../data/models/remito_model.dart';
-import '../../../acopios/data/repositories/acopio_repository.dart'; // ✅ Importamos repo de acopios
+// ✅ IMPORT NUEVO: Necesario para la lógica de descuento
+import '../../../acopios/data/models/acopio_model.dart';
 
 class OrdenInternaProvider extends ChangeNotifier {
-  final OrdenInternaRepository _repository = OrdenInternaRepository();
-  final AcopioRepository _acopioRepo = AcopioRepository(); // ✅ Instancia
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   List<OrdenInternaDetalle> _ordenes = [];
+  OrdenInternaDetalle? _ordenSeleccionada;
   bool _isLoading = false;
-  String? _errorMessage;
 
   List<OrdenInternaDetalle> get ordenes => _ordenes;
+  OrdenInternaDetalle? get ordenSeleccionada => _ordenSeleccionada;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
 
+  // --- CONSULTAS DE REMITOS ---
+  Stream<List<Remito>> getRemitosPorCliente(String clienteId) {
+    return _firestore
+        .collection('remitos')
+        .where('clienteId', isEqualTo: clienteId)
+        .orderBy('fecha', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => Remito.fromMap(doc.data(), doc.id))
+        .toList());
+  }
+
+  Stream<List<Remito>> getRemitosPorProveedor(String proveedorId) {
+    return _firestore
+        .collection('remitos')
+        .where('proveedorId', isEqualTo: proveedorId)
+        .orderBy('fecha', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => Remito.fromMap(doc.data(), doc.id))
+        .toList());
+  }
+
+  Stream<List<Remito>> getRemitosPorOrden(String ordenId) {
+    return _firestore
+        .collection('remitos')
+        .where('ordenId', isEqualTo: ordenId)
+        .orderBy('fecha', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+        .map((doc) => Remito.fromMap(doc.data(), doc.id))
+        .toList());
+  }
+
+  // --- CARGA DE ÓRDENES ---
   Future<void> cargarOrdenes() async {
     _isLoading = true;
     notifyListeners();
     try {
-      _ordenes = await _repository.getOrdenes();
-      _ordenes.sort((a, b) {
-        if (a.orden.prioridad == 'urgente' && b.orden.prioridad != 'urgente') return -1;
-        if (a.orden.prioridad != 'urgente' && b.orden.prioridad == 'urgente') return 1;
-        return b.orden.createdAt.compareTo(a.orden.createdAt);
-      });
+      final snapshot = await _firestore.collection('ordenes_internas')
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      List<OrdenInternaDetalle> temp = [];
+
+      for (var doc in snapshot.docs) {
+        final ordenModelo = OrdenInternaModel.fromSnapshot(doc);
+        final data = doc.data();
+        String clienteNombre = data['clienteRazonSocial'] ?? 'Cliente';
+        String obraNombre = data['obraNombre'] ?? 'Obra';
+
+        temp.add(OrdenInternaDetalle(
+            orden: ordenModelo,
+            clienteRazonSocial: clienteNombre,
+            obraNombre: obraNombre
+        ));
+      }
+      _ordenes = temp;
+
     } catch (e) {
-      _errorMessage = "Error cargando órdenes: $e";
+      print("Error cargando órdenes: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  Future<List<Remito>> cargarRemitos(String ordenId) async {
-    try {
-      return await _repository.obtenerRemitos(ordenId);
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<OrdenInternaDetalle?> cargarDetalleOrden(String id) async {
+  Future<void> cargarDetalleOrden(String id) async {
     _isLoading = true;
     notifyListeners();
     try {
-      return await _repository.getOrdenPorId(id);
+      final doc = await _firestore.collection('ordenes_internas').doc(id).get();
+      if (!doc.exists) {
+        _ordenSeleccionada = null;
+        return;
+      }
+
+      final ordenModelo = OrdenInternaModel.fromSnapshot(doc);
+      final data = doc.data() as Map<String, dynamic>;
+
+      _ordenSeleccionada = OrdenInternaDetalle(
+          orden: ordenModelo,
+          clienteRazonSocial: data['clienteRazonSocial'] ?? 'Cliente',
+          obraNombre: data['obraNombre'] ?? 'Obra'
+      );
     } catch (e) {
-      _errorMessage = "Error cargando detalle: $e";
-      return null;
+      print("Error detalle: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // --- MÉTODOS DE ESCRITURA ---
+  // --- CREAR Y ACTUALIZAR ---
+  Future<bool> aprobarOrden({
+    required String ordenId,
+    required String usuarioId,
+    required List<OrdenItemDetalle> itemsModificados,
+    String? observaciones,
+    String? proveedor,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+
+      final itemsMap = itemsModificados.map((i) => i.toMap()).toList();
+
+      await _firestore.collection('ordenes_internas').doc(ordenId).update({
+        'estado': 'aprobada',
+        'items': itemsMap,
+        'aprobadoPor': usuarioId,
+        'fechaAprobacion': Timestamp.now(),
+        'observacionesAprobacion': observaciones,
+        'proveedor': proveedor, // Campo legacy (visual)
+        'modificadoPor': usuarioId,
+      });
+
+      await cargarOrdenes();
+      if (_ordenSeleccionada?.orden.id == ordenId) {
+        await cargarDetalleOrden(ordenId);
+      }
+      return true;
+    } catch (e) {
+      print("Error aprobando: $e");
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<bool> crearOrden({
     required String clienteId,
@@ -67,54 +157,65 @@ class OrdenInternaProvider extends ChangeNotifier {
     String? titulo,
     required List<Map<String, dynamic>> items,
     String? observaciones,
-    String prioridad = 'media',
-  }) async {
-    _isLoading = true; notifyListeners();
-    try {
-      await _repository.crearOrden(
-          clienteId: clienteId,
-          obraId: obraId,
-          solicitanteNombre: solicitanteNombre,
-          titulo: titulo,
-          items: items,
-          observacionesCliente: observaciones,
-          prioridad: prioridad
-      );
-      await cargarOrdenes();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<bool> editarOrden({
-    required String ordenId,
-    required String clienteId,
-    required String obraId,
     required String prioridad,
-    String? titulo,
-    String? observaciones,
-    required List<Map<String, dynamic>> items,
+    bool esRetiroAcopio = false,
+    String? acopioId,
   }) async {
-    _isLoading = true; notifyListeners();
     try {
-      await _repository.editarOrden(
-        ordenId: ordenId,
-        clienteId: clienteId,
-        obraId: obraId,
-        titulo: titulo,
-        prioridad: prioridad,
-        observaciones: observaciones,
-        items: items,
-      );
+      _isLoading = true;
+      notifyListeners();
+
+      String clienteNombre = '';
+      String obraNombre = '';
+      try {
+        final cd = await _firestore.collection('clientes').doc(clienteId).get();
+        if(cd.exists) clienteNombre = cd.data()?['razonSocial'] ?? '';
+      } catch(_) {}
+      try {
+        final od = await _firestore.collection('obras').doc(obraId).get();
+        if (od.exists) obraNombre = od.data()?['nombre'] ?? '';
+      } catch(_) {}
+
+      final ordenId = const Uuid().v4();
+      final numero = "OI-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
+
+      List<Map<String, dynamic>> itemsParaGuardar = items.map((i) {
+        return {
+          'productoId': i['productoId'],
+          'productoNombre': i['productoNombre'],
+          'productoCodigo': i['productoCodigo'],
+          'unidad': i['unidad'],
+          'cantidad': i['cantidad'],
+          'cantidadEntregada': 0,
+        };
+      }).toList();
+
+      final nuevaOrden = {
+        'id': ordenId,
+        'numero': numero,
+        'clienteId': clienteId,
+        'clienteRazonSocial': clienteNombre,
+        'obraId': obraId,
+        'obraNombre': obraNombre,
+        'solicitanteId': '',
+        'solicitanteNombre': solicitanteNombre,
+        'fechaPedido': Timestamp.now(),
+        'createdAt': Timestamp.now(),
+        'estado': 'solicitado',
+        'prioridad': prioridad,
+        'titulo': titulo,
+        'items': itemsParaGuardar,
+        'observacionesCliente': observaciones,
+        'esRetiroAcopio': esRetiroAcopio,
+        'acopioId': acopioId,
+        'origen': esRetiroAcopio ? 'acopio_cliente' : 'stock_propio',
+      };
+
+      await _firestore.collection('ordenes_internas').doc(ordenId).set(nuevaOrden);
       await cargarOrdenes();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      print("Error creating order: $e");
       return false;
     } finally {
       _isLoading = false;
@@ -122,109 +223,144 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> aprobarOrden({
-    required String ordenId,
-    required List<OrdenItem> itemsOriginales,
-    required Map<String, Map<String, dynamic>> logistica,
-    required String usuarioId,
-  }) async {
-    _isLoading = true; notifyListeners();
-    try {
-      List<OrdenItem> itemsConfigurados = [];
-      for (var item in itemsOriginales) {
-        final config = logistica[item.id];
-        if (config != null) {
-          itemsConfigurados.add(item.copyWith(
-            origen: config['origen'],
-            proveedorId: config['proveedorId'],
-            cantidadAprobada: item.cantidadSolicitada,
-          ));
-        } else {
-          itemsConfigurados.add(item);
-        }
-      }
-      await _repository.aprobarOrdenConLogistica(
-        ordenId: ordenId,
-        itemsConfigurados: itemsConfigurados,
-        usuarioAprobadorId: usuarioId,
-      );
-      await cargarOrdenes();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // ✅ GENERAR REMITO INTELIGENTE (Con descuento de Acopios)
   Future<bool> generarRemito({
-    required String ordenId,
-    required List<Map<String, dynamic>> items, // {itemId, cantidad, acopioId?}
+    required OrdenInternaDetalle ordenDetalle,
+    required List<Map<String, dynamic>> itemsAEntregar,
     required Uint8List firmaAutoriza,
     required Uint8List firmaRecibe,
     required String usuarioId,
     required String usuarioNombre,
+    String? proveedorId,
+    String? proveedorNombre,
   }) async {
-    _isLoading = true; notifyListeners();
     try {
-      // 1. Procesar Descuentos de Acopio (Si corresponde)
-      // Agrupamos por Acopio ID para hacer descuentos en lote
-      Map<String, Map<String, double>> descuentosPorAcopio = {};
+      _isLoading = true;
+      notifyListeners();
 
-      for (var item in items) {
-        if (item.containsKey('acopioId') && item['acopioId'] != null) {
-          final acopioId = item['acopioId'] as String;
-          final prodId = item['productoId'] as String; // Necesitamos pasar esto desde la UI
-          final cant = (item['cantidad'] as num).toDouble();
+      final remitoId = const Uuid().v4();
+      final numeroRemito = "REM-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
 
-          if (!descuentosPorAcopio.containsKey(acopioId)) {
-            descuentosPorAcopio[acopioId] = {};
-          }
-          descuentosPorAcopio[acopioId]![prodId] = cant;
-        }
+      // 1. Armar Items
+      List<RemitoItem> itemsRemito = [];
+      for (var itemEntrega in itemsAEntregar) {
+        String pId = itemEntrega['productoId'];
+        double cantidadEntrega = (itemEntrega['cantidad'] as num).toDouble();
+
+        final itemOriginal = ordenDetalle.items.firstWhere(
+                (i) => i.materialId == pId || i.productoCodigo == pId,
+            orElse: () => ordenDetalle.items.first
+        );
+
+        itemsRemito.add(RemitoItem(
+            productoId: pId,
+            productoNombre: itemOriginal.nombreMaterial,
+            productoCodigo: itemOriginal.productoCodigo,
+            cantidad: cantidadEntrega,
+            cantidadSolicitadaTotal: itemOriginal.cantidad.toDouble(),
+            saldoPendienteAnterior: (itemOriginal.cantidad - itemOriginal.cantidadEntregada).toDouble(),
+            unidad: itemOriginal.unidadBase
+        ));
       }
 
-      // Ejecutamos los descuentos en la colección de Acopios
-      for (var entry in descuentosPorAcopio.entries) {
-        await _acopioRepo.consumirDeAcopio(entry.key, entry.value);
-      }
-
-      // 2. Generar el Remito y actualizar Orden (Stock propio se descuenta en el repo)
-      await _repository.generarRemito(
-        ordenId: ordenId,
-        itemsDespachados: items,
-        firmaAutoriza: firmaAutoriza,
-        firmaRecibe: firmaRecibe,
-        usuarioId: usuarioId,
-        usuarioNombre: usuarioNombre,
+      final nuevoRemito = Remito(
+        id: remitoId,
+        numeroRemito: numeroRemito,
+        ordenId: ordenDetalle.orden.id!,
+        fecha: DateTime.now(),
+        clienteId: ordenDetalle.orden.clienteId,
+        obraId: ordenDetalle.orden.obraId,
+        proveedorId: proveedorId,
+        proveedorNombre: proveedorNombre,
+        items: itemsRemito,
+        firmaAutorizoUrl: '',
+        firmaRecibioUrl: '',
+        usuarioDespachadorId: usuarioId,
+        usuarioDespachadorNombre: usuarioNombre,
       );
 
+      final batch = _firestore.batch();
+      final remitoRef = _firestore.collection('remitos').doc(remitoId);
+      batch.set(remitoRef, nuevoRemito.toMap());
+
+      final ordenRef = _firestore.collection('ordenes_internas').doc(ordenDetalle.orden.id);
+
+      // 2. Lógica de Descuento (Acopio vs Stock)
+      // Buscamos acopio si corresponde
+      AcopioModel? acopioData;
+      DocumentReference? acopioRef;
+
+      if (ordenDetalle.orden.origen == OrigenAbastecimiento.acopio_cliente && ordenDetalle.orden.acopioId != null) {
+        acopioRef = _firestore.collection('acopios').doc(ordenDetalle.orden.acopioId);
+        final snap = await acopioRef.get();
+        if(snap.exists) acopioData = AcopioModel.fromSnapshot(snap);
+      }
+
+      List<Map<String, dynamic>> itemsOrdenActualizados = ordenDetalle.items.map((itemOrig) {
+        final itemEntrega = itemsAEntregar.firstWhere(
+                (i) => i['productoId'] == itemOrig.materialId || i['productoId'] == itemOrig.productoCodigo,
+            orElse: () => {}
+        );
+
+        double entregadoAhora = 0;
+        if (itemEntrega.isNotEmpty) {
+          entregadoAhora = (itemEntrega['cantidad'] as num).toDouble();
+
+          // A. Descuento de Acopio
+          if (acopioData != null && acopioRef != null) {
+            final idx = acopioData!.items.indexWhere((ai) => ai.productoId == itemOrig.materialId);
+            if (idx != -1) {
+              // Actualizamos objeto local para guardar después
+              final itemAcopio = acopioData!.items[idx];
+              final nuevosItems = List<AcopioItem>.from(acopioData!.items);
+              nuevosItems[idx] = itemAcopio.copyWith(cantidadDisponible: itemAcopio.cantidadDisponible - entregadoAhora);
+
+              acopioData = AcopioModel(
+                id: acopioData!.id,
+                clienteId: acopioData!.clienteId,
+                clienteRazonSocial: acopioData!.clienteRazonSocial,
+                proveedorId: acopioData!.proveedorId,
+                proveedorNombre: acopioData!.proveedorNombre,
+                fechaUltimoMovimiento: DateTime.now(),
+                items: nuevosItems,
+              );
+            }
+          }
+          // B. Descuento de Stock Físico (Solo si es despacho propio y origen stock)
+          else if (ordenDetalle.orden.origen == OrigenAbastecimiento.stock_propio && proveedorId == null) {
+            final prodRef = _firestore.collection('productos').doc(itemOrig.materialId);
+            batch.update(prodRef, {'cantidadDisponible': FieldValue.increment(-entregadoAhora)});
+          }
+        }
+
+        final nuevoItem = itemOrig.copyWith(
+            cantidadEntregada: itemOrig.cantidadEntregada + entregadoAhora.toInt()
+        );
+        return nuevoItem.toMap();
+      }).toList();
+
+      if (acopioData != null && acopioRef != null) {
+        batch.update(acopioRef!, acopioData!.toMap());
+      }
+
+      bool ordenCompleta = itemsOrdenActualizados.every((i) {
+        return (i['cantidadEntregada'] as int) >= (i['cantidad'] as int);
+      });
+
+      batch.update(ordenRef, {
+        'items': itemsOrdenActualizados,
+        'estado': ordenCompleta ? 'entregado' : 'en_proceso'
+      });
+
+      await batch.commit();
       await cargarOrdenes();
       return true;
-    } catch (e) {
-      _errorMessage = e.toString();
+
+    } catch(e) {
+      print("Error generando remito: $e");
       return false;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
-  }
-
-  Future<bool> asignarResponsable(String ordenId, String uid, String nombre) async {
-    try {
-      await _repository.asignarResponsable(ordenId, uid, nombre);
-      await cargarOrdenes();
-      return true;
-    } catch (e) { return false; }
-  }
-
-  Future<bool> agregarEtiqueta(String ordenId, String uid) async {
-    try {
-      await _repository.etiquetarUsuario(ordenId, uid);
-      return true;
-    } catch (e) { return false; }
   }
 }

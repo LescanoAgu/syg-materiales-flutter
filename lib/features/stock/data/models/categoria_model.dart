@@ -1,31 +1,35 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class CategoriaModel {
   final String? id;
   final String codigo; // ID interno (ej: AGUA)
   final String nombre; // Nombre visible (ej: Agua)
-  final String prefijo; // ✅ NUEVO: La letra clave (ej: "A", "G", "AR")
+  final String prefijo; // La letra clave (ej: "A", "G", "AR")
   final String? descripcion;
   final int orden;
-  final String? createdAt;
+  final DateTime? createdAt;
 
   CategoriaModel({
     this.id,
     required this.codigo,
     required this.nombre,
-    this.prefijo = '', // Por defecto vacío
+    this.prefijo = '',
     this.descripcion,
     required this.orden,
     this.createdAt,
   });
 
-  factory CategoriaModel.fromMap(Map<String, dynamic> map) {
+  factory CategoriaModel.fromMap(Map<String, dynamic> map, String id) {
     return CategoriaModel(
-      id: map['id']?.toString(),
+      id: id,
       codigo: map['codigo']?.toString() ?? '',
       nombre: map['nombre']?.toString() ?? '',
-      prefijo: map['prefijo']?.toString() ?? '', // ✅ Leemos el prefijo
+      prefijo: map['prefijo']?.toString() ?? '',
       descripcion: map['descripcion']?.toString(),
-      orden: map['orden'] as int? ?? 0,
-      createdAt: map['createdAt']?.toString(),
+      orden: (map['orden'] as num?)?.toInt() ?? 0,
+      createdAt: map['created_at'] is Timestamp
+          ? (map['created_at'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -33,33 +37,10 @@ class CategoriaModel {
     return {
       'codigo': codigo,
       'nombre': nombre,
-      'prefijo': prefijo, // ✅ Guardamos el prefijo
+      'prefijo': prefijo,
       'descripcion': descripcion,
       'orden': orden,
-      'created_at': createdAt,
+      'created_at': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
     };
   }
-
-  CategoriaModel copyWith({
-    String? id,
-    String? codigo,
-    String? nombre,
-    String? prefijo,
-    String? descripcion,
-    int? orden,
-    String? createdAt,
-  }) {
-    return CategoriaModel(
-      id: id ?? this.id,
-      codigo: codigo ?? this.codigo,
-      nombre: nombre ?? this.nombre,
-      prefijo: prefijo ?? this.prefijo,
-      descripcion: descripcion ?? this.descripcion,
-      orden: orden ?? this.orden,
-      createdAt: createdAt ?? this.createdAt,
-    );
-  }
-
-  @override
-  String toString() => 'Cat: $nombre ($prefijo)';
 }

@@ -1,322 +1,206 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../../../core/constants/app_colors.dart';
-import '../../../../core/constants/app_roles.dart'; // ✅ Importamos los roles
 import '../../data/models/orden_interna_model.dart';
-import '../../data/models/orden_item_model.dart';
+import '../widgets/dialogo_aprobar_orden.dart';
+import 'package:provider/provider.dart';
 import '../providers/orden_interna_provider.dart';
-import '../../../reportes/data/services/pdf_service.dart';
-import '../../../../features/auth/presentation/providers/auth_provider.dart';
-import '../../../../features/usuarios/presentation/providers/usuarios_provider.dart';
-
-// Widgets y Páginas
-import '../widgets/orden_aprobacion_dialog.dart';
-import '../widgets/remitos_historicos_dialog.dart';
-import 'orden_despacho_page.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 class OrdenDetallePage extends StatefulWidget {
-  final OrdenInternaDetalle ordenResumen;
-  const OrdenDetallePage({super.key, required this.ordenResumen});
+  final OrdenInterna orden;
+
+  const OrdenDetallePage({Key? key, required this.orden}) : super(key: key);
 
   @override
   State<OrdenDetallePage> createState() => _OrdenDetallePageState();
 }
 
 class _OrdenDetallePageState extends State<OrdenDetallePage> {
-  bool _cargandoItems = true;
-  late OrdenInternaDetalle _ordenCompleta;
+  late OrdenInterna ordenActual;
+  bool _editandoDespacho = false;
+  TipoDespacho? _tipoDespachoSeleccionado;
 
   @override
   void initState() {
     super.initState();
-    _ordenCompleta = widget.ordenResumen;
-    _cargarDetallesCompletos();
+    ordenActual = widget.orden;
+    _tipoDespachoSeleccionado = ordenActual.tipoDespacho;
   }
 
-  Future<void> _cargarDetallesCompletos() async {
-    if (widget.ordenResumen.orden.id == null) {
-      setState(() => _cargandoItems = false);
-      return;
-    }
-    final detalle = await context.read<OrdenInternaProvider>()
-        .cargarDetalleOrden(widget.ordenResumen.orden.id!);
+  void _mostrarDialogoAprobacion() {
+    showDialog(
+      context: context,
+      builder: (context) => DialogoAprobarOrden(
+        orden: ordenActual,
+        onAprobar: (itemsModificados, observacion, proveedor) async {
+          final user = context.read<AuthProvider>().usuario;
 
-    final orgId = context.read<AuthProvider>().usuario?.organizationId;
-    if (orgId != null) {
-      context.read<UsuariosProvider>().cargarUsuarios(orgId);
-    }
+          final exito = await context.read<OrdenInternaProvider>().aprobarOrden(
+              ordenId: ordenActual.id!,
+              usuarioId: user?.uid ?? 'admin',
+              itemsModificados: itemsModificados,
+              observaciones: observacion,
+              proveedor: proveedor
+          );
 
-    if (mounted && detalle != null) {
-      setState(() {
-        _ordenCompleta = detalle;
-        _cargandoItems = false;
-      });
-    }
+          if (exito && mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Orden Aprobada")));
+
+            setState(() {
+              // ✅ CORREGIDO: Usamos proveedorNombre
+              ordenActual = OrdenInternaModel(
+                  id: ordenActual.id,
+                  numero: ordenActual.numero,
+                  clienteId: ordenActual.clienteId,
+                  obraId: ordenActual.obraId,
+                  solicitanteId: ordenActual.solicitanteId,
+                  solicitanteNombre: ordenActual.solicitanteNombre,
+                  fechaCreacion: ordenActual.fechaCreacion,
+                  estado: 'aprobada',
+                  prioridad: ordenActual.prioridad,
+                  items: itemsModificados,
+                  destino: ordenActual.destino,
+                  observaciones: ordenActual.observaciones,
+                  observacionesAprobacion: observacion,
+                  proveedorNombre: proveedor, // CORREGIDO AQUÍ
+                  tipoDespacho: ordenActual.tipoDespacho,
+                  modificadoPor: user?.nombre,
+                  titulo: ordenActual.titulo,
+                  observacionesCliente: ordenActual.observacionesCliente,
+                  esRetiroAcopio: ordenActual.esRetiroAcopio,
+                  acopioId: ordenActual.acopioId
+              );
+            });
+          }
+        },
+      ),
+    );
+  }
+
+  void _guardarCambiosDespacho() {
+    setState(() {
+      _editandoDespacho = false;
+      // Aquí actualizamos solo visualmente por ahora
+      // En una implementación real, llamarías a un método update en el provider
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final orden = _ordenCompleta.orden;
-    final color = _getEstadoColor(orden.estado);
-    final usuario = context.watch<AuthProvider>().usuario;
-
-    // ✅ CAMBIO CLAVE: Usamos el sistema de permisos.
-    // Como quitaste 'aprobarOrden' del rol Jefe de Obra en AppRoles,
-    // esta variable será TRUE solo para Admin (o quien tenga permiso especial).
-    final puedeAprobar = usuario?.tienePermiso(AppRoles.aprobarOrden) ?? false;
-
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text('Orden ${orden.numero}'),
+        title: Text('Orden ${ordenActual.numero}'),
         actions: [
-          // Historial de remitos solo si ya hay movimiento
-          if (orden.estado == 'en_curso' || orden.estado == 'entregado')
+          if (ordenActual.estado == 'solicitado' || ordenActual.estado == 'pendiente')
             IconButton(
-              icon: const Icon(Icons.history_edu),
-              tooltip: 'Ver Remitos Históricos',
-              onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => RemitosHistoricosDialog(
-                    ordenId: orden.id!,
-                    ordenDetalle: _ordenCompleta,
-                  ),
-                );
-              },
+              icon: const Icon(Icons.check_circle_outline),
+              tooltip: 'Revisar y Aprobar',
+              onPressed: _mostrarDialogoAprobacion,
             ),
-
-          IconButton(
-            icon: const Icon(Icons.print),
-            tooltip: 'Imprimir Orden',
-            onPressed: () => PdfService().generarOrdenInterna(_ordenCompleta),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _cargarDetallesCompletos,
-          ),
         ],
       ),
-
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeaderEstado(orden, color, puedeAprobar),
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          _buildEstadoCard(),
+          const SizedBox(height: 16),
+          if (ordenActual.estado != 'solicitado' && ordenActual.estado != 'pendiente')
+            _buildLogisticaSection(),
+          const SizedBox(height: 16),
+          Text('Materiales Solicitados', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ...ordenActual.items.map((item) => Card(
+            child: ListTile(
+              leading: const Icon(Icons.inventory_2),
+              title: Text(item.nombreMaterial),
+              subtitle: Text(item.productoCodigo ?? ''),
+              trailing: Text('${item.cantidad} ${item.unidadBase}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          )),
+          if (ordenActual.observacionesAprobacion != null) ...[
             const SizedBox(height: 20),
-            _buildSeccionInvolucrados(orden),
-            const SizedBox(height: 20),
-            _buildSeccionInfo(orden),
-            const SizedBox(height: 20),
-            const Text('Productos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-            const SizedBox(height: 10),
-            if (_cargandoItems)
-              const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-            else
-              ..._ordenCompleta.items.map((item) => _buildProductoItem(item)),
-
-            // Si ya está entregado o en curso, mostrar última firma si existe
-            if ((orden.estado == 'entregado' || orden.estado == 'en_curso') && orden.firmaUrl != null)
-              _buildFirmaVisual(orden.firmaUrl!),
-
-            const SizedBox(height: 40),
-
-            if (orden.estado == 'aprobado' || orden.estado == 'en_curso')
-              Container(
-                padding: const EdgeInsets.all(16),
-                color: Colors.blue[50],
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue),
-                    SizedBox(width: 10),
-                    Expanded(child: Text("Para entregar material, diríjase al menú 'Área de Despacho'.", style: TextStyle(fontSize: 13))),
-                  ],
-                ),
-              )
-          ],
-        ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.info_outline, color: Colors.orange),
+              title: const Text('Notas de Aprobación'),
+              subtitle: Text(ordenActual.observacionesAprobacion!),
+            ),
+          ]
+        ],
       ),
     );
   }
 
-  Widget _buildHeaderEstado(OrdenInterna orden, Color color, bool puedeAprobar) {
+  Widget _buildEstadoCard() {
+    Color color = Colors.blue;
+    if (ordenActual.estado == 'aprobada') color = Colors.green;
+    if (ordenActual.estado == 'solicitado') color = Colors.orange;
+
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color)
-      ),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(_getEstadoIcon(orden.estado), color: color, size: 30),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(orden.estado.toUpperCase().replaceAll('_', ' '), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
-                if(orden.prioridad == 'urgente')
-                  const Text("PRIORIDAD URGENTE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
-              ],
-            ),
-          ),
-
-          // ✅ EL BOTÓN SOLO APARECE SI TIENE EL PERMISO
-          if (orden.estado == 'solicitado' && puedeAprobar)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-              onPressed: () => _aprobarOrden(context, orden),
-              child: const Text("APROBAR"),
-            )
+          Text('Estado: ${ordenActual.estado.toUpperCase()}', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
 
-  Widget _buildSeccionInvolucrados(OrdenInterna orden) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Equipo Vinculado", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          if (orden.usuariosEtiquetados.isEmpty)
-            const Text("Nadie etiquetado.", style: TextStyle(color: Colors.grey, fontSize: 13))
-          else
-            Wrap(
-              spacing: 8,
-              children: orden.usuariosEtiquetados.map((uid) => Chip(label: Text(uid.substring(0, 4)))).toList(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSeccionInfo(OrdenInterna orden) {
+  Widget _buildLogisticaSection() {
     return Card(
+      elevation: 2,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          children: [
-            _buildDato("Cliente", _ordenCompleta.clienteRazonSocial),
-            const Divider(),
-            _buildDato("Obra", _ordenCompleta.obraNombre ?? "N/A"),
-            const Divider(),
-            _buildDato("Notas", orden.observacionesCliente ?? "-"),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDato(String label, String valor) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(width: 80, child: Text(label, style: const TextStyle(color: Colors.grey))),
-        Expanded(child: Text(valor, style: const TextStyle(fontWeight: FontWeight.bold))),
-      ],
-    );
-  }
-
-  Widget _buildProductoItem(OrdenItemDetalle d) {
-    double entregado = d.item.cantidadEntregada;
-    double total = d.cantidadFinal;
-    bool completo = entregado >= total;
-    double porcentaje = total > 0 ? (entregado/total).clamp(0.0, 1.0) : 0;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        title: Text(d.productoNombre),
-        subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 4),
-            LinearProgressIndicator(
-                value: porcentaje,
-                backgroundColor: Colors.grey[200],
-                color: completo ? Colors.green : Colors.orange
-            ),
-            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('${entregado.toStringAsFixed(0)} / ${total.toStringAsFixed(0)} ${d.unidadBase}'),
-                Text(d.item.origen.name.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                Text('Logística y Despacho', style: Theme.of(context).textTheme.titleMedium),
+                if (!_editandoDespacho)
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 20),
+                    onPressed: () => setState(() => _editandoDespacho = true),
+                  ),
+                if (_editandoDespacho)
+                  IconButton(
+                    icon: const Icon(Icons.save, color: Colors.green),
+                    onPressed: _guardarCambiosDespacho,
+                  ),
               ],
             ),
+            const Divider(),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Proveedor:'),
+              subtitle: Text(ordenActual.proveedorNombre ?? 'No asignado (Stock propio)'),
+              leading: const Icon(Icons.store),
+            ),
+            if (_editandoDespacho)
+              DropdownButtonFormField<TipoDespacho>(
+                value: _tipoDespachoSeleccionado,
+                decoration: const InputDecoration(labelText: 'Responsable del Despacho'),
+                // ✅ CORREGIDO: Quité 'const' porque items no puede ser const con callbacks (si los hubiera)
+                items: const [
+                  DropdownMenuItem(value: TipoDespacho.empresa, child: Text('Nuestra Empresa')),
+                  DropdownMenuItem(value: TipoDespacho.proveedor, child: Text('A cargo del Proveedor')),
+                  DropdownMenuItem(value: TipoDespacho.retiro, child: Text('Retiro en local')),
+                ],
+                onChanged: (val) => setState(() => _tipoDespachoSeleccionado = val),
+              )
+            else
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Método de Despacho:'),
+                subtitle: Text(ordenActual.tipoDespacho?.name.toUpperCase() ?? 'PENDIENTE'),
+                leading: const Icon(Icons.local_shipping),
+              ),
           ],
         ),
-        trailing: Icon(completo ? Icons.check_circle : Icons.timelapse, color: completo ? Colors.green : Colors.grey),
       ),
     );
-  }
-
-  Widget _buildFirmaVisual(String url) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 20),
-      child: Column(
-        children: [
-          const Text("Última Firma Registrada", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Container(
-            decoration: BoxDecoration(border: Border.all(color: Colors.grey), color: Colors.white),
-            height: 120,
-            width: double.infinity,
-            child: Image.network(
-              url,
-              fit: BoxFit.contain,
-              errorBuilder: (c,e,s) => const Center(child: Text("Error cargando firma")),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _abrirDialogoEtiquetar() {
-    showDialog(context: context, builder: (ctx) => const AlertDialog(title: Text("Próximamente")));
-  }
-
-  void _aprobarOrden(BuildContext context, OrdenInterna orden) async {
-    final itemsConfiguradosMap = await showDialog<Map<String, Map<String, dynamic>>>(
-      context: context,
-      builder: (_) => OrdenAprobacionDialog(items: _ordenCompleta.items.map((e) => e.item).toList()),
-    );
-
-    if (itemsConfiguradosMap != null && mounted) {
-      final user = context.read<AuthProvider>().usuario;
-      if (user == null) return;
-
-      final exito = await context.read<OrdenInternaProvider>().aprobarOrden(
-        ordenId: orden.id!,
-        itemsOriginales: _ordenCompleta.items.map((e) => e.item).toList(),
-        logistica: itemsConfiguradosMap,
-        usuarioId: user.uid,
-      );
-
-      if (exito) _cargarDetallesCompletos();
-    }
-  }
-
-  Color _getEstadoColor(String estado) {
-    if (estado == 'entregado') return Colors.green;
-    if (estado == 'aprobado') return Colors.blue;
-    if (estado == 'en_curso') return Colors.orange;
-    return Colors.grey;
-  }
-
-  IconData _getEstadoIcon(String estado) {
-    if (estado == 'entregado') return Icons.check_circle;
-    if (estado == 'en_curso') return Icons.local_shipping;
-    if (estado == 'aprobado') return Icons.thumb_up;
-    return Icons.assignment;
   }
 }

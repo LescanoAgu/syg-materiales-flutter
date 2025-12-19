@@ -8,17 +8,20 @@ class CategoriaRepository {
   Future<List<CategoriaModel>> obtenerTodas() async {
     try {
       final snapshot = await _firestore.collection(_collection)
-          .orderBy('orden') // Asegúrate de crear este índice en Firebase si falla
+          .orderBy('orden')
           .get();
 
       return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return CategoriaModel.fromMap(data);
+        return CategoriaModel.fromMap(doc.data(), doc.id);
       }).toList();
     } catch (e) {
-      print('❌ Error obteniendo categorías: $e');
-      return [];
+      // Si falla el ordenamiento (falta de índice), intentamos sin orden
+      try {
+        final snapshot = await _firestore.collection(_collection).get();
+        return snapshot.docs.map((doc) => CategoriaModel.fromMap(doc.data(), doc.id)).toList();
+      } catch (e2) {
+        return [];
+      }
     }
   }
 
@@ -26,9 +29,7 @@ class CategoriaRepository {
     try {
       final doc = await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
-        final data = doc.data()!;
-        data['id'] = doc.id;
-        return CategoriaModel.fromMap(data);
+        return CategoriaModel.fromMap(doc.data()!, doc.id);
       }
       return null;
     } catch (e) {
@@ -37,7 +38,6 @@ class CategoriaRepository {
   }
 
   Future<void> crear(CategoriaModel categoria) async {
-    // Usamos el código (ej: "OG", "H") como ID del documento
-    await _firestore.collection(_collection).doc(categoria.codigo).set(categoria.toMap());
+    await _firestore.collection(_collection).add(categoria.toMap());
   }
 }

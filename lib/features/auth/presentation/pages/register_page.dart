@@ -41,7 +41,6 @@ class _RegisterPageState extends State<RegisterPage> {
               TextFormField(
                 controller: _emailCtrl,
                 decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email)),
-                keyboardType: TextInputType.emailAddress,
                 validator: (v) => v!.isEmpty ? 'Requerido' : null,
               ),
               const SizedBox(height: 16),
@@ -54,18 +53,15 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
               const SizedBox(height: 16),
 
-              // CAMPO CLAVE: ID ORGANIZACIÓN
+              // Campo de organización (Opcional si es app cerrada, pero útil si es multi-tenant)
               TextFormField(
                 controller: _orgCtrl,
                 decoration: const InputDecoration(
-                  labelText: 'Código de Organización',
-                  hintText: 'Ej: SYG-MZA',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.apartment),
-                  filled: true,
-                  fillColor: Colors.blueGrey,
+                    labelText: 'ID Organización (Opcional)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.apartment),
+                    helperText: "Si no tienes, dejalo vacío"
                 ),
-                validator: (v) => v!.isEmpty ? 'Pide este código a tu administrador' : null,
               ),
               const SizedBox(height: 24),
 
@@ -105,7 +101,8 @@ class _RegisterPageState extends State<RegisterPage> {
     if (mounted) {
       setState(() => _isLoading = false);
       if (success) {
-        Navigator.pop(context); // Volver al login o dejar que AuthGate maneje el estado
+        Navigator.pop(context); // Volver al login o ir a AccessPending
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cuenta creada. Esperando aprobación.')));
       }
     }
   }

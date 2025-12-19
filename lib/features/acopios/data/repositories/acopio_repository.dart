@@ -5,63 +5,53 @@ class AcopioRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'acopios';
 
-  // Traer solo lo que tiene saldo (activo = true)
-  Future<List<AcopioModel>> obtenerActivos() async {
+  Future<List<AcopioModel>> obtenerAcopios() async {
     try {
-      final snapshot = await _firestore.collection(_collection)
-          .where('activo', isEqualTo: true)
-          .orderBy('fechaCompra', descending: true)
-          .get();
-
+      final snapshot = await _firestore.collection(_collection).get();
       return snapshot.docs
           .map((doc) => AcopioModel.fromMap(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      print("Error obteniendo acopios: $e");
-      return [];
+      throw Exception("Error obteniendo acopios: $e");
     }
   }
 
-  Future<void> crearAcopio(AcopioModel acopio) async {
-    await _firestore.collection(_collection).add(acopio.toMap());
+  Future<AcopioModel?> obtenerPorId(String id) async {
+    try {
+      final doc = await _firestore.collection(_collection).doc(id).get();
+      if (!doc.exists) return null;
+      return AcopioModel.fromMap(doc.data()!, doc.id);
+    } catch (e) {
+      return null;
+    }
   }
 
-  // Método transaccional para descontar stock de una factura específica
-  Future<void> consumirDeAcopio(String acopioId, Map<String, double> itemsAConsumir) async {
-    return _firestore.runTransaction((transaction) async {
-      final docRef = _firestore.collection(_collection).doc(acopioId);
-      final doc = await transaction.get(docRef);
+  Future<void> actualizar(AcopioModel acopio) async {
+    if (acopio.id == null) throw Exception("ID nulo");
+    await _firestore.collection(_collection).doc(acopio.id).update(acopio.toMap());
+  }
 
-      if (!doc.exists) throw Exception("Acopio no encontrado");
+  Future<void> guardarAcopio(AcopioModel acopio) async {
+    // Buscamos si ya existe una billetera para este cliente en este proveedor
+    final query = await _firestore.collection(_collection)
+        .where('clienteId', isEqualTo: acopio.clienteId)
+        .where('proveedorId', isEqualTo: acopio.proveedorId)
+        .limit(1)
+        .get();
 
-      final acopio = AcopioModel.fromMap(doc.data()!, doc.id);
+    if (query.docs.isNotEmpty) {
+      // Si existe, actualizamos fusionando items
+      final docId = query.docs.first.id;
+      final existente = AcopioModel.fromMap(query.docs.first.data(), docId);
 
-      List<Map<String, dynamic>> nuevosItems = [];
-      bool quedaSaldoGlobal = false;
+      // Lógica de fusión simple: Agregamos lo nuevo
+      // (En una app real haríamos un merge más complejo de listas)
+      // Por ahora, asumimos que 'acopio' trae la lista final deseada o usamos una lógica de suma
+      // Para simplificar: sobreescribimos con lo que manda el provider que ya hizo la lógica
 
-      for (var item in acopio.items) {
-        // Cuánto vamos a restar de este item específico
-        double consumo = itemsAConsumir[item.productoId] ?? 0.0;
-        double nuevoRestante = item.cantidadRestante - consumo;
-
-        if (nuevoRestante < -0.001) { // Tolerancia pequeña para float
-          throw Exception("Saldo insuficiente en ${item.productoNombre}. Quedan ${item.cantidadRestante}, intentaste sacar $consumo");
-        }
-
-        if (nuevoRestante > 0) quedaSaldoGlobal = true;
-
-        nuevosItems.add({
-          'productoId': item.productoId,
-          'productoNombre': item.productoNombre,
-          'cantidadOriginal': item.cantidadOriginal,
-          'cantidadRestante': nuevoRestante,
-        });
-      }
-
-      transaction.update(docRef, {
-        'items': nuevosItems,
-        'activo': quedaSaldoGlobal, // Se archiva si todo llega a 0
-      });
-    });
+      await _firestore.collection(_collection).doc(docId).update(acopio.toMap());
+    } else {
+      await _firestore.collection(_collection).add(acopio.toMap());
+    }
   }
 }

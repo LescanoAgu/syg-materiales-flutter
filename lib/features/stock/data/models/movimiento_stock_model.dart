@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum TipoMovimiento { entrada, salida, ajuste }
+enum TipoMovimiento { entrada, salida, ajuste, ajustePositivo, ajusteNegativo }
 
 class MovimientoStock extends Equatable {
   final String? id;
@@ -11,11 +12,12 @@ class MovimientoStock extends Equatable {
   final double cantidadAnterior;
   final double cantidadPosterior;
   final String? motivo;
-  final String? referencia;
+  final String? referencia; // N° Remito o Factura
   final String? usuarioId;
-  final DateTime createdAt;
+  final String usuarioNombre;
+  final DateTime fecha; // Antes createdAt
 
-  // ✅ NUEVOS CAMPOS: Vinculación con Obra
+  // Vinculación con Obra
   final String? obraId;
   final String? obraNombre;
 
@@ -30,28 +32,36 @@ class MovimientoStock extends Equatable {
     this.motivo,
     this.referencia,
     this.usuarioId,
-    required this.createdAt,
+    this.usuarioNombre = 'Sistema',
+    required this.fecha,
     this.obraId,
     this.obraNombre,
   });
 
   factory MovimientoStock.fromMap(Map<String, dynamic> map) {
+    // Manejo robusto del Enum
+    TipoMovimiento tipoParsed = TipoMovimiento.entrada;
+    try {
+      tipoParsed = TipoMovimiento.values.firstWhere(
+              (e) => e.toString().split('.').last == map['tipo'],
+          orElse: () => TipoMovimiento.entrada
+      );
+    } catch (_) {}
+
     return MovimientoStock(
       id: map['id']?.toString(),
       productoId: map['productoId']?.toString() ?? '',
-      productoNombre: map['productoNombre']?.toString() ?? 'Producto sin nombre',
-      tipo: TipoMovimiento.values.firstWhere(
-            (e) => e.name == (map['tipo'] ?? 'entrada'),
-        orElse: () => TipoMovimiento.entrada,
-      ),
+      productoNombre: map['productoNombre']?.toString() ?? 'Desconocido',
+      tipo: tipoParsed,
       cantidad: (map['cantidad'] as num?)?.toDouble() ?? 0.0,
       cantidadAnterior: (map['cantidadAnterior'] as num?)?.toDouble() ?? 0.0,
       cantidadPosterior: (map['cantidadPosterior'] as num?)?.toDouble() ?? 0.0,
       motivo: map['motivo']?.toString(),
       referencia: map['referencia']?.toString(),
       usuarioId: map['usuarioId']?.toString(),
-      createdAt: map['createdAt'] != null
-          ? DateTime.parse(map['createdAt'].toString())
+      usuarioNombre: map['usuarioNombre']?.toString() ?? 'Desconocido',
+      fecha: map['createdAt'] is Timestamp
+          ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
       obraId: map['obraId']?.toString(),
       obraNombre: map['obraNombre']?.toString(),
@@ -62,19 +72,23 @@ class MovimientoStock extends Equatable {
     return {
       'productoId': productoId,
       'productoNombre': productoNombre,
-      'tipo': tipo.name,
+      'tipo': tipo.toString().split('.').last,
       'cantidad': cantidad,
       'cantidadAnterior': cantidadAnterior,
       'cantidadPosterior': cantidadPosterior,
       'motivo': motivo,
       'referencia': referencia,
       'usuarioId': usuarioId,
-      'createdAt': createdAt.toIso8601String(),
+      'usuarioNombre': usuarioNombre,
+      'createdAt': Timestamp.fromDate(fecha),
       'obraId': obraId,
       'obraNombre': obraNombre,
     };
   }
 
+  // Getters para compatibilidad con reportes viejos
+  DateTime get createdAt => fecha;
+
   @override
-  List<Object?> get props => [id, productoId, tipo, cantidad, createdAt, obraId];
+  List<Object?> get props => [id, productoId, fecha];
 }

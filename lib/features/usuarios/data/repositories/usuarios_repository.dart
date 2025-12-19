@@ -11,15 +11,14 @@ class UsuariosRepository {
       final snapshot = await _firestore
           .collection(_collection)
           .where('organizationId', isEqualTo: organizationId)
-          .orderBy('nombre') // Requiere índice si combinas con filtro
+          .orderBy('nombre')
           .get();
 
       return snapshot.docs.map((doc) {
         return UsuarioModel.fromMap(doc.data(), doc.id);
       }).toList();
     } catch (e) {
-      print('Error obteniendo usuarios: $e');
-      return [];
+      throw Exception('Error obteniendo usuarios: $e');
     }
   }
 
@@ -29,12 +28,8 @@ class UsuariosRepository {
       await _firestore
           .collection(_collection)
           .doc(usuario.uid)
-      // ⚠️ CAMBIO: Usamos toUpdateMap() en lugar de toMap()
           .update(usuario.toUpdateMap());
-
-      print('✅ Usuario ${usuario.uid} actualizado a rol: ${usuario.rol}, estado: ${usuario.estado}');
     } catch (e) {
-      print('❌ Error repository: $e');
       throw Exception('Error actualizando usuario: $e');
     }
   }

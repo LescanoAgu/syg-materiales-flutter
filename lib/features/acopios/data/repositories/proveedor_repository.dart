@@ -5,36 +5,29 @@ class ProveedorRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'proveedores';
 
-  Future<List<ProveedorModel>> obtenerTodos({bool soloActivos = true}) async {
+  Future<List<ProveedorModel>> obtenerProveedores() async {
     try {
-      Query query = _firestore.collection(_collection).orderBy('nombre');
-      if (soloActivos) {
-        query = query.where('estado', isEqualTo: 'activo');
-      }
-
-      final snapshot = await query.get();
+      final snapshot = await _firestore.collection(_collection).orderBy('nombre').get();
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return ProveedorModel.fromMap(data);
+        final data = doc.data();
+        // Pasamos el ID explícitamente en el segundo argumento opcional que agregamos al factory
+        return ProveedorModel.fromMap(data, doc.id);
       }).toList();
     } catch (e) {
-      print('❌ Error proveedores: $e');
-      return [];
+      throw Exception("Error cargando proveedores: $e");
     }
   }
 
-  Future<void> crear(ProveedorModel proveedor) async {
-    final id = proveedor.codigo.isNotEmpty ? proveedor.codigo : _firestore.collection(_collection).doc().id;
-    await _firestore.collection(_collection).doc(id).set(proveedor.toMap());
+  Future<void> crearProveedor(ProveedorModel proveedor) async {
+    await _firestore.collection(_collection).add(proveedor.toMap());
   }
 
-  Future<void> actualizar(ProveedorModel proveedor) async {
+  Future<void> actualizarProveedor(ProveedorModel proveedor) async {
     if (proveedor.id == null) return;
     await _firestore.collection(_collection).doc(proveedor.id).update(proveedor.toMap());
   }
 
-  Future<void> eliminar(String id) async {
+  Future<void> eliminarProveedor(String id) async {
     await _firestore.collection(_collection).doc(id).delete();
   }
 }

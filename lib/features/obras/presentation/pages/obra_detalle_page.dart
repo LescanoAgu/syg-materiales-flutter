@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../data/models/obra_model.dart';
 import 'obra_form_page.dart';
 
@@ -13,79 +13,57 @@ class ObraDetallePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(obra.nombre),
+        backgroundColor: AppColors.primary,
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ObraFormPage(obra: obra))),
+            onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => ObraFormPage(obra: obra))),
           )
         ],
       ),
-      body: SingleChildScrollView(
+      body: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 20),
-            _buildInfoTile(Icons.person, "Cliente", obra.clienteRazonSocial),
-            _buildInfoTile(Icons.location_on, "Dirección", obra.direccion ?? "-"),
-            _buildInfoTile(Icons.phone, "Contacto en Obra", "${obra.nombreContacto ?? '-'} (${obra.telefonoContacto ?? '-'})"),
-            _buildInfoTile(Icons.calendar_today, "Fecha Inicio", ArgFormats.fecha(obra.fechaInicio)),
-
-            const SizedBox(height: 30),
-            const Text("Ubicación (Mapa Próximamente)", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-            Container(
-              height: 150,
-              width: double.infinity,
-              margin: const EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(
-                color: Colors.grey[200],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: const Center(child: Icon(Icons.map, size: 50, color: Colors.grey)),
-            )
-          ],
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.business, color: AppColors.primary),
+                  title: const Text("Cliente"),
+                  subtitle: Text(obra.clienteRazonSocial, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.map, color: AppColors.primary),
+                  title: const Text("Ubicación"),
+                  subtitle: Text(obra.direccion ?? "Sin dirección"),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.person, color: AppColors.primary),
+                  title: const Text("Contacto"),
+                  subtitle: Text("${obra.nombreContacto ?? '-'} (${obra.telefonoContacto ?? '-'})"),
+                ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.calendar_today, color: AppColors.primary),
+                  title: const Text("Inicio de Obra"),
+                  subtitle: Text(DateFormat('dd/MM/yyyy').format(obra.fechaInicio)),
+                ),
+                const SizedBox(height: 20),
+                Center(
+                  child: Chip(
+                    label: Text(obra.estado.toUpperCase()),
+                    backgroundColor: obra.estado == 'activa' ? Colors.green.withValues(alpha: 0.2) : Colors.grey,
+                  ),
+                )
+              ],
+            ),
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-          child: const Icon(Icons.business, size: 40, color: AppColors.primary),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(obra.codigo, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
-            Text(obra.estado.toUpperCase(), style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-          ],
-        )
-      ],
-    );
-  }
-
-  Widget _buildInfoTile(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.grey, size: 20),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-              Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-            ],
-          )
-        ],
       ),
     );
   }

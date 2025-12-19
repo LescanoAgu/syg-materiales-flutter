@@ -1,146 +1,102 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../data/models/proveedor_model.dart';
-import '../../data/models/acopio_model.dart'; // ✅ Usamos el nuevo modelo
-import '../providers/acopio_provider.dart';
-import 'proveedor_form_page.dart';
+// Eliminamos import de acopio_model ya que no lo usaremos para filtrar por proveedor directamente en este modelo simplificado
 
-class ProveedorDetallePage extends StatefulWidget {
+class ProveedorDetallePage extends StatelessWidget {
   final ProveedorModel proveedor;
 
   const ProveedorDetallePage({super.key, required this.proveedor});
 
   @override
-  State<ProveedorDetallePage> createState() => _ProveedorDetallePageState();
-}
-
-class _ProveedorDetallePageState extends State<ProveedorDetallePage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    // Cargamos los acopios para poder filtrar los de este proveedor
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AcopioProvider>().cargarDatos();
-    });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(widget.proveedor.nombre),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Información'),
-            Tab(text: 'Compras Realizadas'),
+        title: Text(proveedor.nombre),
+        backgroundColor: AppColors.primary,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Tarjeta de Información
+            Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: const Icon(
+                        Icons.business,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text("Razón Social"),
+                      subtitle: Text(proveedor.nombre),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.phone,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text("Teléfono"),
+                      subtitle: Text(
+                        (proveedor.telefono?.isNotEmpty ?? false)
+                            ? proveedor.telefono!
+                            : "-",
+                      ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.email,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text("Email"),
+                      subtitle: Text(
+                        (proveedor.email?.isNotEmpty ?? false)
+                            ? proveedor.email!
+                            : "-",
+                      ),
+                    ),
+                    const Divider(),
+                    ListTile(
+                      leading: const Icon(
+                        Icons.location_on,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text("Dirección"),
+                      subtitle: Text(
+                        (proveedor.direccion?.isNotEmpty ?? false)
+                            ? proveedor.direccion!
+                            : "-",
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // Sección temporal hasta implementar historial de ingresos detallado
+            const Center(
+              child: Text(
+                "El historial de compras se implementará próximamente.",
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ProveedorFormPage(proveedor: widget.proveedor))
-            ).then((_) => setState((){})),
-          )
-        ],
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildInfoTab(),
-          _buildHistorialTab(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoTab() {
-    final p = widget.proveedor;
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.store, color: AppColors.primary, size: 40),
-            title: Text(p.nombre, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-            subtitle: Text(p.tipo.name.toUpperCase()),
-          ),
-        ),
-        const SizedBox(height: 16),
-        _buildDato(Icons.code, 'Código', p.codigo),
-        _buildDato(Icons.location_on, 'Dirección', p.direccion),
-        _buildDato(Icons.phone, 'Teléfono', p.telefono),
-        _buildDato(Icons.email, 'Email', p.email),
-        _buildDato(Icons.person, 'Contacto', p.contacto),
-      ],
-    );
-  }
-
-  Widget _buildDato(IconData icon, String label, String? valor) {
-    if (valor == null || valor.isEmpty) return const SizedBox.shrink();
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(icon, color: Colors.grey),
-        title: Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-        subtitle: Text(valor, style: const TextStyle(fontSize: 16, color: Colors.black87)),
-      ),
-    );
-  }
-
-  Widget _buildHistorialTab() {
-    // Filtramos los acopios donde este proveedor sea el origen
-    return Consumer<AcopioProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-
-        // Buscamos acopios vinculados a este proveedor (por ID o código)
-        final compras = provider.acopios.where((a) =>
-        a.proveedorId == widget.proveedor.id ||
-            a.proveedorId == widget.proveedor.codigo
-        ).toList();
-
-        if (compras.isEmpty) {
-          return const Center(child: Text("No hay compras registradas a este proveedor"));
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: compras.length,
-          itemBuilder: (context, index) {
-            final acopio = compras[index];
-            return Card(
-              child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.blueGrey,
-                  child: Icon(Icons.receipt, color: Colors.white),
-                ),
-                title: Text(acopio.etiqueta),
-                subtitle: Text("Factura: ${acopio.numeroFactura}\n${ArgFormats.fecha(acopio.fechaCompra)}"),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                // Aquí se podría navegar al detalle de la factura si lo deseamos
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

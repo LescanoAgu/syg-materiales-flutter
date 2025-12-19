@@ -29,15 +29,16 @@ class ClienteProvider extends ChangeNotifier {
 
   Future<void> buscarClientes(String termino) async {
     if (termino.isEmpty) return cargarClientes();
+
+    final term = termino.toLowerCase();
     _clientes = _clientes.where((c) =>
-    c.razonSocial.toLowerCase().contains(termino.toLowerCase()) ||
-        c.codigo.toLowerCase().contains(termino.toLowerCase()) ||
-        (c.cuit?.contains(termino) ?? false)
+    c.razonSocial.toLowerCase().contains(term) ||
+        c.codigo.toLowerCase().contains(term) ||
+        (c.cuit?.contains(term) ?? false)
     ).toList();
     notifyListeners();
   }
 
-  // Unificamos crear/actualizar en guardar
   Future<bool> guardarCliente(ClienteModel cliente) async {
     _isLoading = true;
     notifyListeners();
@@ -54,33 +55,28 @@ class ClienteProvider extends ChangeNotifier {
     }
   }
 
-  // Mantenemos los métodos viejos como alias para no romper otras pantallas si las hay
-  Future<bool> crearCliente(ClienteModel c) => guardarCliente(c);
-  Future<bool> actualizarCliente(ClienteModel c) => guardarCliente(c);
-
-  Future<bool> eliminarCliente(String id) async {
+  // ✅ ESTE ES EL MÉTODO QUE FALTABA
+  Future<bool> importarClientes(List<ClienteModel> lista) async {
+    _isLoading = true;
+    notifyListeners();
     try {
-      await _repository.eliminar(id);
-      _clientes.removeWhere((c) => c.id == id);
-      notifyListeners();
+      await _repository.importarMasivos(lista);
+      await cargarClientes(); // Recargamos la lista para ver los nuevos
       return true;
     } catch (e) {
       _errorMessage = e.toString();
       return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  String generarNuevoCodigo() {
-    if (_clientes.isEmpty) return 'CL-001';
+  Future<bool> eliminarCliente(String id) async {
     try {
-      final ultimos = List<ClienteModel>.from(_clientes)..sort((a, b) => b.codigo.compareTo(a.codigo));
-      final ultimo = ultimos.first.codigo;
-      final partes = ultimo.split('-');
-      if (partes.length > 1) {
-        final num = int.tryParse(partes[1]) ?? 0;
-        return 'CL-${(num + 1).toString().padLeft(3, '0')}';
-      }
-    } catch (_) {}
-    return 'CL-${(_clientes.length + 1).toString().padLeft(3, '0')}';
+      await _repository.eliminar(id);
+      await cargarClientes();
+      return true;
+    } catch (e) { return false; }
   }
 }

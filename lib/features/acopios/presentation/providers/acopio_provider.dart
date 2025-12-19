@@ -5,120 +5,112 @@ import '../../data/repositories/acopio_repository.dart';
 import '../../data/repositories/proveedor_repository.dart';
 
 class AcopioProvider extends ChangeNotifier {
-  final AcopioRepository _repository = AcopioRepository();
+  final AcopioRepository _acopioRepo = AcopioRepository();
   final ProveedorRepository _proveedorRepo = ProveedorRepository();
 
-  List<AcopioModel> _acopios = [];
-  List<ProveedorModel> _proveedores = [];
   bool _isLoading = false;
-  String? _errorMessage;
-
-  List<AcopioModel> get acopios => _acopios;
-  List<ProveedorModel> get proveedores => _proveedores;
   bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
 
-  // --- CARGA DE DATOS ---
-  Future<void> cargarDatos() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      await Future.wait([
-        _cargarAcopios(),
-        _cargarProveedores(),
-      ]);
-    } catch (e) {
-      _errorMessage = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
+  List<ProveedorModel> _proveedores = [];
+  List<ProveedorModel> get proveedores => _proveedores;
 
-  Future<void> _cargarAcopios() async {
-    _acopios = await _repository.obtenerActivos();
-  }
+  List<AcopioModel> _acopios = [];
+  List<AcopioModel> get acopios => _acopios;
 
-  // ✅ Método público requerido por las pantallas de proveedores
+  // --- NUEVO: Lista de items para la vista de detalle de cliente ---
+  List<AcopioItem> _itemsCliente = [];
+  List<AcopioItem> get itemsDeCliente => _itemsCliente;
+
+  // --- PROVEEDORES ---
   Future<void> cargarProveedores() async {
     _isLoading = true;
     notifyListeners();
     try {
-      _proveedores = await _proveedorRepo.obtenerTodos();
+      _proveedores = await _proveedorRepo.obtenerProveedores();
     } catch (e) {
-      print("Error proveedores: $e");
+      print("Error cargando proveedores: $e");
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // ✅ Método de carga inicial privado (para usar dentro de cargarDatos)
-  Future<void> _cargarProveedores() async {
-    _proveedores = await _proveedorRepo.obtenerTodos();
-  }
-
-  // --- GESTIÓN DE PROVEEDORES (Faltaban estos métodos) ---
-
-  Future<bool> crearProveedor(ProveedorModel p) async {
-    _isLoading = true; notifyListeners();
+  Future<bool> crearProveedor(ProveedorModel proveedor) async {
     try {
-      await _proveedorRepo.crear(p);
-      await _cargarProveedores();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    } finally {
-      _isLoading = false; notifyListeners();
-    }
-  }
-
-  Future<bool> actualizarProveedor(ProveedorModel p) async {
-    _isLoading = true; notifyListeners();
-    try {
-      await _proveedorRepo.actualizar(p);
-      await _cargarProveedores();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    } finally {
-      _isLoading = false; notifyListeners();
-    }
-  }
-
-  Future<bool> eliminarProveedor(String id) async {
-    try {
-      await _proveedorRepo.eliminar(id);
-      _proveedores.removeWhere((p) => p.id == id || p.codigo == id);
+      _isLoading = true;
       notifyListeners();
+      await _proveedorRepo.crearProveedor(proveedor);
+      await cargarProveedores();
       return true;
-    } catch (e) { return false; }
+    } catch (e) {
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  // --- GESTIÓN DE ACOPIOS (Facturas) ---
-
-  List<AcopioModel> buscar(String query) {
-    if (query.isEmpty) return _acopios;
-    final q = query.toLowerCase();
-    return _acopios.where((a) =>
-    a.clienteRazonSocial.toLowerCase().contains(q) ||
-        a.etiqueta.toLowerCase().contains(q) ||
-        a.numeroFactura.toLowerCase().contains(q)
-    ).toList();
+  Future<bool> actualizarProveedor(ProveedorModel proveedor) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await _proveedorRepo.actualizarProveedor(proveedor);
+      await cargarProveedores();
+      return true;
+    } catch (e) {
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<bool> registrarIngreso(AcopioModel acopio) async {
+  // --- ACOPIOS ---
+  Future<void> cargarAcopios() async {
     _isLoading = true;
     notifyListeners();
     try {
-      await _repository.crearAcopio(acopio);
-      await _cargarAcopios();
+      _acopios = await _acopioRepo.obtenerAcopios();
+    } catch (e) {
+      print("Error cargando acopios: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ✅ NUEVO: Cargar acopios específicos de un cliente y aplanar los items
+  Future<void> cargarAcopiosDeCliente(String clienteId) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      // Reutilizamos la lógica de obtener todos y filtramos en memoria por ahora
+      // (Idealmente haríamos query en repo: where('clienteId', isEqualTo: clienteId))
+      final todos = await _acopioRepo.obtenerAcopios();
+      final delCliente = todos.where((a) => a.clienteId == clienteId).toList();
+
+      // Aplanamos: Juntamos todos los items de todos los proveedores en una sola lista para ver "qué tiene el cliente"
+      _itemsCliente = [];
+      for (var acopio in delCliente) {
+        _itemsCliente.addAll(acopio.items);
+      }
+    } catch (e) {
+      print("Error cargando acopios de cliente: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> registrarIngreso(AcopioModel acopio) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
+      await _acopioRepo.guardarAcopio(acopio);
+      await cargarAcopios();
       return true;
     } catch (e) {
-      _errorMessage = e.toString();
+      print("Error ingreso acopio: $e");
       return false;
     } finally {
       _isLoading = false;

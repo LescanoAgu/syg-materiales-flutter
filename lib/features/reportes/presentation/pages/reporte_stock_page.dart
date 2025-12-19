@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/utils/formatters.dart';
+import '../../../../core/constants/app_colors.dart';
 import '../../../stock/data/models/movimiento_stock_model.dart';
 import '../../../stock/data/repositories/movimiento_stock_repository.dart';
-import '../../data/services/pdf_service.dart';
+import '../../data/services/excel_service.dart';
 
 class ReporteStockPage extends StatefulWidget {
   const ReporteStockPage({super.key});
@@ -13,7 +14,7 @@ class ReporteStockPage extends StatefulWidget {
 
 class _ReporteStockPageState extends State<ReporteStockPage> {
   final MovimientoStockRepository _repo = MovimientoStockRepository();
-  final PdfService _pdfService = PdfService();
+  final ExcelService _excelService = ExcelService();
 
   List<MovimientoStock> _movimientos = [];
   bool _isLoading = true;
@@ -31,96 +32,116 @@ class _ReporteStockPageState extends State<ReporteStockPage> {
 
   Future<void> _cargarMovimientos() async {
     setState(() => _isLoading = true);
-
     try {
-      // CORRECCIÓN: Usar 'obtenerMovimientos' en lugar de 'getMovimientos'
       final movimientos = await _repo.obtenerMovimientos(
         desde: _fechaDesde,
         hasta: _fechaHasta,
         tipo: _tipoFiltro,
       );
-
-      setState(() {
-        _movimientos = movimientos;
-        _isLoading = false;
-      });
+      setState(() => _movimientos = movimientos);
     } catch (e) {
-      setState(() => _isLoading = false);
-      // Manejo de error silencioso o mostrar snackbar
-      print("Error cargando reporte: $e");
+      debugPrint("Error: $e");
+    } finally {
+      if(mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _exportarExcel() async {
+    if (_movimientos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No hay datos para exportar")));
+      return;
+    }
+    await _excelService.generarReporteMovimientos(_movimientos);
   }
 
   Future<void> _seleccionarFecha(bool esDesde) async {
-    final fecha = await showDatePicker(
+    final picked = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
+      firstDate: DateTime(2023),
       lastDate: DateTime.now(),
     );
-
-    if (fecha != null) {
+    if (picked != null) {
       setState(() {
         if (esDesde) {
-          _fechaDesde = fecha;
+          _fechaDesde = picked;
         } else {
-          _fechaHasta = fecha;
+          _fechaHasta = picked;
         }
       });
-      _cargarMovimientos();
-    }
-  }
-
-  Future<void> _exportarPDF() async {
-    try {
-      await _pdfService.generarReporteMovimientosStock(
-        movimientos: _movimientos,
-        fechaDesde: _fechaDesde,
-        fechaHasta: _fechaHasta,
-      );
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ PDF generado')));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error PDF: $e')));
+      _cargarMovimientos(); // Recargar al cambiar filtro
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reporte de Stock')),
+      appBar: AppBar(
+        title: const Text("Reporte de Stock"),
+        backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.file_download),
+            tooltip: "Exportar Excel",
+            onPressed: _exportarExcel,
+          )
+        ],
+      ),
       body: Column(
         children: [
-          // Filtros básicos
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          // FILTROS
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: Colors.white,
             child: Row(
               children: [
-                TextButton.icon(
-                  icon: const Icon(Icons.calendar_today),
-                  label: Text(_fechaDesde == null ? 'Desde' : ArgFormats.fechaCorta(_fechaDesde!)),
-                  onPressed: () => _seleccionarFecha(true),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(_fechaDesde == null ? 'Desde' : ArgFormats.fechaCorta(_fechaDesde!)),
+                    onPressed: () => _seleccionarFecha(true),
+                  ),
                 ),
-                TextButton.icon(
-                  icon: const Icon(Icons.calendar_today),
-                  label: Text(_fechaHasta == null ? 'Hasta' : ArgFormats.fechaCorta(_fechaHasta!)),
-                  onPressed: () => _seleccionarFecha(false),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(_fechaHasta == null ? 'Hasta' : ArgFormats.fechaCorta(_fechaHasta!)),
+                    onPressed: () => _seleccionarFecha(false),
+                  ),
                 ),
-                const Spacer(),
-                IconButton(icon: const Icon(Icons.picture_as_pdf), onPressed: _exportarPDF),
               ],
             ),
           ),
+
+          // LISTA
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
+                : _movimientos.isEmpty
+                ? const Center(child: Text("No se encontraron movimientos"))
+                : ListView.separated(
               itemCount: _movimientos.length,
+              separatorBuilder: (_,__) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final m = _movimientos[index];
+                final esEntrada = m.tipo == TipoMovimiento.entrada || m.tipo == TipoMovimiento.ajustePositivo;
+
                 return ListTile(
-                  title: Text('${m.tipo.name.toUpperCase()} - ${m.cantidad}'),
-                  subtitle: Text(ArgFormats.fechaHora(m.createdAt)),
-                  trailing: m.referencia != null ? Text(m.referencia!) : null,
+                  leading: Icon(
+                    esEntrada ? Icons.arrow_downward : Icons.arrow_upward,
+                    color: esEntrada ? Colors.green : Colors.red,
+                  ),
+                  title: Text(m.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text("${ArgFormats.fechaHora(m.fecha)} - ${m.usuarioNombre}"),
+                  trailing: Text(
+                    "${esEntrada ? '+' : '-'}${m.cantidad}",
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: esEntrada ? Colors.green : Colors.red
+                    ),
+                  ),
                 );
               },
             ),

@@ -30,7 +30,7 @@ class _FirmaDigitalDialogState extends State<FirmaDigitalDialog> {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Firma en el recuadro para confirmar:'),
+          const Text('Firma en el recuadro para confirmar:', style: TextStyle(fontSize: 12, color: Colors.grey)),
           const SizedBox(height: 10),
           Container(
             decoration: BoxDecoration(border: Border.all(color: Colors.grey)),

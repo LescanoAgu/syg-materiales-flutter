@@ -1,113 +1,105 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:equatable/equatable.dart';
 
 class AcopioItem extends Equatable {
   final String productoId;
-  final String productoNombre;
-  final double cantidadOriginal; // Lo que se compró en la factura
-  final double cantidadRestante; // Lo que queda por retirar
+  final String nombreProducto; // Antes productoNombre
+  final double cantidadTotalComprada;
+  final double cantidadDisponible; // Antes cantidadRestante
+  final String unidad;
 
   const AcopioItem({
     required this.productoId,
-    required this.productoNombre,
-    required this.cantidadOriginal,
-    required this.cantidadRestante,
+    required this.nombreProducto,
+    required this.cantidadTotalComprada,
+    required this.cantidadDisponible,
+    this.unidad = 'u',
   });
-
-  factory AcopioItem.fromMap(Map<String, dynamic> map) {
-    return AcopioItem(
-      productoId: map['productoId']?.toString() ?? '',
-      productoNombre: map['productoNombre']?.toString() ?? '',
-      cantidadOriginal: (map['cantidadOriginal'] as num?)?.toDouble() ?? 0.0,
-      cantidadRestante: (map['cantidadRestante'] as num?)?.toDouble() ?? 0.0,
-    );
-  }
 
   Map<String, dynamic> toMap() {
     return {
       'productoId': productoId,
-      'productoNombre': productoNombre,
-      'cantidadOriginal': cantidadOriginal,
-      'cantidadRestante': cantidadRestante,
+      'nombreProducto': nombreProducto,
+      'cantidadTotalComprada': cantidadTotalComprada,
+      'cantidadDisponible': cantidadDisponible,
+      'unidad': unidad,
     };
   }
 
+  factory AcopioItem.fromMap(Map<String, dynamic> map) {
+    return AcopioItem(
+      productoId: map['productoId'] ?? '',
+      nombreProducto: map['nombreProducto'] ?? map['productoNombre'] ?? '',
+      cantidadTotalComprada: (map['cantidadTotalComprada'] as num?)?.toDouble() ?? 0.0,
+      cantidadDisponible: (map['cantidadDisponible'] as num?)?.toDouble() ?? (map['cantidadRestante'] as num?)?.toDouble() ?? 0.0,
+      unidad: map['unidad'] ?? 'u',
+    );
+  }
+
+  // Método helper copyWith
+  AcopioItem copyWith({double? cantidadDisponible}) {
+    return AcopioItem(
+      productoId: productoId,
+      nombreProducto: nombreProducto,
+      cantidadTotalComprada: cantidadTotalComprada,
+      cantidadDisponible: cantidadDisponible ?? this.cantidadDisponible,
+      unidad: unidad,
+    );
+  }
+
   @override
-  List<Object?> get props => [productoId, cantidadOriginal, cantidadRestante];
+  List<Object?> get props => [productoId, cantidadDisponible];
 }
 
 class AcopioModel extends Equatable {
-  final String id;
-  final String numeroFactura; // Ej: "0001-00004523"
-  final String etiqueta;      // Ej: "MATERIALES LOSA 1"
-
+  final String? id;
   final String clienteId;
   final String clienteRazonSocial;
-
   final String proveedorId;
   final String proveedorNombre;
-
-  final DateTime fechaCompra;
+  final DateTime fechaUltimoMovimiento;
   final List<AcopioItem> items;
-  final bool activo; // True mientras quede saldo en algún item
 
   const AcopioModel({
-    required this.id,
-    required this.numeroFactura,
-    required this.etiqueta,
+    this.id,
     required this.clienteId,
     required this.clienteRazonSocial,
     required this.proveedorId,
     required this.proveedorNombre,
-    required this.fechaCompra,
+    required this.fechaUltimoMovimiento,
     required this.items,
-    this.activo = true,
   });
 
-  factory AcopioModel.fromMap(Map<String, dynamic> map, String docId) {
+  factory AcopioModel.fromSnapshot(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
+    return AcopioModel.fromMap(data, doc.id);
+  }
+
+  factory AcopioModel.fromMap(Map<String, dynamic> data, String id) {
     return AcopioModel(
-      id: docId,
-      numeroFactura: map['numeroFactura'] ?? '',
-      etiqueta: map['etiqueta'] ?? '',
-      clienteId: map['clienteId'] ?? '',
-      clienteRazonSocial: map['clienteRazonSocial'] ?? '',
-      proveedorId: map['proveedorId'] ?? '',
-      proveedorNombre: map['proveedorNombre'] ?? '',
-      fechaCompra: map['fechaCompra'] != null
-          ? DateTime.parse(map['fechaCompra'])
-          : DateTime.now(),
-      items: (map['items'] as List<dynamic>?)
-          ?.map((x) => AcopioItem.fromMap(x))
-          .toList() ?? [],
-      activo: map['activo'] ?? true,
+      id: id,
+      clienteId: data['clienteId'] ?? '',
+      clienteRazonSocial: data['clienteRazonSocial'] ?? '',
+      proveedorId: data['proveedorId'] ?? '',
+      proveedorNombre: data['proveedorNombre'] ?? '',
+      fechaUltimoMovimiento: (data['fechaUltimoMovimiento'] as Timestamp).toDate(),
+      items: (data['items'] as List<dynamic>? ?? [])
+          .map((e) => AcopioItem.fromMap(e))
+          .toList(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'numeroFactura': numeroFactura,
-      'etiqueta': etiqueta,
       'clienteId': clienteId,
       'clienteRazonSocial': clienteRazonSocial,
       'proveedorId': proveedorId,
       'proveedorNombre': proveedorNombre,
-      'fechaCompra': fechaCompra.toIso8601String(),
-      'items': items.map((x) => x.toMap()).toList(),
-      'activo': activo,
+      'fechaUltimoMovimiento': Timestamp.fromDate(fechaUltimoMovimiento),
+      'items': items.map((e) => e.toMap()).toList(),
     };
   }
 
-  // Helper visual para barras de progreso (0.0 a 1.0)
-  double get porcentajeConsumido {
-    double totalOrig = 0;
-    double totalRest = 0;
-    for (var i in items) {
-      totalOrig += i.cantidadOriginal;
-      totalRest += i.cantidadRestante;
-    }
-    if (totalOrig == 0) return 1.0;
-    return 1.0 - (totalRest / totalOrig);
-  }
-
   @override
-  List<Object?> get props => [id, numeroFactura, items, activo];
+  List<Object?> get props => [id, clienteId, proveedorId, items];
 }

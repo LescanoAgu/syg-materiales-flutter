@@ -16,6 +16,7 @@ class UsuarioDetallePage extends StatefulWidget {
 class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
   late String _rolSeleccionado;
   late String _estadoSeleccionado;
+  // Mapa temporal para permisos
   late Map<String, bool> _permisosTemp;
 
   @override
@@ -23,116 +24,92 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
     super.initState();
     _rolSeleccionado = widget.usuario.rol;
     _estadoSeleccionado = widget.usuario.estado;
-    // ✅ AHORA SÍ EXISTE ESTE CAMPO
     _permisosTemp = Map.from(widget.usuario.permisosEspeciales);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.usuario.nombre)),
+      appBar: AppBar(
+        title: Text(widget.usuario.nombre),
+        backgroundColor: AppColors.primary,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _guardarCambios,
         icon: const Icon(Icons.save),
-        label: const Text('GUARDAR'),
-        backgroundColor: AppColors.primary,
+        label: const Text('Guardar Cambios'),
+        backgroundColor: AppColors.success,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildSectionTitle('Estado y Rol'),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Estado', border: OutlineInputBorder()),
-                      value: _estadoSeleccionado,
-                      items: const [
-                        DropdownMenuItem(value: 'pendiente', child: Text('⏳ Pendiente')),
-                        DropdownMenuItem(value: 'activo', child: Text('✅ Activo')),
-                        DropdownMenuItem(value: 'bloqueado', child: Text('🚫 Bloqueado')),
-                      ],
-                      onChanged: (v) => setState(() => _estadoSeleccionado = v!),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Rol', border: OutlineInputBorder()),
-                      value: _rolSeleccionado,
-                      items: [
-                        _buildRoleItem(AppRoles.admin),
-                        _buildRoleItem(AppRoles.jefeObra),
-                        _buildRoleItem(AppRoles.panolero),
-                        _buildRoleItem(AppRoles.observador),
-                      ],
-                      onChanged: (v) {
-                        setState(() {
-                          _rolSeleccionado = v!;
-                          _permisosTemp.clear();
-                        });
-                      },
-                    ),
-                  ],
-                ),
+            // Info Header
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.person, size: 40, color: Colors.grey),
+              title: Text(widget.usuario.email),
+              subtitle: Text("ID: ${widget.usuario.uid}", style: const TextStyle(fontSize: 10)),
+            ),
+            const Divider(),
+
+            // Estado de Cuenta
+            _buildSectionTitle("Estado de la Cuenta"),
+            DropdownButtonFormField<String>(
+              value: _estadoSeleccionado,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: const [
+                DropdownMenuItem(value: 'pendiente', child: Text('Pendiente de Aprobación')),
+                DropdownMenuItem(value: 'activo', child: Text('Activo (Permitir Acceso)')),
+                DropdownMenuItem(value: 'suspendido', child: Text('Suspendido (Bloquear)')),
+              ],
+              onChanged: (val) => setState(() => _estadoSeleccionado = val!),
+            ),
+            const SizedBox(height: 20),
+
+            // Rol del Usuario
+            _buildSectionTitle("Rol y Nivel de Acceso"),
+            DropdownButtonFormField<String>(
+              value: _rolSeleccionado,
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              items: AppRoles.labels.entries.map((e) {
+                return DropdownMenuItem(value: e.key, child: Text(e.value));
+              }).toList(),
+              onChanged: (val) {
+                setState(() {
+                  _rolSeleccionado = val!;
+                  // Al cambiar rol, podríamos resetear permisos especiales si quisieras
+                });
+              },
+            ),
+            const SizedBox(height: 10),
+
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200)
+              ),
+              child: Text(
+                _getDescripcionRol(_rolSeleccionado),
+                style: TextStyle(color: Colors.blue.shade800, fontSize: 13),
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            if (_rolSeleccionado != AppRoles.admin) ...[
-              _buildSectionTitle('Ajuste Fino de Permisos'),
-              const Text('Modifica permisos específicos fuera del rol base.', style: TextStyle(color: Colors.grey)),
-              const SizedBox(height: 8),
-
-              _buildSwitch(AppRoles.verPrecios, 'Ver Precios', 'Ver costos en catálogo'),
-              _buildSwitch(AppRoles.crearOrden, 'Crear Órdenes', 'Solicitar materiales'),
-              _buildSwitch(AppRoles.aprobarOrden, 'Aprobar Órdenes', 'Autorizar salidas'),
-              _buildSwitch(AppRoles.gestionarStock, 'Gestionar Stock', 'Ajustes, entradas y salidas'),
-              _buildSwitch(AppRoles.verReportes, 'Ver Reportes', 'Estadísticas y PDF'),
-            ],
           ],
         ),
       ),
     );
   }
 
-  DropdownMenuItem<String> _buildRoleItem(String rolKey) {
-    return DropdownMenuItem(
-      value: rolKey,
-      child: Text(AppRoles.labels[rolKey] ?? rolKey),
-    );
-  }
-
-  Widget _buildSwitch(String key, String titulo, String subtitulo) {
-    final tienePorRol = AppRoles.tienePermisoBase(_rolSeleccionado, key);
-    final valorActual = _permisosTemp.containsKey(key) ? _permisosTemp[key]! : tienePorRol;
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: tienePorRol ? Colors.grey[50] : Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.grey.shade200),
-      ),
-      child: SwitchListTile(
-        title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(
-          tienePorRol ? '$subtitulo (Incluido en Rol)' : subtitulo,
-          style: TextStyle(fontSize: 12, color: tienePorRol ? AppColors.primary : Colors.grey),
-        ),
-        value: valorActual,
-        activeColor: AppColors.primary,
-        onChanged: (val) {
-          setState(() {
-            _permisosTemp[key] = val;
-          });
-        },
-      ),
-    );
+  String _getDescripcionRol(String rol) {
+    switch (rol) {
+      case AppRoles.admin: return "Acceso total al sistema, gestión de usuarios y configuración.";
+      case AppRoles.panolero: return "Gestión de stock, armado de pedidos y despachos.";
+      case AppRoles.jefeObra: return "Solicitud de materiales y visualización de sus obras.";
+      default: return "Solo visualización limitada.";
+    }
   }
 
   Widget _buildSectionTitle(String text) {
@@ -146,17 +123,17 @@ class _UsuarioDetallePageState extends State<UsuarioDetallePage> {
     final usuarioActualizado = widget.usuario.copyWith(
       estado: _estadoSeleccionado,
       rol: _rolSeleccionado,
-      permisosEspeciales: _permisosTemp, // ✅ PARAMETRO CORREGIDO
+      permisosEspeciales: _permisosTemp,
     );
 
     final exito = await context.read<UsuariosProvider>().guardarCambiosUsuario(usuarioActualizado);
 
     if (mounted) {
       if (exito) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Guardado'), backgroundColor: AppColors.success));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cambios guardados exitosamente'), backgroundColor: Colors.green));
         Navigator.pop(context);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('❌ Error'), backgroundColor: AppColors.error));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error al guardar'), backgroundColor: Colors.red));
       }
     }
   }

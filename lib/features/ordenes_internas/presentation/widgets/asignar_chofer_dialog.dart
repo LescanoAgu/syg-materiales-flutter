@@ -19,7 +19,6 @@ class _AsignarChoferDialogState extends State<AsignarChoferDialog> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Cargamos usuarios de la misma organización
       final miOrg = context.read<AuthProvider>().usuario?.organizationId;
       if (miOrg != null) {
         context.read<UsuariosProvider>().cargarUsuarios(miOrg);
@@ -33,17 +32,18 @@ class _AsignarChoferDialogState extends State<AsignarChoferDialog> {
       title: const Text('Asignar Responsable'),
       content: SizedBox(
         width: double.maxFinite,
+        height: 300,
         child: Consumer<UsuariosProvider>(
           builder: (context, provider, _) {
             if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
-            // Filtramos solo activos (opcional: filtrar por rol 'chofer' o 'pañolero')
+            // Filtramos activos
             final disponibles = provider.activos;
 
             if (disponibles.isEmpty) return const Text("No hay usuarios disponibles");
 
-            return ListView.builder(
-              shrinkWrap: true,
+            return ListView.separated(
+              separatorBuilder: (_,__) => const Divider(),
               itemCount: disponibles.length,
               itemBuilder: (ctx, i) {
                 final u = disponibles[i];
@@ -51,8 +51,9 @@ class _AsignarChoferDialogState extends State<AsignarChoferDialog> {
 
                 return ListTile(
                   leading: CircleAvatar(
+                    // ✅ Fix deprecated
                     backgroundColor: isSelected ? AppColors.primary : Colors.grey[300],
-                    child: Text(u.nombre[0].toUpperCase(),
+                    child: Text(u.nombre.isNotEmpty ? u.nombre[0].toUpperCase() : '?',
                         style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
                   ),
                   title: Text(u.nombre),

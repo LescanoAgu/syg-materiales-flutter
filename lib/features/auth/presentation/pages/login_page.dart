@@ -28,7 +28,7 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo o Título
+                // Logo
                 const Icon(Icons.business_center, size: 80, color: AppColors.primary),
                 const SizedBox(height: 16),
                 const Text('S&G Materiales', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
@@ -71,7 +71,7 @@ class _LoginPageState extends State<LoginPage> {
                   child: const Text('¿No tienes cuenta? Regístrate aquí'),
                 ),
 
-                // Mostrar errores
+                // Errores
                 Consumer<AuthProvider>(
                   builder: (ctx, auth, _) => auth.errorMessage != null
                       ? Padding(padding: const EdgeInsets.only(top: 16), child: Text(auth.errorMessage!, style: const TextStyle(color: Colors.red)))

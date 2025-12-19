@@ -16,125 +16,86 @@ class OrdenesPage extends StatefulWidget {
 }
 
 class _OrdenesPageState extends State<OrdenesPage> {
-  // Filtros
-  bool _soloMisPedidos = false;
   String _filtroEstado = 'todos';
+  bool _soloMisPedidos = false;
 
   @override
   void initState() {
     super.initState();
-    _cargarDatos();
-  }
-
-  Future<void> _cargarDatos() async {
-    await context.read<OrdenInternaProvider>().cargarOrdenes();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<OrdenInternaProvider>().cargarOrdenes();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final usuario = context.watch<AuthProvider>().usuario;
+    final user = context.watch<AuthProvider>().usuario;
     final bool mostrarAppBar = !widget.esNavegacionPrincipal;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: mostrarAppBar
-          ? AppBar(title: const Text("Gestión de Pedidos"))
-          : null,
-      floatingActionButton: mostrarAppBar
-          ? FloatingActionButton.extended(
-        icon: const Icon(Icons.add),
-        label: const Text("NUEVA SOLICITUD"),
+          ? AppBar(
+        title: const Text("Órdenes de Pedido"),
         backgroundColor: AppColors.primary,
-        onPressed: () => _navegarFormulario(context),
+        actions: [
+          Row(
+            children: [
+              const Text("Solo mías", style: TextStyle(fontSize: 12)),
+              Switch(
+                value: _soloMisPedidos,
+                activeColor: Colors.white,
+                activeTrackColor: Colors.green,
+                onChanged: (v) => setState(() => _soloMisPedidos = v),
+              )
+            ],
+          )
+        ],
       )
           : null,
       body: Column(
         children: [
-          // --- HEADER DE FILTROS CON BOTÓN DE RECARGA ---
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            color: Colors.white,
-            child: Column(
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.all(12),
+            child: Row(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Botón de Recarga + Título
-                    Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.refresh, color: AppColors.primary),
-                          onPressed: _cargarDatos, // ✅ ¡Botón Mágico!
-                          tooltip: "Actualizar lista",
-                          iconSize: 24,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text("Filtrar listado:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                      ],
-                    ),
-
-                    FilterChip(
-                      label: const Text('👤 Solo Mis Pedidos'),
-                      selected: _soloMisPedidos,
-                      onSelected: (v) => setState(() => _soloMisPedidos = v),
-                      backgroundColor: Colors.grey[100],
-                      selectedColor: AppColors.primary.withOpacity(0.2),
-                      labelStyle: TextStyle(
-                          color: _soloMisPedidos ? AppColors.primary : Colors.black,
-                          fontWeight: _soloMisPedidos ? FontWeight.bold : FontWeight.normal
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildEstadoChip('Todos', 'todos'),
-                      const SizedBox(width: 8),
-                      _buildEstadoChip('⏳ Pendientes', 'solicitado', color: Colors.orange),
-                      const SizedBox(width: 8),
-                      _buildEstadoChip('🚚 En Curso', 'en_curso', color: Colors.blue),
-                      const SizedBox(width: 8),
-                      _buildEstadoChip('✅ Finalizados', 'entregado', color: Colors.green),
-                    ],
-                  ),
-                ),
+                _buildFilterChip('Todas', 'todos'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Pendientes', 'solicitado'),
+                const SizedBox(width: 8),
+                _buildFilterChip('En Proceso', 'aprobada'),
+                const SizedBox(width: 8),
+                _buildFilterChip('Finalizadas', 'entregado'),
               ],
             ),
           ),
-          const Divider(height: 1),
-
-          // --- LISTA DE ÓRDENES CON PULL-TO-REFRESH ---
           Expanded(
             child: Consumer<OrdenInternaProvider>(
               builder: (context, provider, _) {
                 if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
-                List<OrdenInternaDetalle> lista = provider.ordenes;
+                final filtradas = provider.ordenes.where((d) {
+                  bool pasaEstado = true;
+                  if (_filtroEstado == 'solicitado') pasaEstado = d.orden.estado == 'solicitado' || d.orden.estado == 'pendiente';
+                  else if (_filtroEstado == 'aprobada') pasaEstado = d.orden.estado == 'aprobada' || d.orden.estado == 'en_proceso';
+                  else if (_filtroEstado == 'entregado') pasaEstado = d.orden.estado == 'entregado' || d.orden.estado == 'finalizado';
 
-                if (_soloMisPedidos && usuario != null) {
-                  lista = lista.where((o) => o.orden.solicitanteNombre == usuario.nombre).toList();
-                }
+                  bool pasaUsuario = true;
+                  if (_soloMisPedidos && user != null) {
+                    pasaUsuario = d.orden.solicitanteNombre == user.nombre;
+                  }
+                  return pasaEstado && pasaUsuario;
+                }).toList();
 
-                if (_filtroEstado != 'todos') {
-                  lista = lista.where((o) => o.orden.estado == _filtroEstado).toList();
-                }
+                if (filtradas.isEmpty) return const Center(child: Text("No hay órdenes con este criterio"));
 
-                if (lista.isEmpty) {
-                  return _buildEmptyState();
-                }
-
-                // ✅ RefreshIndicator permite deslizar hacia abajo para recargar
                 return RefreshIndicator(
-                  onRefresh: _cargarDatos,
+                  onRefresh: () => provider.cargarOrdenes(),
                   child: ListView.builder(
-                    padding: const EdgeInsets.only(top: 10, bottom: 80, left: 16, right: 16),
-                    itemCount: lista.length,
-                    itemBuilder: (ctx, i) => _buildOrdenCard(lista[i]),
+                    padding: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
+                    itemCount: filtradas.length,
+                    itemBuilder: (ctx, i) => _buildOrdenCard(filtradas[i]),
                   ),
                 );
               },
@@ -142,36 +103,25 @@ class _OrdenesPageState extends State<OrdenesPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    // Envuelto en ListView para que funcione el RefreshIndicator aun estando vacío
-    return LayoutBuilder(
-      builder: (context, constraints) => RefreshIndicator(
-        onRefresh: _cargarDatos,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: SizedBox(
-            height: constraints.maxHeight,
-            child: const Center(child: Text("No hay órdenes (Desliza para actualizar)", style: TextStyle(color: Colors.grey))),
-          ),
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        label: const Text("Nuevo Pedido"),
+        icon: const Icon(Icons.add_shopping_cart),
+        backgroundColor: AppColors.primary,
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OrdenFormPage()))
+            .then((_) => context.read<OrdenInternaProvider>().cargarOrdenes()),
       ),
     );
   }
 
-  Widget _buildEstadoChip(String label, String value, {Color? color}) {
-    final selected = _filtroEstado == value;
-    final activeColor = color ?? Colors.grey[800];
+  Widget _buildFilterChip(String label, String valor) {
+    final selected = _filtroEstado == valor;
     return ChoiceChip(
       label: Text(label),
       selected: selected,
-      onSelected: (v) => setState(() => _filtroEstado = v ? value : 'todos'),
-      backgroundColor: Colors.white,
-      selectedColor: activeColor?.withOpacity(0.1),
+      onSelected: (v) => setState(() => _filtroEstado = valor),
+      selectedColor: AppColors.primary.withValues(alpha: 0.2),
       labelStyle: TextStyle(
-          color: selected ? activeColor : Colors.black,
+          color: selected ? AppColors.primary : Colors.black,
           fontWeight: selected ? FontWeight.bold : FontWeight.normal
       ),
     );
@@ -179,30 +129,27 @@ class _OrdenesPageState extends State<OrdenesPage> {
 
   Widget _buildOrdenCard(OrdenInternaDetalle detalle) {
     final orden = detalle.orden;
-    final bool esUrgente = orden.prioridad == 'urgente';
+    Color colorEstado = Colors.orange;
+    if (orden.estado == 'aprobada') colorEstado = Colors.blue;
+    if (orden.estado == 'en_proceso') colorEstado = Colors.purple;
+    if (orden.estado == 'entregado') colorEstado = Colors.green;
 
-    Color bordeColor = Colors.grey;
-    if (orden.estado == 'solicitado') bordeColor = Colors.orange;
-    if (orden.estado == 'en_curso') bordeColor = Colors.blue;
-    if (orden.estado == 'entregado') bordeColor = Colors.green;
+    // Progreso
+    final progreso = detalle.progresoGeneral;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
+      margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: () {
           Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => OrdenDetallePage(ordenResumen: detalle))
-          ).then((_) => _cargarDatos()); // Recargar al volver
+            context,
+            MaterialPageRoute(builder: (_) => OrdenDetallePage(orden: orden)),
+          );
         },
-        child: Container(
-          decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: bordeColor, width: 5)),
-            borderRadius: BorderRadius.circular(12),
-          ),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,58 +157,60 @@ class _OrdenesPageState extends State<OrdenesPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    "Orden #${orden.numero}",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  if (esUrgente)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(4)),
-                      child: const Text("URGENTE", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 10)),
-                    )
-                  else
-                    Text(orden.estado.toUpperCase(), style: TextStyle(color: bordeColor, fontWeight: FontWeight.bold, fontSize: 11)),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-
-              if (orden.titulo != null && orden.titulo!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(orden.titulo!, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                ),
-
-              Row(
-                children: [
-                  const Icon(Icons.business, size: 16, color: Colors.grey),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      detalle.obraNombre ?? "Obra sin nombre",
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      overflow: TextOverflow.ellipsis,
+                  Text("#${orden.numero}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: colorEstado.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: colorEstado)
                     ),
-                  ),
+                    child: Text(
+                        orden.estado.toUpperCase(),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorEstado)
+                    ),
+                  )
                 ],
               ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.only(left: 22),
-                child: Text(
-                  detalle.clienteRazonSocial,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+              const SizedBox(height: 8),
+              Text(detalle.obraNombre ?? "Obra sin nombre", style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(detalle.clienteRazonSocial, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              const SizedBox(height: 12),
+
+              // === BARRA DE PROGRESO ===
+              if (progreso > 0 && progreso < 1) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Avance de Entrega", style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                    Text("${(progreso * 100).toInt()}%", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
+                  ],
                 ),
-              ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progreso,
+                    backgroundColor: Colors.grey[200],
+                    color: Colors.blue,
+                    minHeight: 6,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
-              const Divider(height: 20),
-
+              const Divider(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("${detalle.cantidadProductos} items", style: const TextStyle(fontWeight: FontWeight.bold)),
-                  Text("Por: ${orden.solicitanteNombre}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  // Chips de Origen
+                  if (orden.esRetiroAcopio || orden.origen == OrigenAbastecimiento.acopio_cliente)
+                    const Chip(label: Text("Acopio", style: TextStyle(fontSize: 10, color: Colors.white)), backgroundColor: Colors.purple, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact)
+                  else if (orden.origen == OrigenAbastecimiento.compra_proveedor)
+                    const Chip(label: Text("Compra Directa", style: TextStyle(fontSize: 10, color: Colors.white)), backgroundColor: Colors.orange, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+
+                  Text("${detalle.cantidadProductos} items"),
+                  Text(orden.prioridad.toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.grey)),
                 ],
               )
             ],
@@ -269,12 +218,5 @@ class _OrdenesPageState extends State<OrdenesPage> {
         ),
       ),
     );
-  }
-
-  void _navegarFormulario(BuildContext context) {
-    Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const OrdenFormPage())
-    ).then((_) => _cargarDatos());
   }
 }

@@ -5,6 +5,7 @@ import '../models/producto_model.dart';
 class StockRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static const String _collection = 'stock';
+  static const String _prodCollection = 'productos';
 
   Future<StockModel?> obtenerPorProductoId(String productoId) async {
     try {
@@ -16,57 +17,47 @@ class StockRepository {
     } catch (e) { return null; }
   }
 
-  // Alias necesario
+  // Alias
   Future<StockModel?> obtenerPorProductoCodigo(String codigo) async => obtenerPorProductoId(codigo);
 
-  Future<List<ProductoConStock>> obtenerTodosConStock({bool soloActivos = true}) async {
+  Future<List<ProductoModel>> obtenerTodosConStock({bool soloActivos = true}) async {
     try {
-      Query query = _firestore.collection('productos');
+      Query query = _firestore.collection(_prodCollection);
       if (soloActivos) query = query.where('estado', isEqualTo: 'activo');
 
-      final snapshot = await query.orderBy('codigo').get();
+      final snapshot = await query.get();
 
       return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return ProductoModel.fromMap(data);
+        // ✅ CORRECCIÓN: Se pasa el ID como segundo argumento
+        return ProductoModel.fromMap(data, doc.id);
       }).toList();
     } catch (e) {
-      print('Error stock: $e');
       return [];
     }
   }
 
-  Future<void> actualizarCantidad({required String productoId, required double cantidad}) async {
-    final batch = _firestore.batch();
-    final stockRef = _firestore.collection(_collection).doc(productoId);
+  // Método atómico para actualizar stock sin movimiento
+  Future<void> actualizarStock(String productoId, double cantidadDelta) async {
+    final refStock = _firestore.collection(_collection).doc(productoId);
+    final refProd = _firestore.collection(_prodCollection).doc(productoId);
 
-    batch.set(stockRef, {
-      'productoId': productoId,
-      'cantidadDisponible': cantidad,
-      'ultimaActualizacion': DateTime.now().toIso8601String(),
-    }, SetOptions(merge: true));
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(refStock);
+      double actual = 0;
+      if (snapshot.exists) {
+        actual = (snapshot.data()?['cantidadDisponible'] as num?)?.toDouble() ?? 0;
+      }
 
-    final prodRef = _firestore.collection('productos').doc(productoId);
-    batch.update(prodRef, {'cantidadDisponible': cantidad});
+      double nueva = actual + cantidadDelta;
 
-    await batch.commit();
-  }
+      transaction.set(refStock, {
+        'productoId': productoId,
+        'cantidadDisponible': nueva,
+        'ultimaActualizacion': FieldValue.serverTimestamp()
+      }, SetOptions(merge: true));
 
-  // Método que faltaba (usado en ProductoFormPage)
-  Future<void> establecer({required String productoId, required double cantidad}) async {
-    await actualizarCantidad(productoId: productoId, cantidad: cantidad);
-  }
-
-  // Método que faltaba (usado en StockPage)
-  Future<int> contarStockBajo() async {
-    try {
-      final snapshot = await _firestore.collection('productos')
-          .where('estado', isEqualTo: 'activo')
-          .where('cantidadDisponible', isLessThan: 10)
-          .where('cantidadDisponible', isGreaterThan: 0)
-          .count().get();
-      return snapshot.count ?? 0;
-    } catch (e) { return 0; }
+      transaction.update(refProd, {'cantidadDisponible': nueva});
+    });
   }
 }

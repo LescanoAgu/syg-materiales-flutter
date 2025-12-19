@@ -16,24 +16,15 @@ class ClienteRepository {
           .map((doc) => ClienteModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
     } catch (e) {
-      print("Error obteniendo clientes: $e");
       return [];
     }
   }
 
-  // ✅ Método necesario para OrdenInternaRepository
   Future<ClienteModel?> obtenerPorId(String id) async {
     try {
-      // Intentar por ID de documento
       final doc = await _firestore.collection(_collection).doc(id).get();
       if (doc.exists) {
         return ClienteModel.fromMap(doc.data()!, doc.id);
-      }
-      // Intentar por campo 'codigo' (Legacy support)
-      final query = await _firestore.collection(_collection).where('codigo', isEqualTo: id).limit(1).get();
-      if (query.docs.isNotEmpty) {
-        final d = query.docs.first;
-        return ClienteModel.fromMap(d.data(), d.id);
       }
       return null;
     } catch (e) {
@@ -41,17 +32,79 @@ class ClienteRepository {
     }
   }
 
+  // ✅ GUARDAR UN SOLO CLIENTE (Auto-incremental)
   Future<void> guardar(ClienteModel cliente) async {
-    final docRef = cliente.id.isEmpty
-        ? _firestore.collection(_collection).doc() // Nuevo auto-ID
-        : _firestore.collection(_collection).doc(cliente.id); // Actualizar
+    if (cliente.id.isNotEmpty) {
+      // Si tiene ID, es actualización
+      await _firestore.collection(_collection).doc(cliente.id).update(cliente.toMap());
+    } else {
+      // Si es nuevo, usamos transacción para el ID correlativo
+      await _firestore.runTransaction((transaction) async {
+        // 1. Referencia al contador
+        final contadorRef = _firestore.collection('sistema').doc('contadores');
+        final contadorDoc = await transaction.get(contadorRef);
 
-    // Usamos set con merge para seguridad
-    await docRef.set(cliente.toMap(), SetOptions(merge: true));
+        // 2. Calcular siguiente número
+        int nuevoNum = 1;
+        if (contadorDoc.exists) {
+          nuevoNum = (contadorDoc.data()?['clientes_count'] as int? ?? 0) + 1;
+        }
+
+        // 3. Formato CL-001
+        String codigoCorrelativo = 'CL-${nuevoNum.toString().padLeft(3, '0')}';
+
+        final nuevoCliente = ClienteModel(
+          id: '',
+          codigo: codigoCorrelativo, // ✅ Código asignado aquí
+          razonSocial: cliente.razonSocial,
+          cuit: cliente.cuit,
+          email: cliente.email,
+          telefono: cliente.telefono,
+          direccion: cliente.direccion,
+          localidad: cliente.localidad,
+          condicionIva: cliente.condicionIva,
+          activo: true,
+          createdAt: DateTime.now(),
+        );
+
+        // 4. Guardar
+        final docRef = _firestore.collection(_collection).doc();
+        transaction.set(docRef, nuevoCliente.toMap());
+        transaction.set(contadorRef, {'clientes_count': nuevoNum}, SetOptions(merge: true));
+      });
+    }
+  }
+
+  // ✅ IMPORTACIÓN MASIVA (Optimizado)
+  Future<void> importarMasivos(List<ClienteModel> clientes) async {
+    final batch = _firestore.batch();
+
+    // Leemos el contador actual UNA VEZ (operación de lectura simple)
+    // Nota: Si hay alta concurrencia esto podría colisionar, pero para importación administrativa está bien.
+    final contadorDoc = await _firestore.collection('sistema').doc('contadores').get();
+    int contadorBase = contadorDoc.data()?['clientes_count'] ?? 0;
+
+    for (var c in clientes) {
+      contadorBase++; // Incrementamos localmente
+      String codigo = 'CL-${contadorBase.toString().padLeft(3, '0')}'; // CL-001
+
+      final docRef = _firestore.collection(_collection).doc();
+
+      // Ajustamos el modelo con el código generado
+      final map = c.toMap();
+      map['codigo'] = codigo;
+      map['createdAt'] = Timestamp.now();
+
+      batch.set(docRef, map);
+    }
+
+    // Actualizamos el contador global al final
+    batch.set(_firestore.collection('sistema').doc('contadores'), {'clientes_count': contadorBase}, SetOptions(merge: true));
+
+    await batch.commit();
   }
 
   Future<void> eliminar(String id) async {
-    // Implementamos Soft Delete cambiando 'activo' a false
-    await _firestore.collection(_collection).doc(id).update({'activo': false});
+    await _firestore.collection(_collection).doc(id).delete();
   }
 }

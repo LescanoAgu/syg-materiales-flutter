@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../../../core/utils/formatters.dart';
 import '../../../acopios/presentation/providers/acopio_provider.dart';
-import '../../data/services/excel_service.dart';
+import '../../data/services/pdf_service.dart';
 
 class ReporteAcopiosPage extends StatefulWidget {
   const ReporteAcopiosPage({super.key});
@@ -13,84 +13,71 @@ class ReporteAcopiosPage extends StatefulWidget {
 }
 
 class _ReporteAcopiosPageState extends State<ReporteAcopiosPage> {
-  final ExcelService _excelService = ExcelService();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AcopioProvider>().cargarDatos();
+      // ✅ CORREGIDO: Usamos cargarAcopios que sí existe
+      context.read<AcopioProvider>().cargarAcopios();
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AcopioProvider>(
-      builder: (context, provider, _) {
-        final acopios = provider.acopios;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Reporte General de Acopios"),
+        backgroundColor: AppColors.primary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: () {
+              final acopios = context.read<AcopioProvider>().acopios;
+              PdfService().generarPdfAcopios(acopios);
+            },
+          )
+        ],
+      ),
+      body: Consumer<AcopioProvider>(
+        builder: (context, provider, _) {
+          if (provider.isLoading) return const Center(child: CircularProgressIndicator());
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('Reporte de Acopios (Facturas)'),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.download),
-                // Conectamos el nuevo método de Excel
-                onPressed: () => _excelService.generarReporteAcopios(acopios: acopios),
-                tooltip: 'Exportar Excel',
-              ),
-            ],
-          ),
-          body: provider.isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : acopios.isEmpty
-              ? _buildEmptyState()
-              : ListView.builder(
+          if (provider.acopios.isEmpty) {
+            return const Center(child: Text("No hay acopios registrados"));
+          }
+
+          return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: acopios.length,
-            itemBuilder: (context, index) {
-              final a = acopios[index];
+            itemCount: provider.acopios.length,
+            itemBuilder: (ctx, i) {
+              final acopio = provider.acopios[i];
+              // Filtramos items con saldo positivo
+              final itemsConSaldo = acopio.items.where((it) => it.cantidadDisponible > 0).toList();
+
+              if (itemsConSaldo.isEmpty) return const SizedBox.shrink();
+
               return Card(
-                margin: const EdgeInsets.only(bottom: 8),
+                margin: const EdgeInsets.only(bottom: 16),
                 child: ExpansionTile(
-                  title: Text(a.etiqueta, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text("${a.clienteRazonSocial} • Fact: ${a.numeroFactura}"),
-                  trailing: Text(ArgFormats.fecha(a.fechaCompra)),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Materiales con saldo pendiente:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                          const SizedBox(height: 8),
-                          ...a.items.where((i) => i.cantidadRestante > 0).map((item) =>
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 4),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(item.productoNombre),
-                                    Text("${item.cantidadRestante.toStringAsFixed(1)} restantes", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              )
-                          ),
-                        ],
-                      ),
-                    )
-                  ],
+                  title: Text(
+                    // ✅ CORREGIDO: clienteRazonSocial
+                      acopio.clienteRazonSocial,
+                      style: const TextStyle(fontWeight: FontWeight.bold)
+                  ),
+                  subtitle: Text("En: ${acopio.proveedorNombre} - Actualizado: ${DateFormat('dd/MM/yyyy').format(acopio.fechaUltimoMovimiento)}"), // ✅ CORREGIDO
+                  children: itemsConSaldo.map((item) {
+                    return ListTile(
+                      dense: true,
+                      title: Text(item.nombreProducto), // ✅ CORREGIDO: nombreProducto
+                      trailing: Text("${item.cantidadDisponible} ${item.unidad}", style: const TextStyle(fontWeight: FontWeight.bold)), // ✅ CORREGIDO
+                    );
+                  }).toList(),
                 ),
               );
             },
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
-  }
-
-  Widget _buildEmptyState() {
-    return const Center(child: Text('No hay acopios registrados'));
   }
 }

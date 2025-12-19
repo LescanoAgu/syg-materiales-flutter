@@ -7,7 +7,6 @@ import '../providers/cliente_provider.dart';
 
 class ClienteFormPage extends StatefulWidget {
   final ClienteModel? cliente;
-
   const ClienteFormPage({super.key, this.cliente});
 
   @override
@@ -25,189 +24,89 @@ class _ClienteFormPageState extends State<ClienteFormPage> {
   late TextEditingController _direccionCtrl;
   late TextEditingController _localidadCtrl;
 
-  String? _condicionIva;
-
   @override
   void initState() {
     super.initState();
-    _codigoCtrl = TextEditingController(text: widget.cliente?.codigo ?? '');
+    // Si es nuevo, mostramos texto informativo
+    String codigoInicial = widget.cliente?.codigo ?? 'Auto-generado (CL-XXX)';
+
+    _codigoCtrl = TextEditingController(text: codigoInicial);
     _razonSocialCtrl = TextEditingController(text: widget.cliente?.razonSocial ?? '');
     _cuitCtrl = TextEditingController(text: widget.cliente?.cuit ?? '');
     _telefonoCtrl = TextEditingController(text: widget.cliente?.telefono ?? '');
     _emailCtrl = TextEditingController(text: widget.cliente?.email ?? '');
     _direccionCtrl = TextEditingController(text: widget.cliente?.direccion ?? '');
     _localidadCtrl = TextEditingController(text: widget.cliente?.localidad ?? '');
-    _condicionIva = widget.cliente?.condicionIva;
-
-    if (widget.cliente == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final nuevoCodigo = context.read<ClienteProvider>().generarNuevoCodigo();
-        _codigoCtrl.text = nuevoCodigo;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _codigoCtrl.dispose();
-    _razonSocialCtrl.dispose();
-    _cuitCtrl.dispose();
-    _telefonoCtrl.dispose();
-    _emailCtrl.dispose();
-    _direccionCtrl.dispose();
-    _localidadCtrl.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final esEdicion = widget.cliente != null;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(esEdicion ? 'Editar Cliente' : 'Nuevo Cliente'),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text('Datos Generales', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: CustomTextField(
-                    label: 'Código',
-                    controller: _codigoCtrl,
-                    enabled: !esEdicion,
-                    validator: (v) => v!.isEmpty ? 'Requerido' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: CustomTextField(
-                    label: 'CUIT',
-                    controller: _cuitCtrl,
-                    keyboardType: TextInputType.number,
-                    hint: '30-12345678-9',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Razón Social / Nombre',
-              controller: _razonSocialCtrl,
-              prefixIcon: Icons.business,
-              validator: (v) => v!.isEmpty ? 'Requerido' : null,
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              value: _condicionIva,
-              decoration: const InputDecoration(
-                labelText: 'Condición IVA',
-                border: OutlineInputBorder(),
-                filled: true,
-                fillColor: Colors.white,
+      appBar: AppBar(title: Text(widget.cliente == null ? 'Nuevo Cliente' : 'Editar Cliente'), backgroundColor: AppColors.primary),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              CustomTextField(
+                label: 'Código',
+                controller: _codigoCtrl,
+                readOnly: true, // Siempre solo lectura
               ),
-              items: const [
-                DropdownMenuItem(value: 'Responsable Inscripto', child: Text('Responsable Inscripto')),
-                DropdownMenuItem(value: 'Monotributista', child: Text('Monotributista')),
-                DropdownMenuItem(value: 'Exento', child: Text('Exento')),
-                DropdownMenuItem(value: 'Consumidor Final', child: Text('Consumidor Final')),
-              ],
-              onChanged: (v) => setState(() => _condicionIva = v),
-            ),
-            const SizedBox(height: 24),
-            const Text('Contacto y Ubicación', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primary)),
-            const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Email',
-              controller: _emailCtrl,
-              keyboardType: TextInputType.emailAddress,
-              prefixIcon: Icons.email,
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Teléfono',
-              controller: _telefonoCtrl,
-              keyboardType: TextInputType.phone,
-              prefixIcon: Icons.phone,
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Dirección',
-              controller: _direccionCtrl,
-              prefixIcon: Icons.location_on,
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              label: 'Localidad / Provincia',
-              controller: _localidadCtrl,
-              prefixIcon: Icons.map,
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _guardar,
-                icon: const Icon(Icons.save),
-                label: Text(esEdicion ? 'GUARDAR CAMBIOS' : 'CREAR CLIENTE'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
+              const SizedBox(height: 16),
+              CustomTextField(label: 'Razón Social / Nombre', controller: _razonSocialCtrl),
+              const SizedBox(height: 16),
+              CustomTextField(label: 'CUIT / DNI', controller: _cuitCtrl, keyboardType: TextInputType.number),
+              const SizedBox(height: 16),
+              CustomTextField(label: 'Teléfono', controller: _telefonoCtrl, keyboardType: TextInputType.phone),
+              const SizedBox(height: 16),
+              CustomTextField(label: 'Email', controller: _emailCtrl, keyboardType: TextInputType.emailAddress),
+              const SizedBox(height: 16),
+              CustomTextField(label: 'Dirección', controller: _direccionCtrl),
+              const SizedBox(height: 16),
+              CustomTextField(label: 'Localidad', controller: _localidadCtrl),
+              const SizedBox(height: 32),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _guardar,
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  child: const Text('GUARDAR CLIENTE'),
                 ),
-              ),
-            ),
-          ],
+              )
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _guardar() async {
-    if (!_formKey.currentState!.validate()) return;
+  void _guardar() async {
+    if (_razonSocialCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("El nombre es obligatorio")));
+      return;
+    }
 
-    final nuevoCliente = ClienteModel(
-      // ✅ CORRECCIÓN: Si id es null, pasamos string vacío (el repo creará uno nuevo)
-      id: widget.cliente?.id ?? '',
-      codigo: _codigoCtrl.text.trim(),
-      razonSocial: _razonSocialCtrl.text.trim(),
-      cuit: _cuitCtrl.text.trim(),
-      condicionIva: _condicionIva,
-      email: _emailCtrl.text.trim(),
-      telefono: _telefonoCtrl.text.trim(),
-      direccion: _direccionCtrl.text.trim(),
-      localidad: _localidadCtrl.text.trim(),
-      // ✅ CORRECCIÓN: 'activo' es bool, no string 'estado'
+    final cliente = ClienteModel(
+      id: widget.cliente?.id ?? '', // Si es '', el repo crea nuevo
+      codigo: widget.cliente?.codigo ?? '', // Si es '', el repo genera CL-XXX
+      razonSocial: _razonSocialCtrl.text,
+      cuit: _cuitCtrl.text,
+      email: _emailCtrl.text,
+      telefono: _telefonoCtrl.text,
+      direccion: _direccionCtrl.text,
+      localidad: _localidadCtrl.text,
       activo: true,
-      // ✅ CORRECCIÓN: Pasamos objetos DateTime, no Strings
       createdAt: widget.cliente?.createdAt ?? DateTime.now(),
-      updatedAt: DateTime.now(),
     );
 
     final provider = context.read<ClienteProvider>();
-    bool exito;
+    // Guardar maneja internamente crear o actualizar
+    final exito = await provider.guardarCliente(cliente);
 
-    showDialog(context: context, barrierDismissible: false, builder: (c) => const Center(child: CircularProgressIndicator()));
-
-    if (widget.cliente != null) {
-      exito = await provider.actualizarCliente(nuevoCliente);
-    } else {
-      exito = await provider.crearCliente(nuevoCliente);
-    }
-
-    if (mounted) {
-      Navigator.pop(context);
-      if (exito) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Operación exitosa'), backgroundColor: AppColors.success));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Error: ${provider.errorMessage}'), backgroundColor: AppColors.error));
-      }
-    }
+    if (exito && mounted) Navigator.pop(context);
   }
 }

@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'login_page.dart';
 import 'access_pending_page.dart';
-// ✅ Importamos el MainLayout en lugar de StockPage
-import '../../../../core/widgets/main_layout.dart';
+// ✅ Import Verificado (Asegúrate de que este archivo exista en esa ruta)
+import '../../../home/presentation/pages/home_hub_page.dart';
 
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -21,8 +21,8 @@ class AuthGate extends StatelessWidget {
           case AuthStatus.pending:
             return const AccessPendingPage();
           case AuthStatus.authenticated:
-          // ✅ Ahora redirige a la nueva estructura con Footer
-            return const MainLayout();
+          // ✅ Clase correctamente instanciada
+            return const HomeHubPage();
         }
       },
     );

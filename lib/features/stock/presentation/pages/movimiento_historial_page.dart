@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../data/models/movimiento_stock_model.dart';
 import '../providers/movimiento_stock_provider.dart';
-import 'stock_page.dart';
 
 class MovimientoHistorialPage extends StatefulWidget {
   final String? productoId;
@@ -14,126 +14,97 @@ class MovimientoHistorialPage extends StatefulWidget {
 }
 
 class _MovimientoHistorialPageState extends State<MovimientoHistorialPage> {
-  TipoMovimiento? _filtroTipo; // Null = Todos
+  TipoMovimiento? _filtroTipo;
 
   @override
   void initState() {
     super.initState();
-    _cargarDatos();
+    _cargar();
   }
 
-  void _cargarDatos() {
+  void _cargar() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.productoId != null) {
-        context.read<MovimientoStockProvider>().cargarMovimientosDeProducto(
-            widget.productoId!,
-            tipo: _filtroTipo
-        );
+        context.read<MovimientoStockProvider>().cargarMovimientosDeProducto(widget.productoId!, tipo: _filtroTipo);
       } else {
-        context.read<MovimientoStockProvider>().cargarMovimientos(
-            tipo: _filtroTipo
-        );
+        context.read<MovimientoStockProvider>().cargarMovimientos(tipo: _filtroTipo);
       }
     });
-  }
-
-  void _cambiarFiltro(TipoMovimiento? nuevoTipo) {
-    setState(() {
-      _filtroTipo = (_filtroTipo == nuevoTipo) ? null : nuevoTipo; // Toggle (si tocas el mismo, se desactiva)
-    });
-    _cargarDatos();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(widget.productoId == null ? 'Historial General' : 'Historial: ${widget.productoId}'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            } else {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(builder: (_) => const StockPage()),
-              );
-            }
-          },
-        ),
+        title: const Text("Historial de Movimientos"),
+        backgroundColor: AppColors.primary,
+        elevation: 0,
       ),
       body: Column(
         children: [
-          // --- BARRA DE FILTROS ---
+          // ✅ NUEVOS FILTROS BONITOS
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             color: Colors.white,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                _buildFilterChip('Todos', null, Colors.grey),
-                _buildFilterChip('Entradas', TipoMovimiento.entrada, Colors.green),
-                _buildFilterChip('Salidas', TipoMovimiento.salida, Colors.red),
-                _buildFilterChip('Ajustes', TipoMovimiento.ajuste, Colors.orange),
+                _buildFilterBtn("Todos", null, Colors.grey),
+                _buildFilterBtn("Entrada", TipoMovimiento.entrada, Colors.green),
+                _buildFilterBtn("Salida", TipoMovimiento.salida, Colors.red),
+                _buildFilterBtn("Ajuste", TipoMovimiento.ajuste, Colors.blue),
               ],
             ),
           ),
-          const Divider(height: 1),
 
-          // --- LISTA ---
           Expanded(
             child: Consumer<MovimientoStockProvider>(
-              builder: (context, provider, _) {
-                if (provider.isLoading) return const Center(child: CircularProgressIndicator());
-                if (provider.errorMessage != null) return Center(child: Text('Error: ${provider.errorMessage}'));
-                if (provider.movimientos.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.filter_list_off, size: 64, color: Colors.grey),
-                        SizedBox(height: 16),
-                        Text('No se encontraron movimientos', style: TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  );
+              builder: (ctx, prov, _) {
+                if (prov.isLoading) return const Center(child: CircularProgressIndicator());
+
+                if (prov.movimientos.isEmpty) {
+                  return const Center(child: Text("No se encontraron movimientos", style: TextStyle(color: Colors.grey)));
                 }
 
                 return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: provider.movimientos.length,
-                  separatorBuilder: (_, __) => const Divider(),
+                  padding: const EdgeInsets.all(12),
+                  itemCount: prov.movimientos.length,
+                  separatorBuilder: (_,__) => const SizedBox(height: 8),
                   itemBuilder: (ctx, i) {
-                    final m = provider.movimientos[i];
+                    final m = prov.movimientos[i];
+                    final esEntrada = m.tipo == TipoMovimiento.entrada;
+                    final color = esEntrada ? Colors.green : (m.tipo == TipoMovimiento.salida ? Colors.red : Colors.blue);
 
-                    Color color = m.tipo == TipoMovimiento.entrada ? Colors.green :
-                    (m.tipo == TipoMovimiento.salida ? Colors.red : Colors.orange);
-                    IconData icon = m.tipo == TipoMovimiento.entrada ? Icons.arrow_circle_down :
-                    (m.tipo == TipoMovimiento.salida ? Icons.arrow_circle_up : Icons.tune);
-
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: color.withOpacity(0.1),
-                        child: Icon(icon, color: color),
+                    return Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                          child: Icon(
+                            esEntrada ? Icons.arrow_downward : (m.tipo == TipoMovimiento.salida ? Icons.arrow_upward : Icons.tune),
+                            color: color,
+                          ),
+                        ),
+                        title: Text(m.productoNombre, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text("${DateFormat('dd/MM HH:mm').format(m.createdAt)} • ${m.usuarioNombre}"),
+                            if (m.obraNombre != null)
+                              Text("Obra: ${m.obraNombre}", style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: Colors.black87)),
+                            if (m.motivo != null && m.motivo!.isNotEmpty)
+                              Text("\"${m.motivo}\"", style: const TextStyle(fontStyle: FontStyle.italic, fontSize: 12)),
+                          ],
+                        ),
+                        trailing: Text(
+                          "${esEntrada ? '+' : '-'}${m.cantidad}",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+                        ),
                       ),
-                      title: Text(
-                        '${m.tipo.name.toUpperCase()} (${m.cantidad})',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if(widget.productoId == null)
-                            Text('Prod: ${m.productoId}', style: const TextStyle(fontWeight: FontWeight.w500)),
-                          Text(m.createdAt.toString().split('.')[0]),
-                          if (m.motivo != null && m.motivo!.isNotEmpty)
-                            Text('"${m.motivo}"', style: const TextStyle(fontStyle: FontStyle.italic)),
-                        ],
-                      ),
-                      trailing: m.referencia != null
-                          ? Chip(label: Text(m.referencia!, style: const TextStyle(fontSize: 10)))
-                          : null,
                     );
                   },
                 );
@@ -145,20 +116,30 @@ class _MovimientoHistorialPageState extends State<MovimientoHistorialPage> {
     );
   }
 
-  Widget _buildFilterChip(String label, TipoMovimiento? valor, Color color) {
-    final bool isSelected = _filtroTipo == valor;
-    return FilterChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (_) => _cambiarFiltro(valor),
-      backgroundColor: Colors.white,
-      selectedColor: color.withOpacity(0.2),
-      labelStyle: TextStyle(
-        color: isSelected ? color : Colors.black,
-        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+  Widget _buildFilterBtn(String label, TipoMovimiento? tipo, Color color) {
+    final bool isSelected = _filtroTipo == tipo;
+    return InkWell(
+      onTap: () {
+        setState(() => _filtroTipo = tipo);
+        _cargar();
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? color : Colors.grey.shade300),
+        ),
+        child: Text(
+            label,
+            style: TextStyle(
+                color: isSelected ? Colors.white : Colors.black54,
+                fontWeight: FontWeight.bold,
+                fontSize: 12
+            )
+        ),
       ),
-      side: BorderSide(color: isSelected ? color : Colors.grey.shade300),
-      checkmarkColor: color,
     );
   }
 }

@@ -1,11 +1,10 @@
-// Importamos el modelo principal
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Este modelo queda como soporte legacy, pero el sistema usa ProductoModel principalmente
 class StockModel {
   final String? id;
   final String productoId;
   final double cantidadDisponible;
-  final String? ultimaActualizacion;
+  final DateTime? ultimaActualizacion;
 
   StockModel({
     this.id,
@@ -19,7 +18,9 @@ class StockModel {
       id: map['id']?.toString(),
       productoId: map['productoId']?.toString() ?? '',
       cantidadDisponible: (map['cantidadDisponible'] as num?)?.toDouble() ?? 0.0,
-      ultimaActualizacion: map['ultimaActualizacion']?.toString(),
+      ultimaActualizacion: map['ultimaActualizacion'] is Timestamp
+          ? (map['ultimaActualizacion'] as Timestamp).toDate()
+          : null,
     );
   }
 
@@ -27,16 +28,16 @@ class StockModel {
     return {
       'productoId': productoId,
       'cantidadDisponible': cantidadDisponible,
-      'ultimaActualizacion': ultimaActualizacion,
+      'ultimaActualizacion': FieldValue.serverTimestamp(),
     };
   }
 
-  StockModel copyWith({String? id}) {
+  StockModel copyWith({String? id, double? cantidad}) {
     return StockModel(
-        id: id ?? this.id,
-        productoId: productoId,
-        cantidadDisponible: cantidadDisponible,
-        ultimaActualizacion: ultimaActualizacion
+      id: id ?? this.id,
+      productoId: productoId,
+      cantidadDisponible: cantidad ?? cantidadDisponible,
+      ultimaActualizacion: ultimaActualizacion,
     );
   }
 }

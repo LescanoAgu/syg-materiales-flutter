@@ -14,70 +14,54 @@ class ProveedorFormPage extends StatefulWidget {
 
 class _ProveedorFormPageState extends State<ProveedorFormPage> {
   final _formKey = GlobalKey<FormState>();
-  final _codigoCtrl = TextEditingController();
   final _nombreCtrl = TextEditingController();
-  final _telefonoCtrl = TextEditingController();
   final _direccionCtrl = TextEditingController();
-
-  // Por defecto externo, ya que el depósito S&G es fijo
-  TipoProveedor _tipo = TipoProveedor.proveedor;
+  final _telefonoCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     if (widget.proveedor != null) {
-      _codigoCtrl.text = widget.proveedor!.codigo;
       _nombreCtrl.text = widget.proveedor!.nombre;
-      _telefonoCtrl.text = widget.proveedor!.telefono ?? '';
       _direccionCtrl.text = widget.proveedor!.direccion ?? '';
-      _tipo = widget.proveedor!.tipo;
+      _telefonoCtrl.text = widget.proveedor!.telefono ?? '';
+      _emailCtrl.text = widget.proveedor!.email ?? '';
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final esEdicion = widget.proveedor != null;
     return Scaffold(
-      appBar: AppBar(title: Text(esEdicion ? 'Editar Proveedor' : 'Nuevo Proveedor')),
-      body: Padding(
+      appBar: AppBar(title: Text(widget.proveedor == null ? "Nuevo Proveedor" : "Editar Proveedor"), backgroundColor: AppColors.primary),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: ListView(
+          child: Column(
             children: [
               TextFormField(
-                controller: _codigoCtrl,
-                decoration: const InputDecoration(labelText: 'Código (Ej: PRO-001)', border: OutlineInputBorder()),
-                readOnly: esEdicion, // Código no editable
-                validator: (v) => v!.isEmpty ? 'Requerido' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
                 controller: _nombreCtrl,
-                decoration: const InputDecoration(labelText: 'Nombre / Razón Social', border: OutlineInputBorder(), prefixIcon: Icon(Icons.store)),
+                decoration: const InputDecoration(labelText: 'Razón Social', border: OutlineInputBorder()),
                 validator: (v) => v!.isEmpty ? 'Requerido' : null,
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _telefonoCtrl,
-                decoration: const InputDecoration(labelText: 'Teléfono', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)),
-                keyboardType: TextInputType.phone,
-              ),
+              TextFormField(controller: _direccionCtrl, decoration: const InputDecoration(labelText: 'Dirección', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on))),
               const SizedBox(height: 16),
-              TextFormField(
-                controller: _direccionCtrl,
-                decoration: const InputDecoration(labelText: 'Dirección', border: OutlineInputBorder(), prefixIcon: Icon(Icons.location_on)),
-              ),
-              const SizedBox(height: 24),
+              TextFormField(controller: _telefonoCtrl, decoration: const InputDecoration(labelText: 'Teléfono', border: OutlineInputBorder(), prefixIcon: Icon(Icons.phone)), keyboardType: TextInputType.phone),
+              const SizedBox(height: 16),
+              TextFormField(controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder(), prefixIcon: Icon(Icons.email)), keyboardType: TextInputType.emailAddress),
+
+              const SizedBox(height: 32),
               SizedBox(
+                width: double.infinity,
                 height: 50,
-                child: ElevatedButton.icon(
+                child: ElevatedButton(
                   onPressed: _guardar,
-                  icon: const Icon(Icons.save),
-                  label: const Text('GUARDAR'),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                  child: const Text("GUARDAR PROVEEDOR"),
                 ),
-              ),
+              )
             ],
           ),
         ),
@@ -90,11 +74,12 @@ class _ProveedorFormPageState extends State<ProveedorFormPage> {
 
     final prov = ProveedorModel(
       id: widget.proveedor?.id,
-      codigo: _codigoCtrl.text.trim(),
-      nombre: _nombreCtrl.text.trim(),
-      tipo: _tipo,
-      telefono: _telefonoCtrl.text.trim(),
-      direccion: _direccionCtrl.text.trim(),
+      codigo: widget.proveedor?.codigo ?? 'PROV-${DateTime.now().millisecondsSinceEpoch}',
+      nombre: _nombreCtrl.text,
+      tipo: TipoProveedor.proveedor,
+      direccion: _direccionCtrl.text,
+      telefono: _telefonoCtrl.text,
+      email: _emailCtrl.text,
       createdAt: widget.proveedor?.createdAt ?? DateTime.now(),
     );
 
@@ -107,6 +92,8 @@ class _ProveedorFormPageState extends State<ProveedorFormPage> {
       exito = await provider.crearProveedor(prov);
     }
 
-    if (mounted && exito) Navigator.pop(context);
+    if (exito && mounted) {
+      Navigator.pop(context);
+    }
   }
 }
