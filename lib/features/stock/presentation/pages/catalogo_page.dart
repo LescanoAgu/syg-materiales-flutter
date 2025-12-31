@@ -20,7 +20,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-          title: const Text("Importar Catálogo (CSV)"),
+          title: const Text("Importar Catálogo (TXT/CSV)"),
           backgroundColor: AppColors.primary
       ),
       body: Padding(
@@ -29,12 +29,12 @@ class _CatalogoPageState extends State<CatalogoPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-                "Pegar datos desde Excel/CSV",
+                "Pegar lista de materiales",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)
             ),
             const SizedBox(height: 8),
             const Text(
-                "Columnas: Código, Nombre, Precio, Categoría, Unidad",
+                "El sistema detectará automáticamente los prefijos (Ej: A, OG, E)\nFormato: CODIGO;NOMBRE;PRECIO;CATEGORIA;UNIDAD",
                 style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 13)
             ),
             const SizedBox(height: 16),
@@ -44,8 +44,9 @@ class _CatalogoPageState extends State<CatalogoPage> {
                 controller: _csvController,
                 maxLines: null,
                 keyboardType: TextInputType.multiline,
+                style: const TextStyle(fontFamily: 'Courier', fontSize: 12),
                 decoration: const InputDecoration(
-                  hintText: "A001, Martillo, 5000, Herramientas, un\nA002, Clavos, 200, Fijaciones, kg...",
+                  hintText: "Pega aquí el contenido de Items.txt...",
                   border: OutlineInputBorder(),
                   filled: true,
                   fillColor: Colors.white,
@@ -62,7 +63,7 @@ class _CatalogoPageState extends State<CatalogoPage> {
                 icon: const Icon(Icons.upload_file),
                 label: _procesando
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("PROCESAR DATOS"),
+                    : const Text("PROCESAR E IMPORTAR"),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
                   foregroundColor: Colors.white,
@@ -90,16 +91,21 @@ class _CatalogoPageState extends State<CatalogoPage> {
     try {
       for (var linea in lineas) {
         if (linea.trim().isEmpty) continue;
+        if (!linea.contains(';')) continue; // Ignora encabezados basura
 
-        final partes = linea.split(',');
-        // Mínimo necesitamos código y nombre
+        final partes = linea.split(';');
+
         if (partes.length >= 2) {
-          final codigo = partes[0].trim();
+          final codigo = partes[0].trim().toUpperCase(); // Ej: OG001 o A-001
           final nombre = partes[1].trim();
+
+          // Validación básica
+          if (codigo.length < 2) continue;
 
           double? precio;
           if (partes.length > 2 && partes[2].trim().isNotEmpty) {
-            precio = double.tryParse(partes[2].trim());
+            String precioStr = partes[2].trim().replaceAll(',', '.');
+            precio = double.tryParse(precioStr);
           }
 
           String catNombre = "General";
@@ -107,29 +113,34 @@ class _CatalogoPageState extends State<CatalogoPage> {
             catNombre = partes[3].trim();
           }
 
-          String unidad = "u";
+          String unidad = "Unidad";
           if (partes.length > 4 && partes[4].trim().isNotEmpty) {
             unidad = partes[4].trim();
           }
 
-          // --- FIX RANGE ERROR ---
-          // Aseguramos que catNombre tenga longitud suficiente antes de substring
-          String catId = "GEN";
-          String prefijo = "G";
+          // --- LOGICA DE PREFIJOS CORRECTA ---
+          // Extraemos TODAS las letras antes de los números
+          // Si codigo es "OG001" -> prefijo "OG"
+          // Si codigo es "A-001" -> prefijo "A-"
+          // Si codigo es "A001"  -> prefijo "A"
 
-          if (catNombre.isNotEmpty) {
-            // ID: Primeras 3 letras mayúsculas
-            catId = catNombre.length >= 3
-                ? catNombre.substring(0, 3).toUpperCase()
-                : catNombre.toUpperCase();
+          final regex = RegExp(r'^([A-Z\-]+)'); // Captura letras y guiones al inicio
+          final match = regex.firstMatch(codigo);
+          String prefijo = "G"; // Default
 
-            // Prefijo: Primera letra
-            prefijo = catNombre.substring(0, 1).toUpperCase();
+          if (match != null) {
+            prefijo = match.group(0) ?? "G";
+            // Si el usuario quiere guardar sin guión en la categoría pero el código lo tiene
+            // prefijo = prefijo.replaceAll('-', '');
           }
 
-          // Crear categoría si no existe (evitamos repetidos en el loop)
-          bool existeCatLocal = provider.categorias.any((c) => c.codigo == catId);
-          if (!existeCatLocal && !categoriasProcesadas.contains(catId)) {
+          // ID de categoría basado en el nombre, para no duplicar "Agua" con "agua"
+          String catId = catNombre.toUpperCase().replaceAll(' ', '_');
+
+          // Crear categoría si no existe en memoria local
+          // (Nota: Esto no chequea contra Firebase en tiempo real por performance,
+          //  asume que Provider tiene la lista cargada o no duplica al guardar)
+          if (!categoriasProcesadas.contains(catId)) {
             await provider.crearCategoria(catNombre, catId, prefijo);
             categoriasProcesadas.add(catId);
           }
@@ -153,17 +164,22 @@ class _CatalogoPageState extends State<CatalogoPage> {
           setState(() => _procesando = false);
           if (exito) {
             ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text("✅ Importación exitosa: ${productosAImportar.length} productos"), backgroundColor: Colors.green)
+                SnackBar(content: Text("✅ Éxito: ${productosAImportar.length} productos importados"), backgroundColor: Colors.green)
             );
             Navigator.pop(context);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Hubo un error al guardar los productos"), backgroundColor: Colors.red)
+                const SnackBar(content: Text("Error al guardar en base de datos"), backgroundColor: Colors.red)
             );
           }
         }
       } else {
-        if (mounted) setState(() => _procesando = false);
+        if (mounted) {
+          setState(() => _procesando = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("⚠️ No se encontraron productos válidos."), backgroundColor: Colors.orange)
+          );
+        }
       }
 
     } catch (e) {

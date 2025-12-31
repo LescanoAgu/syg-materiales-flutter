@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../data/models/orden_interna_model.dart';
-import '../widgets/dialogo_aprobar_orden.dart';
 import 'package:provider/provider.dart';
+import '../../data/models/orden_interna_model.dart';
+import '../../data/models/remito_model.dart';
+import '../widgets/dialogo_aprobar_orden.dart';
 import '../providers/orden_interna_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../widgets/remito_list_widget.dart';
+import '../../../reportes/data/services/pdf_service.dart';
 
 class OrdenDetallePage extends StatefulWidget {
   final OrdenInterna orden;
@@ -18,79 +21,153 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
   late OrdenInterna ordenActual;
   bool _editandoDespacho = false;
   TipoDespacho? _tipoDespachoSeleccionado;
+  List<Remito>? _remitosDeOrden;
 
   @override
   void initState() {
     super.initState();
     ordenActual = widget.orden;
     _tipoDespachoSeleccionado = ordenActual.tipoDespacho;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargarRemitos();
+    });
+  }
+
+  void _cargarRemitos() {
+    context.read<OrdenInternaProvider>().getRemitosPorOrden(ordenActual.id!).listen((lista) {
+      if (mounted) setState(() => _remitosDeOrden = lista);
+    });
   }
 
   void _mostrarDialogoAprobacion() {
     showDialog(
       context: context,
-      builder: (context) => DialogoAprobarOrden(
+      builder: (ctx) => DialogoAprobarOrden(
         orden: ordenActual,
-        onAprobar: (itemsModificados, observacion, proveedor) async {
+        onAprobar: (itemsModificados, observacion, provId, provNombre, origen) async {
+          Navigator.pop(ctx);
           final user = context.read<AuthProvider>().usuario;
 
           final exito = await context.read<OrdenInternaProvider>().aprobarOrden(
-              ordenId: ordenActual.id!,
-              usuarioId: user?.uid ?? 'admin',
-              itemsModificados: itemsModificados,
-              observaciones: observacion,
-              proveedor: proveedor
+            ordenId: ordenActual.id!,
+            usuarioId: user?.uid ?? 'admin',
+            itemsModificados: itemsModificados,
+            observaciones: observacion,
+            proveedorId: provId,
+            proveedorNombre: provNombre,
+            origen: origen,
           );
 
-          if (exito && mounted) {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Orden Aprobada")));
+          if (!mounted) return;
 
-            setState(() {
-              // ✅ CORREGIDO: Usamos proveedorNombre
-              ordenActual = OrdenInternaModel(
-                  id: ordenActual.id,
-                  numero: ordenActual.numero,
-                  clienteId: ordenActual.clienteId,
-                  obraId: ordenActual.obraId,
-                  solicitanteId: ordenActual.solicitanteId,
-                  solicitanteNombre: ordenActual.solicitanteNombre,
-                  fechaCreacion: ordenActual.fechaCreacion,
-                  estado: 'aprobada',
-                  prioridad: ordenActual.prioridad,
-                  items: itemsModificados,
-                  destino: ordenActual.destino,
-                  observaciones: ordenActual.observaciones,
-                  observacionesAprobacion: observacion,
-                  proveedorNombre: proveedor, // CORREGIDO AQUÍ
-                  tipoDespacho: ordenActual.tipoDespacho,
-                  modificadoPor: user?.nombre,
-                  titulo: ordenActual.titulo,
-                  observacionesCliente: ordenActual.observacionesCliente,
-                  esRetiroAcopio: ordenActual.esRetiroAcopio,
-                  acopioId: ordenActual.acopioId
-              );
-            });
+          if (exito) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Orden Aprobada")));
+            await context.read<OrdenInternaProvider>().cargarDetalleOrden(ordenActual.id!);
+            final actualizado = context.read<OrdenInternaProvider>().ordenSeleccionada;
+            if (actualizado != null) {
+              setState(() => ordenActual = actualizado.orden);
+            }
           }
         },
       ),
     );
   }
 
-  void _guardarCambiosDespacho() {
-    setState(() {
-      _editandoDespacho = false;
-      // Aquí actualizamos solo visualmente por ahora
-      // En una implementación real, llamarías a un método update en el provider
-    });
+  void _guardarCambiosDespacho() async {
+    if (_tipoDespachoSeleccionado == null) return;
+
+    final exito = await context.read<OrdenInternaProvider>().actualizarLogistica(
+      ordenId: ordenActual.id!,
+      tipoDespacho: _tipoDespachoSeleccionado!,
+      proveedorId: ordenActual.proveedorId,
+      proveedorNombre: ordenActual.proveedorNombre,
+    );
+
+    if (exito && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Logística actualizada")));
+      setState(() {
+        _editandoDespacho = false;
+        ordenActual = OrdenInternaModel(
+            id: ordenActual.id,
+            numero: ordenActual.numero,
+            clienteId: ordenActual.clienteId,
+            obraId: ordenActual.obraId,
+            solicitanteId: ordenActual.solicitanteId,
+            solicitanteNombre: ordenActual.solicitanteNombre,
+            fechaCreacion: ordenActual.fechaCreacion,
+            estado: ordenActual.estado,
+            prioridad: ordenActual.prioridad,
+            items: ordenActual.items,
+            destino: ordenActual.destino,
+            observaciones: ordenActual.observaciones,
+            observacionesAprobacion: ordenActual.observacionesAprobacion,
+            proveedorId: ordenActual.proveedorId,
+            proveedorNombre: ordenActual.proveedorNombre,
+            tipoDespacho: _tipoDespachoSeleccionado,
+            modificadoPor: ordenActual.modificadoPor,
+            origen: ordenActual.origen,
+            esRetiroAcopio: ordenActual.esRetiroAcopio,
+            acopioId: ordenActual.acopioId,
+            titulo: ordenActual.titulo,
+            observacionesCliente: ordenActual.observacionesCliente
+        );
+      });
+    }
+  }
+
+  // ✅ NUEVO: Generar PDF de la Orden (Presupuesto)
+  void _imprimirOrdenPedido() async {
+    final provider = context.read<OrdenInternaProvider>();
+    OrdenInternaDetalle? detalleFull;
+
+    // Buscamos los datos completos (nombre cliente/obra) en el provider
+    try {
+      detalleFull = provider.ordenes.firstWhere((d) => d.orden.id == ordenActual.id);
+    } catch (_) {
+      // Si no está en la lista general, quizas es la seleccionada actualmente
+      if (provider.ordenSeleccionada?.orden.id == ordenActual.id) {
+        detalleFull = provider.ordenSeleccionada;
+      }
+    }
+
+    // Si aun así no tenemos nombres (orden vieja), usamos fallbacks
+    final detalleParaPdf = OrdenInternaDetalle(
+        orden: ordenActual,
+        clienteRazonSocial: detalleFull?.clienteRazonSocial ?? "Cliente: ${ordenActual.clienteId}",
+        obraNombre: detalleFull?.obraNombre ?? "Obra: ${ordenActual.obraId}"
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generando Orden de Pedido...")));
+    await PdfService().generarOrdenDePedido(detalleParaPdf);
   }
 
   @override
   Widget build(BuildContext context) {
+    // Buscar detalle completo para mostrar nombres en UI
+    final provider = context.watch<OrdenInternaProvider>();
+    OrdenInternaDetalle? detalleEncontrado;
+
+    try {
+      detalleEncontrado = provider.ordenes.firstWhere((d) => d.orden.id == ordenActual.id);
+    } catch (_) {
+      if (provider.ordenSeleccionada?.orden.id == ordenActual.id) {
+        detalleEncontrado = provider.ordenSeleccionada;
+      }
+    }
+
+    final String clienteNombre = detalleEncontrado?.clienteRazonSocial ?? "Cliente: ${ordenActual.clienteId}";
+    final String obraNombre = detalleEncontrado?.obraNombre ?? "Obra: ${ordenActual.obraId}";
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Orden ${ordenActual.numero}'),
         actions: [
+          // ✅ BOTÓN DE IMPRIMIR ORDEN
+          IconButton(
+            icon: const Icon(Icons.print),
+            tooltip: 'Imprimir Orden de Pedido',
+            onPressed: _imprimirOrdenPedido,
+          ),
           if (ordenActual.estado == 'solicitado' || ordenActual.estado == 'pendiente')
             IconButton(
               icon: const Icon(Icons.check_circle_outline),
@@ -106,6 +183,7 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
           const SizedBox(height: 16),
           if (ordenActual.estado != 'solicitado' && ordenActual.estado != 'pendiente')
             _buildLogisticaSection(),
+
           const SizedBox(height: 16),
           Text('Materiales Solicitados', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
@@ -117,15 +195,46 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
               trailing: Text('${item.cantidad} ${item.unidadBase}', style: const TextStyle(fontWeight: FontWeight.bold)),
             ),
           )),
-          if (ordenActual.observacionesAprobacion != null) ...[
-            const SizedBox(height: 20),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.orange),
-              title: const Text('Notas de Aprobación'),
-              subtitle: Text(ordenActual.observacionesAprobacion!),
+
+          const SizedBox(height: 30),
+          const Divider(thickness: 2),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Historial de Entregas", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                IconButton(icon: const Icon(Icons.refresh), onPressed: _cargarRemitos),
+              ],
             ),
-          ]
+          ),
+
+          if (_remitosDeOrden == null)
+            const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+          else if (_remitosDeOrden!.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20.0),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.receipt_long, size: 40, color: Colors.grey),
+                    Text("No se han generado remitos aún.", style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+            )
+          else
+            RemitoListWidget(
+                remitos: _remitosDeOrden!,
+                ordenContexto: OrdenInternaDetalle(
+                    orden: ordenActual,
+                    clienteRazonSocial: clienteNombre,
+                    obraNombre: obraNombre
+                ),
+                mostrarCliente: false
+            ),
+
+          const SizedBox(height: 80),
         ],
       ),
     );
@@ -135,7 +244,6 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
     Color color = Colors.blue;
     if (ordenActual.estado == 'aprobada') color = Colors.green;
     if (ordenActual.estado == 'solicitado') color = Colors.orange;
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
@@ -175,15 +283,14 @@ class _OrdenDetallePageState extends State<OrdenDetallePage> {
             const Divider(),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Proveedor:'),
-              subtitle: Text(ordenActual.proveedorNombre ?? 'No asignado (Stock propio)'),
+              title: const Text('Origen / Proveedor:'),
+              subtitle: Text(ordenActual.proveedorNombre ?? ordenActual.origen.name.toUpperCase()),
               leading: const Icon(Icons.store),
             ),
             if (_editandoDespacho)
               DropdownButtonFormField<TipoDespacho>(
                 value: _tipoDespachoSeleccionado,
                 decoration: const InputDecoration(labelText: 'Responsable del Despacho'),
-                // ✅ CORREGIDO: Quité 'const' porque items no puede ser const con callbacks (si los hubiera)
                 items: const [
                   DropdownMenuItem(value: TipoDespacho.empresa, child: Text('Nuestra Empresa')),
                   DropdownMenuItem(value: TipoDespacho.proveedor, child: Text('A cargo del Proveedor')),

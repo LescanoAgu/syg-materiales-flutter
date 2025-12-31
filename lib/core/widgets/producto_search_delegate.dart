@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../features/stock/data/models/producto_model.dart';
 import '../../features/stock/presentation/providers/producto_provider.dart';
-import '../../core/constants/app_colors.dart';
+import '../../features/stock/presentation/pages/producto_form_page.dart'; // Si lo usas para editar al tocar
 
 class ProductoSearchDelegate extends SearchDelegate<ProductoModel?> {
 
   @override
-  String get searchFieldLabel => 'Buscar material...';
+  String get searchFieldLabel => 'Buscar producto...';
 
   @override
   List<Widget>? buildActions(BuildContext context) {
@@ -30,86 +30,51 @@ class ProductoSearchDelegate extends SearchDelegate<ProductoModel?> {
 
   @override
   Widget buildResults(BuildContext context) {
-    return _realizarBusqueda(context);
+    // Reutilizamos la misma vista de sugerencias para los resultados
+    return buildSuggestions(context);
   }
 
   @override
   Widget buildSuggestions(BuildContext context) {
-    if (query.length < 2) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search, size: 48, color: Colors.grey),
-            SizedBox(height: 10),
-            Text("Escribe al menos 2 letras", style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
+    // 1. Obtenemos el provider (usamos watch para que si cambia la lista de fondo, se actualice)
+    final provider = context.watch<ProductoProvider>();
+
+    // 2. Accedemos a la lista completa (asegúrate que tu provider devuelva la lista llena si no hay query en el provider)
+    // Como no llamamos a 'buscarProductos' del provider, el provider tiene _searchQuery vacío,
+    // por lo tanto provider.productos debería devolver TODO.
+    final listaCompleta = provider.productos;
+
+    // 3. Filtramos LOCALMENTE (Esto evita el error de setState durante build)
+    final filtro = query.isEmpty
+        ? <ProductoModel>[] // O listaCompleta si quieres mostrar todo al inicio
+        : listaCompleta.where((p) {
+      final q = query.toLowerCase();
+      return p.nombre.toLowerCase().contains(q) ||
+          p.codigo.toLowerCase().contains(q) ||
+          (p.categoriaNombre != null && p.categoriaNombre!.toLowerCase().contains(q));
+    }).toList();
+
+    if (filtro.isEmpty && query.isNotEmpty) {
+      return const Center(child: Text("No se encontraron productos"));
     }
-    return _realizarBusqueda(context);
-  }
 
-  Widget _realizarBusqueda(BuildContext context) {
-    final provider = context.read<ProductoProvider>();
-
-    // ✅ SOLUCIÓN: Usamos FutureBuilder para manejar el Future<void>
-    return FutureBuilder(
-      future: provider.buscarProductos(query),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        return Consumer<ProductoProvider>(
-          builder: (ctx, prov, _) {
-            final resultados = prov.productos;
-
-            if (resultados.isEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey),
-                    const SizedBox(height: 10),
-                    Text('No se encontró "$query"', style: const TextStyle(color: Colors.grey)),
-                  ],
-                ),
-              );
-            }
-
-            return ListView.separated(
-              itemCount: resultados.length,
-              separatorBuilder: (_,__) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final p = resultados[index];
-                Color colorStock = p.cantidadDisponible > 0 ? Colors.green : Colors.red;
-
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: colorStock.withValues(alpha: 0.1),
-                    child: Text(
-                      p.unidadBase.isNotEmpty ? p.unidadBase.substring(0, 1).toUpperCase() : 'U',
-                      style: TextStyle(color: colorStock, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  title: Text(p.nombre, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${p.codigo} • ${p.categoriaNombre ?? "Gral"}'),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                          p.cantidadFormateada,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: colorStock)
-                      ),
-                      Text(p.unidadBase, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                    ],
-                  ),
-                  onTap: () => close(context, p),
-                );
-              },
-            );
+    return ListView.separated(
+      itemCount: filtro.length,
+      separatorBuilder: (_,__) => const Divider(),
+      itemBuilder: (context, index) {
+        final producto = filtro[index];
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: Colors.blue.withOpacity(0.1),
+            child: Text(producto.codigo.isNotEmpty ? producto.codigo[0] : '?',
+                style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+          ),
+          title: Text(producto.nombre),
+          subtitle: Text("${producto.codigo} - ${producto.categoriaNombre ?? 'Gral'}"),
+          trailing: Text("\$${producto.precioSinIva ?? 0}", style: const TextStyle(fontWeight: FontWeight.bold)),
+          onTap: () {
+            // Devolvemos el producto seleccionado
+            close(context, producto);
           },
         );
       },

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/constants/app_colors.dart';
-import '../../data/models/cliente_model.dart';
 import '../providers/cliente_provider.dart';
 
 class ClientesImportPage extends StatefulWidget {
@@ -12,120 +11,75 @@ class ClientesImportPage extends StatefulWidget {
 }
 
 class _ClientesImportPageState extends State<ClientesImportPage> {
-  final TextEditingController _csvController = TextEditingController();
   bool _procesando = false;
+
+  void _importarCSV() async {
+    setState(() => _procesando = true);
+
+    // Llamamos al método del provider que abre el selector de archivos
+    final mensaje = await context.read<ClienteProvider>().importarClientesDesdeCSV();
+
+    if (mounted) {
+      setState(() => _procesando = false);
+
+      bool exito = mensaje.contains("Éxito");
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(mensaje),
+        backgroundColor: exito ? Colors.green : Colors.red,
+      ));
+
+      if (exito) {
+        // Esperamos un poco para que el usuario lea y cerramos
+        await Future.delayed(const Duration(seconds: 1));
+        if (mounted) Navigator.pop(context);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Importar Clientes"),
+        title: const Text("Importación Masiva"),
         backgroundColor: AppColors.primary,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Icon(Icons.upload_file, size: 80, color: Colors.grey),
+            const SizedBox(height: 20),
             const Text(
-              "Pegar lista de Clientes (CSV)",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              "Importar Clientes y Obras",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             const Text(
-              "Formato: Nombre, CUIT, Teléfono, Dirección, Email",
-              style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+              "Selecciona un archivo .CSV con el siguiente formato:\n\nRazón Social, CUIT, Teléfono, Estado (Activo/Inactivo), Nombre Obra, Dirección Obra",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
             ),
-            const Text(
-              "El código se generará automáticamente (CL-001, CL-002...)",
-              style: TextStyle(color: AppColors.secondary, fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TextField(
-                controller: _csvController,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                decoration: const InputDecoration(
-                  hintText: "Juan Perez, 20304050607, 11223344, Calle Falsa 123, juan@mail.com\nEmpresa SA, 3050..., ...",
-                  border: OutlineInputBorder(),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: _procesando ? null : _procesarImportacion,
-                icon: const Icon(Icons.group_add),
-                label: _procesando
+            const SizedBox(height: 40),
+            ElevatedButton.icon(
+              onPressed: _procesando ? null : _importarCSV,
+              icon: const Icon(Icons.folder_open),
+              label: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: _procesando
                     ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text("IMPORTAR AHORA"),
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                    : const Text("SELECCIONAR ARCHIVO CSV"),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                textStyle: const TextStyle(fontSize: 16),
               ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  Future<void> _procesarImportacion() async {
-    final texto = _csvController.text;
-    if (texto.isEmpty) return;
-
-    setState(() => _procesando = true);
-
-    List<ClienteModel> clientes = [];
-    final lineas = texto.split('\n');
-
-    for (var linea in lineas) {
-      if (linea.trim().isEmpty) continue;
-      final partes = linea.split(',');
-
-      if (partes.isNotEmpty) {
-        // Orden esperado: Nombre, CUIT, Telefono, Direccion, Email
-        String nombre = partes[0].trim();
-        if (nombre.isEmpty) continue;
-
-        String? cuit = partes.length > 1 ? partes[1].trim() : null;
-        String? tel = partes.length > 2 ? partes[2].trim() : null;
-        String? dir = partes.length > 3 ? partes[3].trim() : null;
-        String? mail = partes.length > 4 ? partes[4].trim() : null;
-
-        clientes.add(ClienteModel(
-          id: '', // Se genera en BD
-          codigo: '', // Se genera en BD (CL-XXX)
-          razonSocial: nombre,
-          cuit: cuit,
-          telefono: tel,
-          direccion: dir,
-          email: mail,
-          activo: true,
-          createdAt: DateTime.now(),
-        ));
-      }
-    }
-
-    if (clientes.isNotEmpty) {
-      final exito = await context.read<ClienteProvider>().importarClientes(clientes);
-      if (mounted) {
-        setState(() => _procesando = false);
-        if (exito) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("✅ ${clientes.length} clientes importados")));
-          Navigator.pop(context);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error al importar"), backgroundColor: Colors.red));
-        }
-      }
-    } else {
-      if (mounted) {
-        setState(() => _procesando = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("No se detectaron datos válidos")));
-      }
-    }
   }
 }

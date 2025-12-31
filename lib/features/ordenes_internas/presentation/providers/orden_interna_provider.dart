@@ -5,7 +5,6 @@ import 'package:uuid/uuid.dart';
 
 import '../../data/models/orden_interna_model.dart';
 import '../../data/models/remito_model.dart';
-// ✅ IMPORT NUEVO: Necesario para la lógica de descuento
 import '../../../acopios/data/models/acopio_model.dart';
 
 class OrdenInternaProvider extends ChangeNotifier {
@@ -19,41 +18,18 @@ class OrdenInternaProvider extends ChangeNotifier {
   OrdenInternaDetalle? get ordenSeleccionada => _ordenSeleccionada;
   bool get isLoading => _isLoading;
 
-  // --- CONSULTAS DE REMITOS ---
+  // --- STREAMS ---
   Stream<List<Remito>> getRemitosPorCliente(String clienteId) {
-    return _firestore
-        .collection('remitos')
-        .where('clienteId', isEqualTo: clienteId)
-        .orderBy('fecha', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => Remito.fromMap(doc.data(), doc.id))
-        .toList());
+    return _firestore.collection('remitos').where('clienteId', isEqualTo: clienteId).orderBy('fecha', descending: true).snapshots().map((s) => s.docs.map((d) => Remito.fromMap(d.data(), d.id)).toList());
   }
-
   Stream<List<Remito>> getRemitosPorProveedor(String proveedorId) {
-    return _firestore
-        .collection('remitos')
-        .where('proveedorId', isEqualTo: proveedorId)
-        .orderBy('fecha', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => Remito.fromMap(doc.data(), doc.id))
-        .toList());
+    return _firestore.collection('remitos').where('proveedorId', isEqualTo: proveedorId).orderBy('fecha', descending: true).snapshots().map((s) => s.docs.map((d) => Remito.fromMap(d.data(), d.id)).toList());
   }
-
   Stream<List<Remito>> getRemitosPorOrden(String ordenId) {
-    return _firestore
-        .collection('remitos')
-        .where('ordenId', isEqualTo: ordenId)
-        .orderBy('fecha', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-        .map((doc) => Remito.fromMap(doc.data(), doc.id))
-        .toList());
+    return _firestore.collection('remitos').where('ordenId', isEqualTo: ordenId).orderBy('fecha', descending: true).snapshots().map((s) => s.docs.map((d) => Remito.fromMap(d.data(), d.id)).toList());
   }
 
-  // --- CARGA DE ÓRDENES ---
+  // --- CARGA DE ÓRDENES (Auto-Reparación con ALIAS) ---
   Future<void> cargarOrdenes() async {
     _isLoading = true;
     notifyListeners();
@@ -63,17 +39,95 @@ class OrdenInternaProvider extends ChangeNotifier {
           .get();
 
       List<OrdenInternaDetalle> temp = [];
+      // Cache para optimizar lecturas repetidas
+      Map<String, String> cacheClientes = {};
+      Map<String, String> cacheObras = {};
 
       for (var doc in snapshot.docs) {
         final ordenModelo = OrdenInternaModel.fromSnapshot(doc);
         final data = doc.data();
-        String clienteNombre = data['clienteRazonSocial'] ?? 'Cliente';
-        String obraNombre = data['obraNombre'] ?? 'Obra';
+
+        String clienteNombre = data['clienteRazonSocial'] ?? '';
+        String obraNombre = data['obraNombre'] ?? '';
+        bool necesitaUpdate = false;
+
+        // 1. RECUPERAR CLIENTE (Prioridad: Razón Social -> Nombre -> Alias)
+        if (clienteNombre.isEmpty || clienteNombre.contains('Eliminado') || clienteNombre.contains('ID:')) {
+          if (cacheClientes.containsKey(ordenModelo.clienteId)) {
+            clienteNombre = cacheClientes[ordenModelo.clienteId]!;
+          } else {
+            try {
+              var cDoc = await _firestore.collection('clientes').doc(ordenModelo.clienteId).get();
+              // Si falla por ID, intentamos buscar por código interno
+              if (!cDoc.exists) {
+                final q = await _firestore.collection('clientes').where('codigo', isEqualTo: ordenModelo.clienteId).limit(1).get();
+                if(q.docs.isNotEmpty) cDoc = q.docs.first;
+              }
+
+              if (cDoc.exists) {
+                final d = cDoc.data();
+                clienteNombre = d?['razonSocial'] ?? d?['nombre'] ?? d?['alias'] ?? 'Cliente S/N';
+                necesitaUpdate = true;
+              } else {
+                clienteNombre = 'Cliente (ID: ${ordenModelo.clienteId.substring(0, 4)}...)';
+              }
+            } catch (_) {
+              clienteNombre = 'Cliente Offline';
+            }
+            cacheClientes[ordenModelo.clienteId] = clienteNombre;
+          }
+        }
+
+        // 2. RECUPERAR OBRA (Prioridad: ALIAS -> NOMBRE -> DIRECCIÓN)
+        if (obraNombre.isEmpty || obraNombre.contains('Eliminado') || obraNombre == 'Obra General' || obraNombre.contains('ID:')) {
+          if (ordenModelo.obraId.isNotEmpty) {
+            if (cacheObras.containsKey(ordenModelo.obraId)) {
+              obraNombre = cacheObras[ordenModelo.obraId]!;
+            } else {
+              try {
+                // Intento 1: Por ID directo
+                var oDoc = await _firestore.collection('obras').doc(ordenModelo.obraId).get();
+
+                // Intento 2: Por Código (Si el ID guardado es "O-2024..." y no el UUID)
+                if (!oDoc.exists) {
+                  final q = await _firestore.collection('obras').where('codigo', isEqualTo: ordenModelo.obraId).limit(1).get();
+                  if(q.docs.isNotEmpty) oDoc = q.docs.first;
+                }
+
+                if (oDoc.exists) {
+                  final d = oDoc.data();
+                  // ✅ AQUÍ ESTÁ LA MAGIA: Busca Alias, luego Nombre, luego Dirección
+                  obraNombre = d?['alias'] ?? d?['nombre'] ?? d?['direccion'] ?? 'Obra S/N';
+                  necesitaUpdate = true;
+                } else {
+                  // Si no existe, mostramos código CORTO
+                  String idCorto = ordenModelo.obraId.length > 6
+                      ? ordenModelo.obraId.substring(0, 6)
+                      : ordenModelo.obraId;
+                  obraNombre = 'Obra ($idCorto...)';
+                }
+              } catch (_) {
+                obraNombre = 'Obra Offline';
+              }
+              cacheObras[ordenModelo.obraId] = obraNombre;
+            }
+          } else {
+            obraNombre = "Sin Obra";
+          }
+        }
+
+        // 3. Persistir datos encontrados para que la próxima vez sea instantáneo
+        if (necesitaUpdate) {
+          doc.reference.update({
+            'clienteRazonSocial': clienteNombre,
+            'obraNombre': obraNombre
+          });
+        }
 
         temp.add(OrdenInternaDetalle(
             orden: ordenModelo,
             clienteRazonSocial: clienteNombre,
-            obraNombre: obraNombre
+            obraNombre: obraNombre.isNotEmpty ? obraNombre : '---'
         ));
       }
       _ordenes = temp;
@@ -86,23 +140,49 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
+  // --- DETALLE ORDEN (Misma lógica de Alias) ---
   Future<void> cargarDetalleOrden(String id) async {
     _isLoading = true;
     notifyListeners();
     try {
       final doc = await _firestore.collection('ordenes_internas').doc(id).get();
-      if (!doc.exists) {
-        _ordenSeleccionada = null;
-        return;
-      }
+      if (!doc.exists) { _ordenSeleccionada = null; return; }
 
       final ordenModelo = OrdenInternaModel.fromSnapshot(doc);
       final data = doc.data() as Map<String, dynamic>;
 
+      String cName = data['clienteRazonSocial'] ?? '';
+      String oName = data['obraNombre'] ?? '';
+
+      // Recuperación al vuelo si falta el dato en el detalle
+      if(cName.isEmpty || cName.contains('ID:')) {
+        var cDoc = await _firestore.collection('clientes').doc(ordenModelo.clienteId).get();
+        if(!cDoc.exists) {
+          final q = await _firestore.collection('clientes').where('codigo', isEqualTo: ordenModelo.clienteId).limit(1).get();
+          if(q.docs.isNotEmpty) cDoc = q.docs.first;
+        }
+        if (cDoc.exists) {
+          cName = cDoc.data()?['razonSocial'] ?? cDoc.data()?['nombre'] ?? '';
+        }
+      }
+
+      if((oName.isEmpty || oName.contains('ID:')) && ordenModelo.obraId.isNotEmpty) {
+        var oDoc = await _firestore.collection('obras').doc(ordenModelo.obraId).get();
+        if(!oDoc.exists) {
+          final q = await _firestore.collection('obras').where('codigo', isEqualTo: ordenModelo.obraId).limit(1).get();
+          if(q.docs.isNotEmpty) oDoc = q.docs.first;
+        }
+
+        if (oDoc.exists) {
+          // ✅ Prioridad Alias -> Nombre -> Direccion
+          oName = oDoc.data()?['alias'] ?? oDoc.data()?['nombre'] ?? oDoc.data()?['direccion'] ?? 'Obra';
+        }
+      }
+
       _ordenSeleccionada = OrdenInternaDetalle(
           orden: ordenModelo,
-          clienteRazonSocial: data['clienteRazonSocial'] ?? 'Cliente',
-          obraNombre: data['obraNombre'] ?? 'Obra'
+          clienteRazonSocial: cName.isNotEmpty ? cName : 'Cliente',
+          obraNombre: oName.isNotEmpty ? oName : 'Obra'
       );
     } catch (e) {
       print("Error detalle: $e");
@@ -112,44 +192,7 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
-  // --- CREAR Y ACTUALIZAR ---
-  Future<bool> aprobarOrden({
-    required String ordenId,
-    required String usuarioId,
-    required List<OrdenItemDetalle> itemsModificados,
-    String? observaciones,
-    String? proveedor,
-  }) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
-
-      final itemsMap = itemsModificados.map((i) => i.toMap()).toList();
-
-      await _firestore.collection('ordenes_internas').doc(ordenId).update({
-        'estado': 'aprobada',
-        'items': itemsMap,
-        'aprobadoPor': usuarioId,
-        'fechaAprobacion': Timestamp.now(),
-        'observacionesAprobacion': observaciones,
-        'proveedor': proveedor, // Campo legacy (visual)
-        'modificadoPor': usuarioId,
-      });
-
-      await cargarOrdenes();
-      if (_ordenSeleccionada?.orden.id == ordenId) {
-        await cargarDetalleOrden(ordenId);
-      }
-      return true;
-    } catch (e) {
-      print("Error aprobando: $e");
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
+  // --- CREAR ORDEN (Guardar Alias desde el inicio) ---
   Future<bool> crearOrden({
     required String clienteId,
     required String obraId,
@@ -167,17 +210,35 @@ class OrdenInternaProvider extends ChangeNotifier {
 
       String clienteNombre = '';
       String obraNombre = '';
+
       try {
-        final cd = await _firestore.collection('clientes').doc(clienteId).get();
-        if(cd.exists) clienteNombre = cd.data()?['razonSocial'] ?? '';
-      } catch(_) {}
-      try {
-        final od = await _firestore.collection('obras').doc(obraId).get();
-        if (od.exists) obraNombre = od.data()?['nombre'] ?? '';
+        var cd = await _firestore.collection('clientes').doc(clienteId).get();
+        if(cd.exists) {
+          clienteNombre = cd.data()?['razonSocial'] ?? cd.data()?['nombre'] ?? '';
+        }
+
+        if (obraId.isNotEmpty) {
+          var od = await _firestore.collection('obras').doc(obraId).get();
+          if(od.exists) {
+            // ✅ Guardamos Alias si existe, sino Nombre
+            obraNombre = od.data()?['alias'] ?? od.data()?['nombre'] ?? od.data()?['direccion'] ?? '';
+          }
+        }
       } catch(_) {}
 
       final ordenId = const Uuid().v4();
-      final numero = "OI-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
+      final docContador = _firestore.collection('metadata').doc('contadores');
+      String numeroFinal = "OI-000";
+
+      await _firestore.runTransaction((transaction) async {
+        final snapshot = await transaction.get(docContador);
+        int nextNumber = 1;
+        if (snapshot.exists) {
+          nextNumber = (snapshot.data()?['ordenes'] ?? 0) + 1;
+        }
+        numeroFinal = "OI-${nextNumber.toString().padLeft(3, '0')}";
+        transaction.set(docContador, {'ordenes': nextNumber}, SetOptions(merge: true));
+      });
 
       List<Map<String, dynamic>> itemsParaGuardar = items.map((i) {
         return {
@@ -192,7 +253,7 @@ class OrdenInternaProvider extends ChangeNotifier {
 
       final nuevaOrden = {
         'id': ordenId,
-        'numero': numero,
+        'numero': numeroFinal,
         'clienteId': clienteId,
         'clienteRazonSocial': clienteNombre,
         'obraId': obraId,
@@ -215,7 +276,6 @@ class OrdenInternaProvider extends ChangeNotifier {
       await cargarOrdenes();
       return true;
     } catch (e) {
-      print("Error creating order: $e");
       return false;
     } finally {
       _isLoading = false;
@@ -223,6 +283,10 @@ class OrdenInternaProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> aprobarOrden({ required String ordenId, required String usuarioId, required List<OrdenItemDetalle> itemsModificados, String? observaciones, String? proveedorId, String? proveedorNombre, OrigenAbastecimiento? origen, }) async { try { _isLoading = true; notifyListeners(); final itemsMap = itemsModificados.map((i) => i.toMap()).toList(); final Map<String, dynamic> updateData = { 'estado': 'aprobada', 'items': itemsMap, 'aprobadoPor': usuarioId, 'fechaAprobacion': Timestamp.now(), 'observacionesAprobacion': observaciones, 'modificadoPor': usuarioId, }; if (proveedorId != null) updateData['proveedorId'] = proveedorId; if (proveedorNombre != null) updateData['proveedor'] = proveedorNombre; if (origen != null) updateData['origen'] = origen.name; await _firestore.collection('ordenes_internas').doc(ordenId).update(updateData); await cargarOrdenes(); if (_ordenSeleccionada?.orden.id == ordenId) { await cargarDetalleOrden(ordenId); } return true; } catch (e) { return false; } finally { _isLoading = false; notifyListeners(); } }
+  Future<bool> actualizarLogistica({ required String ordenId, required TipoDespacho tipoDespacho, String? proveedorId, String? proveedorNombre, }) async { try { _isLoading = true; notifyListeners(); await _firestore.collection('ordenes_internas').doc(ordenId).update({ 'tipoDespacho': tipoDespacho.name, 'proveedorId': proveedorId, 'proveedor': proveedorNombre, }); await cargarOrdenes(); if (_ordenSeleccionada?.orden.id == ordenId) { await cargarDetalleOrden(ordenId); } return true; } catch (e) { return false; } finally { _isLoading = false; notifyListeners(); } }
+
+  // --- GENERAR REMITO (Corregido 'productoId') ---
   Future<bool> generarRemito({
     required OrdenInternaDetalle ordenDetalle,
     required List<Map<String, dynamic>> itemsAEntregar,
@@ -238,9 +302,10 @@ class OrdenInternaProvider extends ChangeNotifier {
       notifyListeners();
 
       final remitoId = const Uuid().v4();
-      final numeroRemito = "REM-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}";
+      String numeroOrdenLimpio = ordenDetalle.orden.numero.replaceFirst('OI-', '').replaceFirst('OI', '');
+      final sufijoRemito = DateTime.now().millisecondsSinceEpoch.toString().substring(9);
+      final numeroRemito = "OI - $numeroOrdenLimpio | R - $sufijoRemito";
 
-      // 1. Armar Items
       List<RemitoItem> itemsRemito = [];
       for (var itemEntrega in itemsAEntregar) {
         String pId = itemEntrega['productoId'];
@@ -252,6 +317,7 @@ class OrdenInternaProvider extends ChangeNotifier {
         );
 
         itemsRemito.add(RemitoItem(
+          // ✅ CORREGIDO: ERA productId, AHORA ES productoId
             productoId: pId,
             productoNombre: itemOriginal.nombreMaterial,
             productoCodigo: itemOriginal.productoCodigo,
@@ -284,8 +350,6 @@ class OrdenInternaProvider extends ChangeNotifier {
 
       final ordenRef = _firestore.collection('ordenes_internas').doc(ordenDetalle.orden.id);
 
-      // 2. Lógica de Descuento (Acopio vs Stock)
-      // Buscamos acopio si corresponde
       AcopioModel? acopioData;
       DocumentReference? acopioRef;
 
@@ -305,11 +369,9 @@ class OrdenInternaProvider extends ChangeNotifier {
         if (itemEntrega.isNotEmpty) {
           entregadoAhora = (itemEntrega['cantidad'] as num).toDouble();
 
-          // A. Descuento de Acopio
           if (acopioData != null && acopioRef != null) {
             final idx = acopioData!.items.indexWhere((ai) => ai.productoId == itemOrig.materialId);
             if (idx != -1) {
-              // Actualizamos objeto local para guardar después
               final itemAcopio = acopioData!.items[idx];
               final nuevosItems = List<AcopioItem>.from(acopioData!.items);
               nuevosItems[idx] = itemAcopio.copyWith(cantidadDisponible: itemAcopio.cantidadDisponible - entregadoAhora);
@@ -325,7 +387,6 @@ class OrdenInternaProvider extends ChangeNotifier {
               );
             }
           }
-          // B. Descuento de Stock Físico (Solo si es despacho propio y origen stock)
           else if (ordenDetalle.orden.origen == OrigenAbastecimiento.stock_propio && proveedorId == null) {
             final prodRef = _firestore.collection('productos').doc(itemOrig.materialId);
             batch.update(prodRef, {'cantidadDisponible': FieldValue.increment(-entregadoAhora)});

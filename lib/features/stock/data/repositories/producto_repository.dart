@@ -1,5 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../core/constants/app_colors.dart'; // Opcional
+import '../../../../core/constants/app_colors.dart';
 import '../models/producto_model.dart';
 import '../models/categoria_model.dart';
 
@@ -13,7 +13,8 @@ class ProductoRepository {
 
   Future<List<ProductoModel>> obtenerProductos() async {
     try {
-      final snapshot = await _firestore.collection(_collection).orderBy('nombre').get();
+      // ✅ CORRECCIÓN: Ordenamos por CÓDIGO, no por nombre.
+      final snapshot = await _firestore.collection(_collection).orderBy('codigo').get();
       return snapshot.docs.map((doc) => ProductoModel.fromMap(doc.data(), doc.id)).toList();
     } catch (e) {
       print("Error repository obtenerProductos: $e");
@@ -23,18 +24,13 @@ class ProductoRepository {
 
   Future<void> guardar(ProductoModel producto) async {
     final data = producto.toMap();
-    if (producto.id != null && producto.id!.isNotEmpty) {
-      await _firestore.collection(_collection).doc(producto.id).update(data);
-    } else {
-      // Si usamos el código como ID
-      await _firestore.collection(_collection).doc(producto.codigo).set(data);
-    }
+    // Usamos el código como ID del documento para mantener orden y unicidad
+    await _firestore.collection(_collection).doc(producto.codigo).set(data);
   }
 
   Future<void> guardarLote(List<ProductoModel> productos) async {
     final batch = _firestore.batch();
     for (var p in productos) {
-      // Usamos el código como ID del documento para evitar duplicados
       final docRef = _firestore.collection(_collection).doc(p.codigo);
       batch.set(docRef, p.toMap());
     }
@@ -58,6 +54,7 @@ class ProductoRepository {
   }
 
   Future<void> guardarCategoria(CategoriaModel categoria) async {
-    await _firestore.collection(_categoriasCollection).add(categoria.toMap());
+    // Usamos el código de la categoría como ID si es posible
+    await _firestore.collection(_categoriasCollection).doc(categoria.codigo).set(categoria.toMap());
   }
 }
