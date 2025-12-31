@@ -64,6 +64,7 @@ class _OrdenFormPageState extends State<OrdenFormPage> {
           setState(() => _clienteSel = c);
         } catch (_) {}
       }
+      context.read<ClienteProvider>().cargarClientes(soloActivos: true);
     });
   }
 

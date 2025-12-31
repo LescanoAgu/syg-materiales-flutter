@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/orden_interna_provider.dart';
 import '../../data/models/orden_interna_model.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import 'orden_detalle_page.dart';
 import 'orden_form_page.dart';
+import '../../../stock/presentation/providers/producto_provider.dart';
+// ✅ IMPORT DEL BUSCADOR
+import 'delegates/orden_search_delegate.dart';
 
 class OrdenesPage extends StatefulWidget {
   final bool esNavegacionPrincipal;
@@ -24,6 +28,7 @@ class _OrdenesPageState extends State<OrdenesPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<OrdenInternaProvider>().cargarOrdenes();
+      context.read<ProductoProvider>().cargarProductos();
     });
   }
 
@@ -39,6 +44,18 @@ class _OrdenesPageState extends State<OrdenesPage> {
         title: const Text("Órdenes de Pedido"),
         backgroundColor: AppColors.primary,
         actions: [
+          // ✅ BOTÓN DE BÚSQUEDA NUEVO
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              final listaOrdenes = context.read<OrdenInternaProvider>().ordenes;
+              showSearch(
+                  context: context,
+                  delegate: OrdenSearchDelegate(listaOrdenes)
+              );
+            },
+          ),
+          // Switch de filtro propio
           Row(
             children: [
               const Text("Solo mías", style: TextStyle(fontSize: 12)),
@@ -55,6 +72,7 @@ class _OrdenesPageState extends State<OrdenesPage> {
           : null,
       body: Column(
         children: [
+          // FILTROS CHIPS
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(12),
@@ -70,6 +88,8 @@ class _OrdenesPageState extends State<OrdenesPage> {
               ],
             ),
           ),
+
+          // LISTA
           Expanded(
             child: Consumer<OrdenInternaProvider>(
               builder: (context, provider, _) {
@@ -79,7 +99,7 @@ class _OrdenesPageState extends State<OrdenesPage> {
                   bool pasaEstado = true;
                   if (_filtroEstado == 'solicitado') pasaEstado = d.orden.estado == 'solicitado' || d.orden.estado == 'pendiente';
                   else if (_filtroEstado == 'aprobada') pasaEstado = d.orden.estado == 'aprobada' || d.orden.estado == 'en_proceso';
-                  else if (_filtroEstado == 'entregado') pasaEstado = d.orden.estado == 'entregado' || d.orden.estado == 'finalizado';
+                  else if (_filtroEstado == 'entregado') pasaEstado = d.orden.estado == 'entregado' || d.orden.estado == 'finalizado' || d.orden.estado == 'completada';
 
                   bool pasaUsuario = true;
                   if (_soloMisPedidos && user != null) {
@@ -88,10 +108,15 @@ class _OrdenesPageState extends State<OrdenesPage> {
                   return pasaEstado && pasaUsuario;
                 }).toList();
 
-                if (filtradas.isEmpty) return const Center(child: Text("No hay órdenes con este criterio"));
+                if (filtradas.isEmpty) {
+                  return const Center(child: Text("No hay órdenes con este criterio"));
+                }
 
                 return RefreshIndicator(
-                  onRefresh: () => provider.cargarOrdenes(),
+                  onRefresh: () async {
+                    await provider.cargarOrdenes();
+                    if(mounted) context.read<ProductoProvider>().cargarProductos();
+                  },
                   child: ListView.builder(
                     padding: const EdgeInsets.only(bottom: 80, left: 16, right: 16),
                     itemCount: filtradas.length,
@@ -131,14 +156,20 @@ class _OrdenesPageState extends State<OrdenesPage> {
     final orden = detalle.orden;
     Color colorEstado = Colors.orange;
     if (orden.estado == 'aprobada') colorEstado = Colors.blue;
-    if (orden.estado == 'en_proceso') colorEstado = Colors.purple;
     if (orden.estado == 'entregado') colorEstado = Colors.green;
 
-    // Progreso
     final progreso = detalle.progresoGeneral;
 
+    // ✅ CORRECCIÓN CL-CL:
+    // Limpiamos el ID del cliente por si ya tiene "CL-" o es un UUID
+    String rawId = orden.clienteId.replaceAll('CL-', '');
+    String clienteCorto = rawId.length > 5 ? rawId.substring(0, 5).toUpperCase() : rawId;
+
+    // Formato Limpio: CL-XXXX | OI-XXXX
+    String tituloNomenclatura = "CL-$clienteCorto | ${orden.numero}";
+
     return Card(
-      elevation: 2,
+      elevation: 3,
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
@@ -154,10 +185,11 @@ class _OrdenesPageState extends State<OrdenesPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Encabezado
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text("#${orden.numero}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text(tituloNomenclatura, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -165,54 +197,65 @@ class _OrdenesPageState extends State<OrdenesPage> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: colorEstado)
                     ),
-                    child: Text(
-                        orden.estado.toUpperCase(),
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorEstado)
-                    ),
+                    child: Text(orden.estado.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colorEstado)),
                   )
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(detalle.obraNombre ?? "Obra sin nombre", style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(detalle.clienteRazonSocial, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
-              // === BARRA DE PROGRESO ===
-              if (progreso > 0 && progreso < 1) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("Avance de Entrega", style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-                    Text("${(progreso * 100).toInt()}%", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progreso,
-                    backgroundColor: Colors.grey[200],
-                    color: Colors.blue,
-                    minHeight: 6,
+              // Cliente y Obra
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.business, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(detalle.obraNombre ?? "Obra Sin Asignar", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text(detalle.clienteRazonSocial, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-              ],
+                ],
+              ),
+              const SizedBox(height: 8),
 
-              const Divider(),
+              // Solicitante
+              Row(
+                children: [
+                  const Icon(Icons.person_outline, size: 16, color: Colors.blueGrey),
+                  const SizedBox(width: 6),
+                  Text("Solicitante: ", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                  Text(orden.solicitanteNombre, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+
+              // Pie: Fecha y Cantidad
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Chips de Origen
-                  if (orden.esRetiroAcopio || orden.origen == OrigenAbastecimiento.acopio_cliente)
-                    const Chip(label: Text("Acopio", style: TextStyle(fontSize: 10, color: Colors.white)), backgroundColor: Colors.purple, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact)
-                  else if (orden.origen == OrigenAbastecimiento.compra_proveedor)
-                    const Chip(label: Text("Compra Directa", style: TextStyle(fontSize: 10, color: Colors.white)), backgroundColor: Colors.orange, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-
-                  Text("${detalle.cantidadProductos} items"),
-                  Text(orden.prioridad.toUpperCase(), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  Row(children: [
+                    const Icon(Icons.calendar_today, size: 12, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(DateFormat('dd/MM/yyyy').format(orden.fechaCreacion), style: const TextStyle(fontSize: 12)),
+                  ]),
+                  Text("${detalle.cantidadProductos} items • ${orden.prioridad}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                 ],
-              )
+              ),
+
+              if (progreso > 0 && progreso < 1) ...[
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(value: progreso, backgroundColor: Colors.grey[200], color: Colors.blue, minHeight: 4),
+                ),
+              ],
             ],
           ),
         ),

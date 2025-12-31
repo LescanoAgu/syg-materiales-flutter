@@ -7,30 +7,26 @@ import '../../../reportes/data/services/pdf_service.dart';
 
 class RemitoListWidget extends StatelessWidget {
   final List<Remito> remitos;
+  // ✅ NUEVO: Recibimos la orden padre para tener los datos de obra/cliente
+  final OrdenInternaDetalle? ordenContexto;
   final bool mostrarCliente;
 
   const RemitoListWidget({
     super.key,
     required this.remitos,
+    this.ordenContexto,
     this.mostrarCliente = true,
   });
 
   @override
   Widget build(BuildContext context) {
     if (remitos.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey),
-            SizedBox(height: 10),
-            Text("No hay remitos registrados", style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
+      return const Center(child: Text("No hay remitos registrados", style: TextStyle(color: Colors.grey)));
     }
 
     return ListView.builder(
+      shrinkWrap: true,
+      physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.all(12),
       itemCount: remitos.length,
       itemBuilder: (ctx, i) {
@@ -48,19 +44,18 @@ class RemitoListWidget extends StatelessWidget {
                 color: esEntregaProveedor ? Colors.orange : Colors.blue,
               ),
             ),
-            title: Text("Remito #${r.numeroRemito}", style: const TextStyle(fontWeight: FontWeight.bold)),
+            title: Text("Remito: ${r.numeroRemito}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(DateFormat('dd/MM/yyyy HH:mm').format(r.fecha)),
-                if (mostrarCliente)
-                  Text("Cliente ID: ${r.clienteId}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
                 if (esEntregaProveedor)
-                  Text("Entregó: ${r.proveedorNombre}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
+                  Text("Entregó: ${r.proveedorNombre ?? 'Externo'}", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.deepOrange)),
               ],
             ),
             trailing: IconButton(
-              icon: const Icon(Icons.picture_as_pdf, color: Colors.red),
+              icon: const Icon(Icons.print, color: Colors.red),
+              tooltip: "Reimprimir PDF",
               onPressed: () => _imprimirRemito(context, r),
             ),
             children: [
@@ -83,25 +78,38 @@ class RemitoListWidget extends StatelessWidget {
     );
   }
 
-  void _imprimirRemito(BuildContext context, Remito remito) {
-    // Creamos el dummy para que el PDF funcione
-    final ordenDummy = OrdenInternaDetalle(
-      orden: OrdenInterna(
-        id: remito.ordenId,
-        numero: 'REF',
-        clienteId: remito.clienteId,
-        obraId: remito.obraId ?? '',
-        solicitanteId: '',
-        solicitanteNombre: '',
-        fechaCreacion: remito.fecha,
-        estado: 'entregado',
-        prioridad: 'N/A',
-        items: const [],
-      ),
-      clienteRazonSocial: 'Consultar Detalle',
-      obraNombre: 'Destino Obra',
-    );
+  void _imprimirRemito(BuildContext context, Remito remito) async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Generando PDF..."), duration: Duration(seconds: 1)));
 
-    PdfService().generarRemitoHistorico(remito, ordenDummy);
+    // ✅ USAMOS DATOS REALES SI EXISTEN
+    OrdenInternaDetalle ordenParaPdf;
+
+    if (ordenContexto != null) {
+      ordenParaPdf = ordenContexto!;
+    } else {
+      // Fallback solo si se usa desde el reporte general sin contexto
+      ordenParaPdf = OrdenInternaDetalle(
+        orden: OrdenInterna(
+          id: remito.ordenId,
+          numero: 'REF',
+          clienteId: remito.clienteId,
+          obraId: remito.obraId ?? '',
+          solicitanteId: '',
+          solicitanteNombre: '',
+          fechaCreacion: remito.fecha,
+          estado: 'entregado',
+          prioridad: 'N/A',
+          items: const [],
+        ),
+        clienteRazonSocial: 'Cliente ID: ${remito.clienteId}', // Mejor que "Consultar"
+        obraNombre: 'Obra ID: ${remito.obraId}',
+      );
+    }
+
+    try {
+      await PdfService().generarRemitoHistorico(remito, ordenParaPdf);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red));
+    }
   }
 }
